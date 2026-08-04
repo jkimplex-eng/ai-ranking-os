@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from analytics.ports import AnalyticsDataSource, AnalyticsRecord
 from analytics.schemas import AnalyticsFilter, FilterOperator
 from segmentation.models import SegmentDefinition, SegmentEvaluation
