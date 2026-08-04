@@ -4,8 +4,8 @@
 
 The repository is prepared for repeat independent audit. Automated application, migration,
 security, compatibility, concurrency, and pipeline gates pass. Docker Engine is unavailable in
-the local audit environment; the strengthened GitHub Actions Docker build/runtime-health job is
-the authoritative container execution gate.
+the local audit environment; the authoritative GitHub Actions run `30915046038` passed its
+Python 3.13 suite, PostgreSQL migration cycle, Docker build, runtime smoke test and healthcheck.
 
 Production code-readiness: **READY FOR PRODUCTION**. Operational release still requires the
 manual environment evidence listed below.
@@ -38,6 +38,9 @@ therefore proven directly against the GitHub source rather than inferred or inve
 10. **No dependency lockfiles.** Added runtime/development lockfiles and connected Docker/CI.
 11. **HTTP response hardening absent.** Added CSP for non-doc endpoints, nosniff, frame denial,
     referrer/permissions policies and production HSTS.
+12. **Python 3.13 evaluated shadowed type annotations eagerly.** Service/repository modules that
+    expose a `list` method now defer annotation evaluation, preserving the declared Python 3.13
+    runtime contract and avoiding import-time failures.
 
 ## False positives / rejected changes
 
@@ -95,7 +98,8 @@ Migration: `0041_add_retention_indexes.py`, fully reversible.
 | Secret scan | 0 critical/high |
 | Dependency scan | 0 findings |
 | License scan | 0 conflicts, score 100 |
-| Docker/Compose | Static/YAML PASS; runtime delegated to GitHub Actions (local Docker unavailable) |
+| GitHub Actions | PASS on Python 3.13 ([run 30915046038](https://github.com/jkimplex-eng/ai-ranking-os/actions/runs/30915046038)) |
+| Docker/Compose | Image build, runtime smoke and container healthcheck PASS in GitHub Actions |
 
 ## Architecture and compatibility
 
