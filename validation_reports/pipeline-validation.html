@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AI Ranking OS Pipeline Validation</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; color: #172033; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 2rem; }
+    th, td { border: 1px solid #d9deea; padding: .6rem; text-align: left; }
+    th { background: #f3f5fa; } .pass { color: #08783e; font-weight: 700; }
+    .fail { color: #b42318; font-weight: 700; } pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>AI Ranking OS Pipeline Validation</h1>
+  <p>Overall: <strong class="pass">PASS</strong></p>
+  <p>Correlation ID: <code>f4a37ab0-fcd3-44e8-bbe5-a428af63d62d</code></p>
+  <h2>Checks</h2>
+  <table><thead><tr><th>Check</th><th>Status</th><th>Details</th></tr></thead>
+  <tbody><tr><td>JSON Schema compatibility</td><td class='pass'>PASS</td><td><pre>{
+  &quot;errors&quot;: {},
+  &quot;signatures&quot;: {
+    &quot;intent&quot;: {
+      &quot;title&quot;: &quot;IntentResult&quot;,
+      &quot;required&quot;: [
+        &quot;classified_at&quot;,
+        &quot;confidence&quot;,
+        &quot;constraints&quot;,
+        &quot;entities&quot;,
+        &quot;expected_output&quot;,
+        &quot;intents&quot;,
+        &quot;language&quot;,
+        &quot;primary_intent&quot;,
+        &quot;query&quot;,
+        &quot;request_id&quot;,
+        &quot;routing&quot;
+      ],
+      &quot;properties&quot;: [
+        &quot;classified_at&quot;,
+        &quot;confidence&quot;,
+        &quot;constraints&quot;,
+        &quot;entities&quot;,
+        &quot;expected_output&quot;,
+        &quot;intents&quot;,
+        &quot;language&quot;,
+        &quot;primary_intent&quot;,
+        &quot;query&quot;,
+        &quot;request_id&quot;,
+        &quot;routing&quot;,
+        &quot;version&quot;
+      ]
+    },
+    &quot;router&quot;: {
+      &quot;title&quot;: &quot;ExecutionPlan&quot;,
+      &quot;required&quot;: [
+        &quot;steps&quot;
+      ],
+      &quot;properties&quot;: [
+        &quot;metadata&quot;,
+        &quot;mode&quot;,
+        &quot;plan_id&quot;,
+        &quot;request_id&quot;,
+        &quot;steps&quot;
+      ]
+    },
+    &quot;executor&quot;: {
+      &quot;title&quot;: &quot;ExecutorResult&quot;,
+      &quot;required&quot;: [
+        &quot;duration_ms&quot;,
+        &quot;execution_id&quot;,
+        &quot;finished_at&quot;,
+        &quot;mode&quot;,
+        &quot;plan_id&quot;,
+        &quot;request_id&quot;,
+        &quot;results&quot;,
+        &quot;started_at&quot;,
+        &quot;state&quot;,
+        &quot;telemetry&quot;
+      ],
+      &quot;properties&quot;: [
+        &quot;duration_ms&quot;,
+        &quot;error&quot;,
+        &quot;execution_id&quot;,
+        &quot;finished_at&quot;,
+        &quot;mode&quot;,
+        &quot;output&quot;,
+        &quot;plan_id&quot;,
+        &quot;request_id&quot;,
+        &quot;results&quot;,
+        &quot;started_at&quot;,
+        &quot;state&quot;,
+        &quot;telemetry&quot;,
+        &quot;version&quot;
+      ]
+    },
+    &quot;entity_extraction&quot;: {
+      &quot;title&quot;: &quot;ExtractionResult&quot;,
+      &quot;required&quot;: [
+        &quot;entities&quot;,
+        &quot;processed_at&quot;,
+        &quot;relations&quot;,
+        &quot;resolution_logs&quot;,
+        &quot;response_id&quot;
+      ],
+      &quot;properties&quot;: [
+        &quot;entities&quot;,
+        &quot;processed_at&quot;,
+        &quot;relations&quot;,
+        &quot;resolution_logs&quot;,
+        &quot;response_id&quot;,
+        &quot;version&quot;
+      ]
+    },
+    &quot;visibility&quot;: {
+      &quot;title&quot;: &quot;VisibilityResult&quot;,
+      &quot;required&quot;: [
+        &quot;calculated_at&quot;,
+        &quot;confidence&quot;,
+        &quot;entity&quot;,
+        &quot;entity_id&quot;,
+        &quot;metrics&quot;,
+        &quot;version&quot;,
+        &quot;visibility_score&quot;,
+        &quot;weights&quot;
+      ],
+      &quot;properties&quot;: [
+        &quot;calculated_at&quot;,
+        &quot;confidence&quot;,
+        &quot;entity&quot;,
+        &quot;entity_id&quot;,
+        &quot;metrics&quot;,
+        &quot;version&quot;,
+        &quot;visibility_score&quot;,
+        &quot;weights&quot;
+      ]
+    }
+  }
+}</pre></td></tr>
+<tr><td>API compatibility</td><td class='pass'>PASS</td><td><pre>{
+  &quot;required_operations&quot;: 12,
+  &quot;missing&quot;: []
+}</pre></td></tr>
+<tr><td>Production Router</td><td class='pass'>PASS</td><td><pre>{
+  &quot;source&quot;: &quot;production_llm_router&quot;,
+  &quot;mode&quot;: &quot;SINGLE&quot;
+}</pre></td></tr>
+<tr><td>Monitoring</td><td class='pass'>PASS</td><td><pre>{
+  &quot;endpoints&quot;: 11,
+  &quot;prometheus&quot;: true
+}</pre></td></tr>
+<tr><td>Provider interfaces</td><td class='pass'>PASS</td><td><pre>{
+  &quot;providers&quot;: [
+    &quot;anthropic&quot;,
+    &quot;deepseek&quot;,
+    &quot;gemini&quot;,
+    &quot;gigachat&quot;,
+    &quot;grok&quot;,
+    &quot;local&quot;,
+    &quot;mistral&quot;,
+    &quot;openai&quot;,
+    &quot;perplexity&quot;,
+    &quot;yandex&quot;
+  ],
+  &quot;russian_providers&quot;: [
+    &quot;gigachat&quot;,
+    &quot;yandex&quot;
+  ]
+}</pre></td></tr>
+<tr><td>Executor</td><td class='pass'>PASS</td><td><pre>{
+  &quot;state&quot;: &quot;COMPLETED&quot;,
+  &quot;mode&quot;: &quot;SINGLE&quot;
+}</pre></td></tr>
+<tr><td>Event compatibility</td><td class='pass'>PASS</td><td><pre>{
+  &quot;event_count&quot;: 5
+}</pre></td></tr>
+<tr><td>Pipeline integrity</td><td class='pass'>PASS</td><td><pre>{
+  &quot;stage_count&quot;: 9
+}</pre></td></tr>
+<tr><td>Compatibility adapters removed</td><td class='pass'>PASS</td><td><pre>{
+  &quot;adapter_stages&quot;: []
+}</pre></td></tr>
+<tr><td>Correlation ID propagation</td><td class='pass'>PASS</td><td><pre>{
+  &quot;correlation_id&quot;: &quot;f4a37ab0-fcd3-44e8-bbe5-a428af63d62d&quot;
+}</pre></td></tr>
+<tr><td>Metrics collection</td><td class='pass'>PASS</td><td><pre>{
+  &quot;stage_timings_ms&quot;: {
+    &quot;intent&quot;: 4.115,
+    &quot;router&quot;: 31.709,
+    &quot;executor&quot;: 1.619,
+    &quot;entity_extraction&quot;: 0.085,
+    &quot;reason&quot;: 0.005,
+    &quot;visibility&quot;: 0.131,
+    &quot;knowledge_graph&quot;: 0.017,
+    &quot;response&quot;: 0.001
+  }
+}</pre></td></tr>
+<tr><td>Streaming compatibility</td><td class='pass'>PASS</td><td><pre>{
+  &quot;events&quot;: 3,
+  &quot;format&quot;: &quot;application/x-ndjson&quot;
+}</pre></td></tr>
+<tr><td>Retry/Fallback correctness</td><td class='pass'>PASS</td><td><pre>{
+  &quot;attempts&quot;: 2,
+  &quot;state&quot;: &quot;COMPLETED&quot;,
+  &quot;mode&quot;: &quot;FALLBACK&quot;
+}</pre></td></tr>
+<tr><td>Response serialization</td><td class='pass'>PASS</td><td><pre>{
+  &quot;error&quot;: null
+}</pre></td></tr>
+<tr><td>Performance</td><td class='pass'>PASS</td><td><pre>{
+  &quot;total_pipeline_ms&quot;: 37.682,
+  &quot;budget_ms&quot;: 500,
+  &quot;benchmark&quot;: {
+    &quot;iterations&quot;: 10,
+    &quot;p50_ms&quot;: 3.195,
+    &quot;p95_ms&quot;: 3.642,
+    &quot;p99_ms&quot;: 3.642,
+    &quot;throughput_per_second&quot;: 300.67
+  },
+  &quot;load&quot;: {
+    &quot;requests&quot;: 12,
+    &quot;concurrency&quot;: 4,
+    &quot;failures&quot;: 0,
+    &quot;success_rate&quot;: 1.0,
+    &quot;duration_seconds&quot;: 0.047,
+    &quot;throughput_per_second&quot;: 255.15
+  }
+}</pre></td></tr>
+<tr><td>Regression</td><td class='pass'>PASS</td><td><pre>{
+  &quot;response_schema_version&quot;: &quot;1.0&quot;
+}</pre></td></tr></tbody></table>
+  <h2>Compatibility Matrix</h2>
+  <table><thead><tr><th>Producer</th><th>Consumer</th><th>Contract</th><th>Status</th></tr></thead>
+  <tbody><tr><td>Query</td><td>Intent</td><td>query:string</td><td class='pass'>PASS</td></tr>
+<tr><td>Intent</td><td>Router</td><td>IntentResult→ExecutionPlan</td><td class='pass'>PASS</td></tr>
+<tr><td>Router</td><td>Executor</td><td>ExecutionPlan v1</td><td class='pass'>PASS</td></tr>
+<tr><td>Executor</td><td>Entity Extraction</td><td>provider output→raw_response</td><td class='pass'>PASS</td></tr>
+<tr><td>Entity Extraction</td><td>Reason Engine</td><td>ExtractionResult→ReasonContext</td><td class='pass'>PASS</td></tr>
+<tr><td>Reason Engine</td><td>Visibility Engine</td><td>ReasonContext→VisibilityInput</td><td class='pass'>PASS</td></tr>
+<tr><td>Entity Extraction</td><td>Knowledge Graph</td><td>entities/relations→nodes/edges</td><td class='pass'>PASS</td></tr>
+<tr><td>Knowledge Graph</td><td>Response</td><td>PipelineResponse v1</td><td class='pass'>PASS</td></tr></tbody></table>
+  <h2>Coverage</h2><pre>{
+  &quot;checks&quot;: {
+    &quot;passed&quot;: 16,
+    &quot;total&quot;: 16,
+    &quot;percent&quot;: 100.0
+  },
+  &quot;pipeline_stages&quot;: {
+    &quot;covered&quot;: 9,
+    &quot;total&quot;: 9,
+    &quot;percent&quot;: 100.0
+  },
+  &quot;adapter_stages&quot;: []
+}</pre>
+  <h2>Performance</h2><pre>{
+  &quot;stage_timings_ms&quot;: {
+    &quot;intent&quot;: 4.115,
+    &quot;router&quot;: 31.709,
+    &quot;executor&quot;: 1.619,
+    &quot;entity_extraction&quot;: 0.085,
+    &quot;reason&quot;: 0.005,
+    &quot;visibility&quot;: 0.131,
+    &quot;knowledge_graph&quot;: 0.017,
+    &quot;response&quot;: 0.001
+  },
+  &quot;total_pipeline_ms&quot;: 37.682,
+  &quot;benchmark&quot;: {
+    &quot;iterations&quot;: 10,
+    &quot;p50_ms&quot;: 3.195,
+    &quot;p95_ms&quot;: 3.642,
+    &quot;p99_ms&quot;: 3.642,
+    &quot;throughput_per_second&quot;: 300.67
+  },
+  &quot;load&quot;: {
+    &quot;requests&quot;: 12,
+    &quot;concurrency&quot;: 4,
+    &quot;failures&quot;: 0,
+    &quot;success_rate&quot;: 1.0,
+    &quot;duration_seconds&quot;: 0.047,
+    &quot;throughput_per_second&quot;: 255.15
+  }
+}</pre>
+</body>
+</html>

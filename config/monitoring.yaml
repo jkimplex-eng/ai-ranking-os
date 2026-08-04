@@ -1,0 +1,13 @@
+version: "1.0"
+slo:
+  availability_target: 0.999
+  router_p95_ms: 500
+  pipeline_p95_ms: 2000
+thresholds:
+  provider_availability_warning: 0.95
+  error_rate_warning: 0.01
+  queue_depth_warning: 100
+prometheus:
+  enabled: true
+  namespace: ai_ranking_os
+

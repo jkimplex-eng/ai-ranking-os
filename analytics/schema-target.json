@@ -1,0 +1,28 @@
+{
+  "tables": {
+    "analytics_runs": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "engine_version": {"type": "VARCHAR(50)", "nullable": false},
+        "query_payload": {"type": "JSON", "nullable": false},
+        "result_payload": {"type": "JSON", "nullable": false},
+        "source_record_count": {"type": "INTEGER", "nullable": false},
+        "group_count": {"type": "INTEGER", "nullable": false},
+        "calculated_at": {"type": "TIMESTAMP WITH TIME ZONE", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "indexes": [
+        {
+          "name": "ix_analytics_runs_calculated_id",
+          "columns": ["calculated_at", "id"],
+          "unique": false
+        },
+        {
+          "name": "ix_analytics_runs_version_calculated",
+          "columns": ["engine_version", "calculated_at"],
+          "unique": false
+        }
+      ]
+    }
+  }
+}

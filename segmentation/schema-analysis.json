@@ -1,0 +1,50 @@
+{
+  "schema_overview": {
+    "total_tables": 3,
+    "total_columns": 6,
+    "tables_with_primary_keys": 3,
+    "total_foreign_keys": 0,
+    "total_indexes": 5
+  },
+  "normalization_analysis": {
+    "total_issues": 0,
+    "by_severity": {
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "warning": 0
+    },
+    "issues": []
+  },
+  "data_type_analysis": {
+    "total_issues": 0,
+    "issues": []
+  },
+  "constraint_analysis": {
+    "total_issues": 1,
+    "by_severity": {
+      "high": 0,
+      "medium": 1,
+      "low": 0
+    },
+    "issues": [
+      {
+        "table": "segment_definitions",
+        "issue_type": "MISSING_UNIQUE",
+        "severity": "MEDIUM",
+        "description": "Column 'code' should likely have UNIQUE constraint",
+        "suggestion": "Add UNIQUE constraint to 'code'",
+        "columns_affected": [
+          "code"
+        ]
+      }
+    ]
+  },
+  "naming_analysis": {
+    "total_issues": 0,
+    "issues": []
+  },
+  "missing_indexes": [],
+  "recommendations": [],
+  "mermaid_erd": "erDiagram\n    SEGMENT_DEFINITIONS {\n        INTEGER id \"PK\"\n        VARCHAR code\n    }\n    SEGMENT_EVALUATIONS {\n        INTEGER id \"PK\"\n        INTEGER segment_id \"NOT NULL\"\n    }\n    SEGMENT_MEMBERSHIPS {\n        INTEGER id \"PK\"\n        INTEGER evaluation_id \"NOT NULL\"\n    }"
+}

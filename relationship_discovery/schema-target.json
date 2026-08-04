@@ -1,0 +1,31 @@
+{
+  "tables": {
+    "relationship_candidates": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "graph_snapshot_id": {"type": "INTEGER", "nullable": false},
+        "source_external_id": {"type": "VARCHAR(300)", "nullable": false},
+        "target_external_id": {"type": "VARCHAR(300)", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "unique_constraints": [["graph_snapshot_id", "source_external_id", "target_external_id"]]
+    },
+    "relationship_evidence": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "candidate_id": {"type": "INTEGER", "nullable": false, "foreign_key": "relationship_candidates.id"},
+        "source_reference": {"type": "VARCHAR(300)", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "unique_constraints": [["candidate_id", "source_reference"]]
+    },
+    "relationship_decisions": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "candidate_id": {"type": "INTEGER", "nullable": false, "foreign_key": "relationship_candidates.id"}
+      },
+      "primary_key": ["id"],
+      "indexes": [{"name": "ix_relationship_decisions_candidate_created", "columns": ["candidate_id"]}]
+    }
+  }
+}

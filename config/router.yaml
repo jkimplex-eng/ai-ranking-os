@@ -1,0 +1,15 @@
+version: "1.0"
+defaults:
+  policy_id: quality-first
+  request_timeout_seconds: 30
+  circuit_failure_threshold: 3
+  circuit_recovery_seconds: 60
+  half_open_success_threshold: 2
+thresholds:
+  minimum_routing_score: 0.25
+  minimum_availability: 0.50
+  ensemble_min_models: 2
+budgets:
+  daily_usd: 100.0
+  monthly_usd: 2000.0
+

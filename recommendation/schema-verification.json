@@ -1,0 +1,65 @@
+{
+  "schema_overview": {
+    "total_tables": 3,
+    "total_columns": 32,
+    "tables_with_primary_keys": 3,
+    "total_foreign_keys": 2,
+    "total_indexes": 0
+  },
+  "normalization_analysis": {
+    "total_issues": 1,
+    "by_severity": {
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "warning": 1
+    },
+    "issues": [
+      {
+        "table": "recommendation_executions",
+        "issue_type": "1NF_VIOLATION",
+        "severity": "WARNING",
+        "description": "Column 'input_snapshot' uses JSON type which may contain non-atomic values",
+        "suggestion": "Consider normalizing JSON arrays into separate tables",
+        "columns_affected": [
+          "input_snapshot"
+        ]
+      }
+    ]
+  },
+  "data_type_analysis": {
+    "total_issues": 0,
+    "issues": []
+  },
+  "constraint_analysis": {
+    "total_issues": 0,
+    "by_severity": {
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "issues": []
+  },
+  "naming_analysis": {
+    "total_issues": 0,
+    "issues": []
+  },
+  "missing_indexes": [
+    {
+      "table": "recommendations",
+      "column": "execution_id",
+      "type": "foreign_key",
+      "suggestion": "CREATE INDEX idx_recommendations_execution_id ON recommendations (execution_id);"
+    },
+    {
+      "table": "recommendations",
+      "column": "rule_id",
+      "type": "foreign_key",
+      "suggestion": "CREATE INDEX idx_recommendations_rule_id ON recommendations (rule_id);"
+    }
+  ],
+  "recommendations": [
+    "Review 1 normalization issues for schema optimization"
+  ],
+  "mermaid_erd": "erDiagram\n    RECOMMENDATION_RULES {\n        INTEGER id \"PK NOT NULL UNIQUE\"\n        VARCHAR(100) code \"NOT NULL UNIQUE\"\n        VARCHAR(100) recommendation_type \"NOT NULL\"\n        VARCHAR(100) metric \"NOT NULL\"\n        VARCHAR(20) operator \"NOT NULL\"\n        DOUBLE PRECISION threshold \"NOT NULL\"\n        VARCHAR(20) priority \"NOT NULL\"\n        TEXT explanation_template \"NOT NULL\"\n        TEXT expected_effect \"NOT NULL\"\n        VARCHAR(50) version \"NOT NULL\"\n        BOOLEAN is_active \"NOT NULL\"\n        TIMESTAMP created_at \"NOT NULL\"\n    }\n    RECOMMENDATION_EXECUTIONS {\n        INTEGER id \"PK NOT NULL UNIQUE\"\n        INTEGER research_id \"NOT NULL\"\n        VARCHAR(20) status \"NOT NULL\"\n        VARCHAR(50) engine_version \"NOT NULL\"\n        JSON input_snapshot \"NOT NULL\"\n        INTEGER generated_count \"NOT NULL\"\n        TEXT error\n        TIMESTAMP started_at \"NOT NULL\"\n        TIMESTAMP finished_at\n    }\n    RECOMMENDATIONS {\n        INTEGER id \"PK NOT NULL UNIQUE\"\n        INTEGER execution_id \"FK NOT NULL\"\n        INTEGER rule_id \"FK\"\n        INTEGER research_id \"NOT NULL\"\n        VARCHAR(100) recommendation_type \"NOT NULL\"\n        VARCHAR(20) priority \"NOT NULL\"\n        TEXT explanation \"NOT NULL\"\n        VARCHAR(100) metric \"NOT NULL\"\n        DOUBLE PRECISION metric_value \"NOT NULL\"\n        TEXT expected_effect \"NOT NULL\"\n        TIMESTAMP created_at \"NOT NULL\"\n    }\n    RECOMMENDATION_EXECUTIONS ||--o{ RECOMMENDATIONS : has\n    RECOMMENDATION_RULES ||--o{ RECOMMENDATIONS : has"
+}

@@ -1,0 +1,39 @@
+{
+  "schema_overview": {
+    "total_tables": 2,
+    "total_columns": 4,
+    "tables_with_primary_keys": 2,
+    "total_foreign_keys": 0,
+    "total_indexes": 4
+  },
+  "normalization_analysis": {
+    "total_issues": 0,
+    "by_severity": {
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "warning": 0
+    },
+    "issues": []
+  },
+  "data_type_analysis": {
+    "total_issues": 0,
+    "issues": []
+  },
+  "constraint_analysis": {
+    "total_issues": 0,
+    "by_severity": {
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "issues": []
+  },
+  "naming_analysis": {
+    "total_issues": 0,
+    "issues": []
+  },
+  "missing_indexes": [],
+  "recommendations": [],
+  "mermaid_erd": "erDiagram\n    BENCHMARK_RUNS {\n        INTEGER id \"PK\"\n        VARCHAR engine_version\n    }\n    BENCHMARK_ENTRIES {\n        INTEGER id \"PK\"\n        INTEGER run_id \"NOT NULL\"\n    }"
+}

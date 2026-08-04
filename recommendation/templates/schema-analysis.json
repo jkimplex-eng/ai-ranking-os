@@ -1,0 +1,39 @@
+{
+  "schema_overview": {
+    "total_tables": 1,
+    "total_columns": 2,
+    "tables_with_primary_keys": 1,
+    "total_foreign_keys": 0,
+    "total_indexes": 1
+  },
+  "normalization_analysis": {
+    "total_issues": 0,
+    "by_severity": {
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "warning": 0
+    },
+    "issues": []
+  },
+  "data_type_analysis": {
+    "total_issues": 0,
+    "issues": []
+  },
+  "constraint_analysis": {
+    "total_issues": 0,
+    "by_severity": {
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "issues": []
+  },
+  "naming_analysis": {
+    "total_issues": 0,
+    "issues": []
+  },
+  "missing_indexes": [],
+  "recommendations": [],
+  "mermaid_erd": "erDiagram\n    RECOMMENDATION_TEMPLATES {\n        INTEGER id \"PK\"\n        VARCHAR template_code\n    }"
+}

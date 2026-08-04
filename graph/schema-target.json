@@ -1,0 +1,30 @@
+{
+  "tables": {
+    "graph_snapshots": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "structure_version": {"type": "VARCHAR(50)", "nullable": false}
+      },
+      "primary_key": ["id"]
+    },
+    "graph_nodes": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "snapshot_id": {"type": "INTEGER", "nullable": false, "foreign_key": "graph_snapshots.id"},
+        "external_id": {"type": "VARCHAR(300)", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "unique_constraints": [["snapshot_id", "external_id"]]
+    },
+    "graph_edges": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "snapshot_id": {"type": "INTEGER", "nullable": false, "foreign_key": "graph_snapshots.id"},
+        "source_node_id": {"type": "INTEGER", "nullable": false, "foreign_key": "graph_nodes.id"},
+        "target_node_id": {"type": "INTEGER", "nullable": false, "foreign_key": "graph_nodes.id"}
+      },
+      "primary_key": ["id"],
+      "unique_constraints": [["snapshot_id", "source_node_id", "target_node_id"]]
+    }
+  }
+}

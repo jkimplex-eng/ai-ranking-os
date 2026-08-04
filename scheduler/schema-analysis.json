@@ -1,0 +1,70 @@
+{
+  "schema_overview": {
+    "total_tables": 3,
+    "total_columns": 6,
+    "tables_with_primary_keys": 3,
+    "total_foreign_keys": 0,
+    "total_indexes": 4
+  },
+  "normalization_analysis": {
+    "total_issues": 0,
+    "by_severity": {
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "warning": 0
+    },
+    "issues": []
+  },
+  "data_type_analysis": {
+    "total_issues": 0,
+    "issues": []
+  },
+  "constraint_analysis": {
+    "total_issues": 2,
+    "by_severity": {
+      "high": 0,
+      "medium": 1,
+      "low": 1
+    },
+    "issues": [
+      {
+        "table": "schedules",
+        "issue_type": "MISSING_NOT_NULL",
+        "severity": "LOW",
+        "description": "Column 'name' allows NULL but typically should not",
+        "suggestion": "Consider adding NOT NULL constraint to 'name'",
+        "columns_affected": [
+          "name"
+        ]
+      },
+      {
+        "table": "schedule_executions",
+        "issue_type": "MISSING_FOREIGN_KEY",
+        "severity": "MEDIUM",
+        "description": "Column 'schedule_id' appears to be a foreign key but has no constraint",
+        "suggestion": "Add foreign key constraint referencing schedule table",
+        "columns_affected": [
+          "schedule_id"
+        ]
+      }
+    ]
+  },
+  "naming_analysis": {
+    "total_issues": 1,
+    "issues": [
+      {
+        "table": "schedule_history",
+        "column": null,
+        "issue": "Table name should be plural",
+        "current_name": "schedule_history",
+        "suggested_name": "schedule_historys"
+      }
+    ]
+  },
+  "missing_indexes": [],
+  "recommendations": [
+    "Consider adding 1 foreign key constraints for referential integrity"
+  ],
+  "mermaid_erd": "erDiagram\n    SCHEDULES {\n        INTEGER id \"PK\"\n        VARCHAR name\n    }\n    SCHEDULE_EXECUTIONS {\n        INTEGER id \"PK\"\n        INTEGER schedule_id \"NOT NULL\"\n    }\n    SCHEDULE_HISTORY {\n        INTEGER id \"PK\"\n        INTEGER execution_id \"NOT NULL\"\n    }"
+}

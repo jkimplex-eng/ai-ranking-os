@@ -1,0 +1,39 @@
+{
+  "tables": {
+    "canonical_entities": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "normalized_name": {"type": "VARCHAR(500)", "nullable": false},
+        "entity_type": {"type": "VARCHAR(100)", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "unique_constraints": [["entity_type", "normalized_name"]]
+    },
+    "entity_aliases": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "canonical_entity_id": {"type": "INTEGER", "nullable": false, "foreign_key": "canonical_entities.id"},
+        "normalized_alias": {"type": "VARCHAR(500)", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "unique_constraints": [["canonical_entity_id", "normalized_alias"]]
+    },
+    "link_candidates": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "canonical_entity_id": {"type": "INTEGER", "nullable": true, "foreign_key": "canonical_entities.id"},
+        "status": {"type": "VARCHAR(20)", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "indexes": [{"name": "ix_link_candidates_status_created", "columns": ["status"]}]
+    },
+    "link_decisions": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "candidate_id": {"type": "INTEGER", "nullable": false, "foreign_key": "link_candidates.id"}
+      },
+      "primary_key": ["id"],
+      "indexes": [{"name": "ix_link_decisions_candidate_created", "columns": ["candidate_id"]}]
+    }
+  }
+}

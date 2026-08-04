@@ -1,0 +1,30 @@
+{
+  "queries": [
+    {
+      "id": "analytics_runs_recent",
+      "type": "SELECT",
+      "table": "analytics_runs",
+      "description": "Paginated analytics run history",
+      "where_conditions": [],
+      "join_conditions": [],
+      "order_by": [{"column": "calculated_at", "direction": "DESC"}],
+      "group_by": [],
+      "frequency": 500,
+      "avg_execution_time_ms": 10
+    },
+    {
+      "id": "analytics_runs_by_version",
+      "type": "SELECT",
+      "table": "analytics_runs",
+      "description": "Version-specific analytics history",
+      "where_conditions": [
+        {"column": "engine_version", "operator": "=", "selectivity": 0.1}
+      ],
+      "join_conditions": [],
+      "order_by": [{"column": "calculated_at", "direction": "DESC"}],
+      "group_by": [],
+      "frequency": 100,
+      "avg_execution_time_ms": 8
+    }
+  ]
+}

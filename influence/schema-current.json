@@ -1,0 +1,10 @@
+{
+  "tables": {
+    "graph_snapshots": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false}
+      },
+      "primary_key": ["id"]
+    }
+  }
+}

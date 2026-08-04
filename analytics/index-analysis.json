@@ -1,0 +1,79 @@
+{
+  "analysis_summary": {
+    "tables_analyzed": 1,
+    "query_patterns_analyzed": 2,
+    "existing_indexes": 2,
+    "total_recommendations": 1,
+    "high_priority_recommendations": 1,
+    "redundancy_issues_found": 0
+  },
+  "index_recommendations": {
+    "high_priority": [
+      {
+        "recommendation_id": "9f2c8548",
+        "table": "analytics_runs",
+        "recommended_index": {
+          "name": "idx_analytics_runs_covering_engine_version_calculated_at",
+          "table": "analytics_runs",
+          "columns": [
+            "engine_version",
+            "calculated_at"
+          ],
+          "unique": false,
+          "index_type": "btree",
+          "partial_condition": null,
+          "include_columns": [],
+          "size_estimate": null
+        },
+        "reason": "Covering index for WHERE + ORDER BY optimization",
+        "query_patterns_helped": [
+          "analytics_runs_by_version"
+        ],
+        "estimated_benefit": "High (eliminates table lookups for SELECT)",
+        "estimated_overhead": "High (covering index with 2 columns)",
+        "priority": 2,
+        "sql_statement": "CREATE INDEX idx_analytics_runs_covering_engine_version_calculated_at ON analytics_runs (engine_version, calculated_at);",
+        "selectivity_analysis": {
+          "main_columns_selectivity": 0.6,
+          "covering_benefit": "Eliminates table lookup for SELECT queries"
+        }
+      }
+    ],
+    "medium_priority": [],
+    "low_priority": []
+  },
+  "redundancy_analysis": [],
+  "size_estimates": {
+    "analytics_runs": {
+      "estimated_table_rows": 10000,
+      "existing_indexes_size_mb": 10,
+      "index_overhead_per_column_mb": 2
+    }
+  },
+  "sql_statements": {
+    "create_indexes": [
+      "CREATE INDEX idx_analytics_runs_covering_engine_version_calculated_at ON analytics_runs (engine_version, calculated_at);"
+    ],
+    "drop_redundant": []
+  },
+  "performance_impact": {
+    "query_optimization": {
+      "queries_improved": 1,
+      "high_impact_queries": 1,
+      "benefit_distribution": {
+        "High (eliminates table lookups for SELECT)": 1
+      }
+    },
+    "write_overhead": {
+      "total_new_indexes": 1,
+      "estimated_insert_overhead": "5%",
+      "tables_most_affected": [
+        [
+          "analytics_runs",
+          1
+        ]
+      ]
+    },
+    "storage_impact": {}
+  }
+}

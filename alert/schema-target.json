@@ -1,0 +1,42 @@
+{
+  "tables": {
+    "alert_rules": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "code": {"type": "VARCHAR(100)", "nullable": false},
+        "version": {"type": "VARCHAR(50)", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "unique_constraints": [["code", "version"]]
+    },
+    "alerts": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "rule_id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "foreign_key": "alert_rules.id"
+        },
+        "entity_id": {"type": "UUID", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "indexes": [
+        {"name": "ix_alerts_entity_detected", "columns": ["entity_id"]}
+      ]
+    },
+    "alert_events": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "alert_id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "foreign_key": "alerts.id"
+        }
+      },
+      "primary_key": ["id"],
+      "indexes": [
+        {"name": "ix_alert_events_alert_created", "columns": ["alert_id"]}
+      ]
+    }
+  }
+}

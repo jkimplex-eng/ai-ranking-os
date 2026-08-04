@@ -1,0 +1,31 @@
+{
+  "tables": {
+    "baselines": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "entity_id": {"type": "UUID", "nullable": false, "unique": true},
+        "algorithm_version": {"type": "VARCHAR(50)", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "unique_constraints": [["entity_id"]]
+    },
+    "baseline_snapshots": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "baseline_id": {"type": "INTEGER", "nullable": false, "foreign_key": "baselines.id"},
+        "research_id": {"type": "INTEGER", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "indexes": [{"name": "ix_baseline_snapshots_baseline_created", "columns": ["baseline_id"]}]
+    },
+    "regression_events": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "baseline_id": {"type": "INTEGER", "nullable": false, "foreign_key": "baselines.id"},
+        "baseline_snapshot_id": {"type": "INTEGER", "nullable": false, "foreign_key": "baseline_snapshots.id"}
+      },
+      "primary_key": ["id"],
+      "indexes": [{"name": "ix_regression_events_baseline_created", "columns": ["baseline_id"]}]
+    }
+  }
+}

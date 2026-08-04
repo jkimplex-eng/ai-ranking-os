@@ -1,0 +1,278 @@
+version: "1.0"
+models:
+  - id: gpt-4o-mini
+    provider: openai
+    display_name: GPT-4o Mini
+    status: ACTIVE
+    tier: STANDARD
+    capabilities: [chat, tools, json, multilingual]
+    pricing: {input_per_million: 0.15, output_per_million: 0.60}
+    latency_ms: 550
+    quality: 0.86
+    availability: 0.995
+    context_window: 128000
+    hallucination_rate: 0.08
+    domains: [general, coding, business]
+    languages: [en, ru, es, fr, de]
+  - id: claude-3-5-sonnet
+    provider: anthropic
+    display_name: Claude 3.5 Sonnet
+    status: ACTIVE
+    tier: PREMIUM
+    capabilities: [chat, tools, json, research]
+    pricing: {input_per_million: 3.0, output_per_million: 15.0}
+    latency_ms: 900
+    quality: 0.95
+    availability: 0.99
+    context_window: 200000
+    hallucination_rate: 0.05
+    domains: [general, research, legal, writing]
+    languages: [en, ru, es, fr, de]
+  - id: gemini-2-flash
+    provider: gemini
+    display_name: Gemini 2 Flash
+    status: ACTIVE
+    tier: STANDARD
+    capabilities: [chat, json, multimodal, multilingual]
+    pricing: {input_per_million: 0.10, output_per_million: 0.40}
+    latency_ms: 400
+    quality: 0.84
+    availability: 0.99
+    context_window: 1000000
+    hallucination_rate: 0.09
+    domains: [general, multimodal]
+    languages: [en, ru, es, fr, de]
+  - id: sonar-pro
+    provider: perplexity
+    display_name: Perplexity Sonar Pro
+    status: ACTIVE
+    tier: PREMIUM
+    capabilities: [chat, research, citations, web]
+    pricing: {input_per_million: 3.0, output_per_million: 15.0}
+    latency_ms: 1200
+    quality: 0.93
+    availability: 0.985
+    context_window: 200000
+    hallucination_rate: 0.03
+    domains: [research, news, web]
+    languages: [en, ru]
+  - id: grok-3-mini
+    provider: grok
+    display_name: Grok 3 Mini
+    status: ACTIVE
+    tier: STANDARD
+    capabilities: [chat, tools, research]
+    pricing: {input_per_million: 0.30, output_per_million: 0.50}
+    latency_ms: 650
+    quality: 0.82
+    availability: 0.98
+    context_window: 131072
+    hallucination_rate: 0.10
+    domains: [general, news]
+    languages: [en]
+  - id: deepseek-chat
+    provider: deepseek
+    display_name: DeepSeek Chat
+    status: ACTIVE
+    tier: ECONOMY
+    capabilities: [chat, coding, json]
+    pricing: {input_per_million: 0.14, output_per_million: 0.28}
+    latency_ms: 700
+    quality: 0.83
+    availability: 0.98
+    context_window: 64000
+    hallucination_rate: 0.09
+    domains: [general, coding, math]
+    languages: [en, ru]
+  - id: mistral-small
+    provider: mistral
+    display_name: Mistral Small
+    status: ACTIVE
+    tier: ECONOMY
+    capabilities: [chat, json, multilingual]
+    pricing: {input_per_million: 0.10, output_per_million: 0.30}
+    latency_ms: 500
+    quality: 0.80
+    availability: 0.985
+    context_window: 32000
+    hallucination_rate: 0.10
+    domains: [general, european]
+    languages: [en, fr, de, es]
+  - id: local-llama
+    provider: local
+    display_name: Local Llama
+    status: ACTIVE
+    tier: LOCAL
+    capabilities: [chat, json, private]
+    pricing: {input_per_million: 0.0, output_per_million: 0.0}
+    latency_ms: 300
+    quality: 0.70
+    availability: 0.95
+    context_window: 16000
+    hallucination_rate: 0.14
+    domains: [general, private]
+    languages: [en, ru]
+    region: GLOBAL
+    success_probability: 0.96
+  - id: yandexgpt-pro
+    provider: yandex
+    display_name: YandexGPT Pro
+    status: ACTIVE
+    tier: STANDARD
+    capabilities: [chat, json, multilingual]
+    pricing: {input_per_million: 2.0, output_per_million: 2.0}
+    latency_ms: 750
+    quality: 0.84
+    availability: 0.98
+    context_window: 32768
+    hallucination_rate: 0.08
+    domains: [general, business, russia]
+    languages: [ru, en]
+    region: RUSSIA
+    success_probability: 0.96
+  - id: gigachat-pro
+    provider: gigachat
+    display_name: GigaChat Pro
+    status: ACTIVE
+    tier: STANDARD
+    capabilities: [chat, json, tools, multilingual]
+    pricing: {input_per_million: 1.8, output_per_million: 1.8}
+    latency_ms: 700
+    quality: 0.83
+    availability: 0.98
+    context_window: 32768
+    hallucination_rate: 0.09
+    domains: [general, business, russia]
+    languages: [ru, en]
+    region: RUSSIA
+    success_probability: 0.96
+
+providers:
+  - name: openai
+    region: GLOBAL
+    protocol: openai
+    base_url: https://api.openai.com/v1
+    credential: OPENAI_API_KEY
+    mock: true
+    rate_limits: {rpm: 500, tpm: 500000, concurrent_requests: 20, retry_budget: 3}
+    models:
+      - id: gpt-4o-mini
+        context_window: 128000
+        max_output_tokens: 16384
+        capabilities: [chat, streaming, function_calling, json_mode, vision, tool_use]
+      - id: text-embedding-3-small
+        context_window: 8191
+        max_output_tokens: 1
+        capabilities: [embeddings]
+  - name: anthropic
+    region: GLOBAL
+    protocol: anthropic
+    base_url: https://api.anthropic.com/v1
+    credential: ANTHROPIC_API_KEY
+    mock: true
+    rate_limits: {rpm: 200, tpm: 300000, concurrent_requests: 10, retry_budget: 3}
+    models:
+      - id: claude-3-5-sonnet
+        context_window: 200000
+        max_output_tokens: 8192
+        capabilities: [chat, streaming, function_calling, json_mode, vision, tool_use, research]
+  - name: gemini
+    region: GLOBAL
+    protocol: gemini
+    base_url: https://generativelanguage.googleapis.com/v1beta
+    credential: GEMINI_API_KEY
+    mock: true
+    rate_limits: {rpm: 300, tpm: 500000, concurrent_requests: 20, retry_budget: 3}
+    models:
+      - id: gemini-2-flash
+        context_window: 1000000
+        max_output_tokens: 8192
+        capabilities: [chat, streaming, function_calling, json_mode, vision, tool_use]
+      - id: gemini-embedding-001
+        context_window: 2048
+        max_output_tokens: 1
+        capabilities: [embeddings]
+  - name: deepseek
+    region: GLOBAL
+    protocol: openai
+    base_url: https://api.deepseek.com/v1
+    credential: DEEPSEEK_API_KEY
+    mock: true
+    rate_limits: {rpm: 300, tpm: 300000, concurrent_requests: 15, retry_budget: 3}
+    models:
+      - id: deepseek-chat
+        context_window: 64000
+        max_output_tokens: 8192
+        capabilities: [chat, streaming, function_calling, json_mode, tool_use]
+  - name: perplexity
+    region: GLOBAL
+    protocol: openai
+    base_url: https://api.perplexity.ai
+    credential: PERPLEXITY_API_KEY
+    mock: true
+    rate_limits: {rpm: 100, tpm: 200000, concurrent_requests: 8, retry_budget: 3}
+    models:
+      - id: sonar-pro
+        context_window: 200000
+        max_output_tokens: 8192
+        capabilities: [chat, streaming, research, citations]
+  - name: mistral
+    region: GLOBAL
+    protocol: openai
+    base_url: https://api.mistral.ai/v1
+    credential: MISTRAL_API_KEY
+    mock: true
+    rate_limits: {rpm: 200, tpm: 200000, concurrent_requests: 10, retry_budget: 3}
+    models:
+      - id: mistral-small
+        context_window: 32000
+        max_output_tokens: 8192
+        capabilities: [chat, streaming, function_calling, json_mode, tool_use]
+  - name: grok
+    region: GLOBAL
+    protocol: openai
+    base_url: https://api.x.ai/v1
+    credential: GROK_API_KEY
+    mock: true
+    rate_limits: {rpm: 100, tpm: 200000, concurrent_requests: 8, retry_budget: 3}
+    models:
+      - id: grok-3-mini
+        context_window: 131072
+        max_output_tokens: 8192
+        capabilities: [chat, streaming, function_calling, tool_use, research]
+  - name: local
+    region: GLOBAL
+    protocol: openai
+    base_url: http://localhost:11434/v1
+    mock: true
+    rate_limits: {rpm: 1000, tpm: 1000000, concurrent_requests: 4, retry_budget: 1}
+    models:
+      - id: local-llama
+        context_window: 16000
+        max_output_tokens: 4096
+        capabilities: [chat, streaming, json_mode, embeddings]
+  - name: yandex
+    region: RUSSIA
+    protocol: yandex
+    base_url: https://llm.api.cloud.yandex.net/foundationModels/v1
+    credential: YANDEX_API_KEY
+    project_credential: YANDEX_FOLDER_ID
+    mock: true
+    rate_limits: {rpm: 100, tpm: 150000, concurrent_requests: 8, retry_budget: 3}
+    models:
+      - id: yandexgpt-pro
+        context_window: 32768
+        max_output_tokens: 8192
+        capabilities: [chat, streaming, json_mode]
+  - name: gigachat
+    region: RUSSIA
+    protocol: openai
+    base_url: https://gigachat.devices.sberbank.ru/api/v1
+    credential: GIGACHAT_ACCESS_TOKEN
+    mock: true
+    rate_limits: {rpm: 100, tpm: 150000, concurrent_requests: 8, retry_budget: 3}
+    models:
+      - id: gigachat-pro
+        context_window: 32768
+        max_output_tokens: 8192
+        capabilities: [chat, streaming, function_calling, json_mode, tool_use]

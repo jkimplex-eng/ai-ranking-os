@@ -1,0 +1,47 @@
+{
+  "schema_overview": {
+    "total_tables": 2,
+    "total_columns": 5,
+    "tables_with_primary_keys": 2,
+    "total_foreign_keys": 0,
+    "total_indexes": 3
+  },
+  "normalization_analysis": {
+    "total_issues": 0,
+    "by_severity": {
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "warning": 0
+    },
+    "issues": []
+  },
+  "data_type_analysis": {
+    "total_issues": 0,
+    "issues": []
+  },
+  "constraint_analysis": {
+    "total_issues": 0,
+    "by_severity": {
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "issues": []
+  },
+  "naming_analysis": {
+    "total_issues": 1,
+    "issues": [
+      {
+        "table": "entity_influence",
+        "column": null,
+        "issue": "Table name should be plural",
+        "current_name": "entity_influence",
+        "suggested_name": "entity_influences"
+      }
+    ]
+  },
+  "missing_indexes": [],
+  "recommendations": [],
+  "mermaid_erd": "erDiagram\n    INFLUENCE_SNAPSHOTS {\n        INTEGER id \"PK\"\n        INTEGER graph_snapshot_id \"NOT NULL\"\n        VARCHAR algorithm_version\n    }\n    ENTITY_INFLUENCE {\n        INTEGER id \"PK\"\n        INTEGER snapshot_id \"NOT NULL\"\n    }"
+}

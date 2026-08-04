@@ -1,0 +1,48 @@
+{
+  "schema_overview": {
+    "total_tables": 4,
+    "total_columns": 10,
+    "tables_with_primary_keys": 4,
+    "total_foreign_keys": 0,
+    "total_indexes": 6
+  },
+  "normalization_analysis": {
+    "total_issues": 0,
+    "by_severity": {
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "warning": 0
+    },
+    "issues": []
+  },
+  "data_type_analysis": {
+    "total_issues": 1,
+    "issues": [
+      {
+        "table": "link_candidates",
+        "column": "external_id",
+        "current_type": "VARCHAR",
+        "issue": "Numeric ID stored as string",
+        "suggested_type": "INTEGER, BIGINT, or UUID",
+        "rationale": "Numeric types are more efficient for ID columns and enable better indexing"
+      }
+    ]
+  },
+  "constraint_analysis": {
+    "total_issues": 0,
+    "by_severity": {
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "issues": []
+  },
+  "naming_analysis": {
+    "total_issues": 0,
+    "issues": []
+  },
+  "missing_indexes": [],
+  "recommendations": [],
+  "mermaid_erd": "erDiagram\n    CANONICAL_ENTITIES {\n        INTEGER id \"PK\"\n        VARCHAR canonical_name\n    }\n    ENTITY_ALIASES {\n        INTEGER id \"PK\"\n        INTEGER canonical_entity_id \"NOT NULL\"\n    }\n    LINK_CANDIDATES {\n        INTEGER id \"PK\"\n        INTEGER graph_snapshot_id \"NOT NULL\"\n        INTEGER graph_node_id \"NOT NULL\"\n        VARCHAR external_id\n    }\n    LINK_DECISIONS {\n        INTEGER id \"PK\"\n        INTEGER candidate_id \"NOT NULL\"\n    }"
+}

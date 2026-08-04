@@ -1,0 +1,13 @@
+{
+  "checks": {
+    "passed": 16,
+    "total": 16,
+    "percent": 100.0
+  },
+  "pipeline_stages": {
+    "covered": 9,
+    "total": 9,
+    "percent": 100.0
+  },
+  "adapter_stages": []
+}

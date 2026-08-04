@@ -1,0 +1,62 @@
+{
+  "schema_overview": {
+    "total_tables": 3,
+    "total_columns": 8,
+    "tables_with_primary_keys": 3,
+    "total_foreign_keys": 0,
+    "total_indexes": 3
+  },
+  "normalization_analysis": {
+    "total_issues": 0,
+    "by_severity": {
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "warning": 0
+    },
+    "issues": []
+  },
+  "data_type_analysis": {
+    "total_issues": 0,
+    "issues": []
+  },
+  "constraint_analysis": {
+    "total_issues": 2,
+    "by_severity": {
+      "high": 0,
+      "medium": 2,
+      "low": 0
+    },
+    "issues": [
+      {
+        "table": "baseline_snapshots",
+        "issue_type": "MISSING_FOREIGN_KEY",
+        "severity": "MEDIUM",
+        "description": "Column 'baseline_id' appears to be a foreign key but has no constraint",
+        "suggestion": "Add foreign key constraint referencing baseline table",
+        "columns_affected": [
+          "baseline_id"
+        ]
+      },
+      {
+        "table": "regression_events",
+        "issue_type": "MISSING_FOREIGN_KEY",
+        "severity": "MEDIUM",
+        "description": "Column 'baseline_id' appears to be a foreign key but has no constraint",
+        "suggestion": "Add foreign key constraint referencing baseline table",
+        "columns_affected": [
+          "baseline_id"
+        ]
+      }
+    ]
+  },
+  "naming_analysis": {
+    "total_issues": 0,
+    "issues": []
+  },
+  "missing_indexes": [],
+  "recommendations": [
+    "Consider adding 2 foreign key constraints for referential integrity"
+  ],
+  "mermaid_erd": "erDiagram\n    BASELINES {\n        INTEGER id \"PK\"\n        UUID entity_id \"NOT NULL UNIQUE\"\n        INTEGER research_id \"NOT NULL\"\n        VARCHAR update_policy\n    }\n    BASELINE_SNAPSHOTS {\n        INTEGER id \"PK\"\n        INTEGER baseline_id \"NOT NULL\"\n    }\n    REGRESSION_EVENTS {\n        INTEGER id \"PK\"\n        INTEGER baseline_id \"NOT NULL\"\n    }"
+}

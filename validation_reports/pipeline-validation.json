@@ -1,0 +1,677 @@
+{
+  "status": "PASS",
+  "generated_at": "2026-08-02T11:05:44.589611+00:00",
+  "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+  "query": "Compare OpenAI and Qwen with sources",
+  "checks": [
+    {
+      "name": "JSON Schema compatibility",
+      "status": "PASS",
+      "details": {
+        "errors": {},
+        "signatures": {
+          "intent": {
+            "title": "IntentResult",
+            "required": [
+              "classified_at",
+              "confidence",
+              "constraints",
+              "entities",
+              "expected_output",
+              "intents",
+              "language",
+              "primary_intent",
+              "query",
+              "request_id",
+              "routing"
+            ],
+            "properties": [
+              "classified_at",
+              "confidence",
+              "constraints",
+              "entities",
+              "expected_output",
+              "intents",
+              "language",
+              "primary_intent",
+              "query",
+              "request_id",
+              "routing",
+              "version"
+            ]
+          },
+          "router": {
+            "title": "ExecutionPlan",
+            "required": [
+              "steps"
+            ],
+            "properties": [
+              "metadata",
+              "mode",
+              "plan_id",
+              "request_id",
+              "steps"
+            ]
+          },
+          "executor": {
+            "title": "ExecutorResult",
+            "required": [
+              "duration_ms",
+              "execution_id",
+              "finished_at",
+              "mode",
+              "plan_id",
+              "request_id",
+              "results",
+              "started_at",
+              "state",
+              "telemetry"
+            ],
+            "properties": [
+              "duration_ms",
+              "error",
+              "execution_id",
+              "finished_at",
+              "mode",
+              "output",
+              "plan_id",
+              "request_id",
+              "results",
+              "started_at",
+              "state",
+              "telemetry",
+              "version"
+            ]
+          },
+          "entity_extraction": {
+            "title": "ExtractionResult",
+            "required": [
+              "entities",
+              "processed_at",
+              "relations",
+              "resolution_logs",
+              "response_id"
+            ],
+            "properties": [
+              "entities",
+              "processed_at",
+              "relations",
+              "resolution_logs",
+              "response_id",
+              "version"
+            ]
+          },
+          "visibility": {
+            "title": "VisibilityResult",
+            "required": [
+              "calculated_at",
+              "confidence",
+              "entity",
+              "entity_id",
+              "metrics",
+              "version",
+              "visibility_score",
+              "weights"
+            ],
+            "properties": [
+              "calculated_at",
+              "confidence",
+              "entity",
+              "entity_id",
+              "metrics",
+              "version",
+              "visibility_score",
+              "weights"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "API compatibility",
+      "status": "PASS",
+      "details": {
+        "required_operations": 12,
+        "missing": []
+      }
+    },
+    {
+      "name": "Production Router",
+      "status": "PASS",
+      "details": {
+        "source": "production_llm_router",
+        "mode": "SINGLE"
+      }
+    },
+    {
+      "name": "Monitoring",
+      "status": "PASS",
+      "details": {
+        "endpoints": 11,
+        "prometheus": true
+      }
+    },
+    {
+      "name": "Provider interfaces",
+      "status": "PASS",
+      "details": {
+        "providers": [
+          "anthropic",
+          "deepseek",
+          "gemini",
+          "gigachat",
+          "grok",
+          "local",
+          "mistral",
+          "openai",
+          "perplexity",
+          "yandex"
+        ],
+        "russian_providers": [
+          "gigachat",
+          "yandex"
+        ]
+      }
+    },
+    {
+      "name": "Executor",
+      "status": "PASS",
+      "details": {
+        "state": "COMPLETED",
+        "mode": "SINGLE"
+      }
+    },
+    {
+      "name": "Event compatibility",
+      "status": "PASS",
+      "details": {
+        "event_count": 5
+      }
+    },
+    {
+      "name": "Pipeline integrity",
+      "status": "PASS",
+      "details": {
+        "stage_count": 9
+      }
+    },
+    {
+      "name": "Compatibility adapters removed",
+      "status": "PASS",
+      "details": {
+        "adapter_stages": []
+      }
+    },
+    {
+      "name": "Correlation ID propagation",
+      "status": "PASS",
+      "details": {
+        "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d"
+      }
+    },
+    {
+      "name": "Metrics collection",
+      "status": "PASS",
+      "details": {
+        "stage_timings_ms": {
+          "intent": 4.115,
+          "router": 31.709,
+          "executor": 1.619,
+          "entity_extraction": 0.085,
+          "reason": 0.005,
+          "visibility": 0.131,
+          "knowledge_graph": 0.017,
+          "response": 0.001
+        }
+      }
+    },
+    {
+      "name": "Streaming compatibility",
+      "status": "PASS",
+      "details": {
+        "events": 3,
+        "format": "application/x-ndjson"
+      }
+    },
+    {
+      "name": "Retry/Fallback correctness",
+      "status": "PASS",
+      "details": {
+        "attempts": 2,
+        "state": "COMPLETED",
+        "mode": "FALLBACK"
+      }
+    },
+    {
+      "name": "Response serialization",
+      "status": "PASS",
+      "details": {
+        "error": null
+      }
+    },
+    {
+      "name": "Performance",
+      "status": "PASS",
+      "details": {
+        "total_pipeline_ms": 37.682,
+        "budget_ms": 500,
+        "benchmark": {
+          "iterations": 10,
+          "p50_ms": 3.195,
+          "p95_ms": 3.642,
+          "p99_ms": 3.642,
+          "throughput_per_second": 300.67
+        },
+        "load": {
+          "requests": 12,
+          "concurrency": 4,
+          "failures": 0,
+          "success_rate": 1.0,
+          "duration_seconds": 0.047,
+          "throughput_per_second": 255.15
+        }
+      }
+    },
+    {
+      "name": "Regression",
+      "status": "PASS",
+      "details": {
+        "response_schema_version": "1.0"
+      }
+    }
+  ],
+  "coverage": {
+    "checks": {
+      "passed": 16,
+      "total": 16,
+      "percent": 100.0
+    },
+    "pipeline_stages": {
+      "covered": 9,
+      "total": 9,
+      "percent": 100.0
+    },
+    "adapter_stages": []
+  },
+  "compatibility_matrix": [
+    {
+      "producer": "Query",
+      "consumer": "Intent",
+      "status": "PASS",
+      "contract": "query:string"
+    },
+    {
+      "producer": "Intent",
+      "consumer": "Router",
+      "status": "PASS",
+      "contract": "IntentResult→ExecutionPlan"
+    },
+    {
+      "producer": "Router",
+      "consumer": "Executor",
+      "status": "PASS",
+      "contract": "ExecutionPlan v1"
+    },
+    {
+      "producer": "Executor",
+      "consumer": "Entity Extraction",
+      "status": "PASS",
+      "contract": "provider output→raw_response"
+    },
+    {
+      "producer": "Entity Extraction",
+      "consumer": "Reason Engine",
+      "status": "PASS",
+      "contract": "ExtractionResult→ReasonContext"
+    },
+    {
+      "producer": "Reason Engine",
+      "consumer": "Visibility Engine",
+      "status": "PASS",
+      "contract": "ReasonContext→VisibilityInput"
+    },
+    {
+      "producer": "Entity Extraction",
+      "consumer": "Knowledge Graph",
+      "status": "PASS",
+      "contract": "entities/relations→nodes/edges"
+    },
+    {
+      "producer": "Knowledge Graph",
+      "consumer": "Response",
+      "status": "PASS",
+      "contract": "PipelineResponse v1"
+    }
+  ],
+  "performance": {
+    "stage_timings_ms": {
+      "intent": 4.115,
+      "router": 31.709,
+      "executor": 1.619,
+      "entity_extraction": 0.085,
+      "reason": 0.005,
+      "visibility": 0.131,
+      "knowledge_graph": 0.017,
+      "response": 0.001
+    },
+    "total_pipeline_ms": 37.682,
+    "benchmark": {
+      "iterations": 10,
+      "p50_ms": 3.195,
+      "p95_ms": 3.642,
+      "p99_ms": 3.642,
+      "throughput_per_second": 300.67
+    },
+    "load": {
+      "requests": 12,
+      "concurrency": 4,
+      "failures": 0,
+      "success_rate": 1.0,
+      "duration_seconds": 0.047,
+      "throughput_per_second": 255.15
+    }
+  },
+  "stages": {
+    "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+    "query": {
+      "query": "Compare OpenAI and Qwen with sources",
+      "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d"
+    },
+    "intent": {
+      "request_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+      "query": "Compare OpenAI and Qwen with sources",
+      "language": {
+        "code": "en",
+        "confidence": 0.9
+      },
+      "primary_intent": "COMPARISON",
+      "intents": [
+        {
+          "intent": "COMPARISON",
+          "subtype": "VERSUS",
+          "confidence": 0.4539,
+          "signals": [
+            "\\b(?:vs|versus|compare|сравни|сравнить|comparar|comparer)\\b",
+            "leading_comparison_verb"
+          ]
+        },
+        {
+          "intent": "RESEARCH",
+          "subtype": "EVIDENCE",
+          "confidence": 0.314,
+          "signals": [
+            "\\b(?:evidence|sources|citations|источники|доказательства)\\b"
+          ]
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_type": "LANGUAGE",
+          "operator": "EQ",
+          "value": "en",
+          "confidence": 1.0
+        }
+      ],
+      "entities": [],
+      "expected_output": {
+        "format": "COMPARISON_TABLE",
+        "fields": [
+          "option",
+          "pros",
+          "cons",
+          "differences"
+        ],
+        "cardinality": "MULTIPLE"
+      },
+      "confidence": 0.3597,
+      "routing": {
+        "strategy": "RULE_EMBEDDING_ENSEMBLE",
+        "llm_fallback_required": false,
+        "rule_scores": {
+          "INFORMATIONAL": 0.0,
+          "NAVIGATIONAL": 0.0,
+          "TRANSACTIONAL": 0.0,
+          "COMMERCIAL_INVESTIGATION": 0.0,
+          "COMPARISON": 0.6,
+          "RECOMMENDATION": 0.0,
+          "TROUBLESHOOTING": 0.0,
+          "HOW_TO": 0.0,
+          "LOCAL": 0.0,
+          "RESEARCH": 0.4
+        },
+        "embedding_scores": {
+          "INFORMATIONAL": 0.1361,
+          "NAVIGATIONAL": 0.0,
+          "TRANSACTIONAL": 0.0,
+          "COMMERCIAL_INVESTIGATION": 0.0,
+          "COMPARISON": 0.1826,
+          "RECOMMENDATION": 0.0,
+          "TROUBLESHOOTING": 0.0,
+          "HOW_TO": 0.0,
+          "LOCAL": 0.1667,
+          "RESEARCH": 0.1543
+        },
+        "ensemble_scores": {
+          "INFORMATIONAL": 0.0476,
+          "NAVIGATIONAL": 0.0,
+          "TRANSACTIONAL": 0.0,
+          "COMMERCIAL_INVESTIGATION": 0.0,
+          "COMPARISON": 0.4539,
+          "RECOMMENDATION": 0.0,
+          "TROUBLESHOOTING": 0.0,
+          "HOW_TO": 0.0,
+          "LOCAL": 0.0583,
+          "RESEARCH": 0.314
+        }
+      },
+      "version": "1.0",
+      "classified_at": "2026-08-02T11:05:44.589677Z"
+    },
+    "router": {
+      "plan_id": "router-f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+      "request_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+      "mode": "SINGLE",
+      "steps": [
+        {
+          "step_id": "model-1",
+          "provider": "anthropic",
+          "payload": {
+            "model": "claude-3-5-sonnet",
+            "query": "Compare OpenAI and Qwen with sources",
+            "max_tokens": 512,
+            "metadata": {
+              "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d"
+            }
+          },
+          "timeout_seconds": 30.0,
+          "max_retries": 2,
+          "retry_base_seconds": 0.1,
+          "required": true
+        }
+      ],
+      "metadata": {
+        "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+        "source": "production_llm_router"
+      }
+    },
+    "executor": {
+      "execution_id": "executor-f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+      "plan_id": "router-f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+      "request_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+      "mode": "SINGLE",
+      "state": "COMPLETED",
+      "results": [
+        {
+          "step_id": "model-1",
+          "provider": "anthropic",
+          "state": "COMPLETED",
+          "attempts": 1,
+          "latency_ms": 1,
+          "output": {
+            "provider": "anthropic",
+            "model": "claude-3-5-sonnet",
+            "content": "[anthropic:claude-3-5-sonnet] Compare OpenAI and Qwen with sources",
+            "usage": {
+              "prompt_tokens": 9,
+              "completion_tokens": 17,
+              "total_tokens": 26,
+              "estimated_cost": 0.000282,
+              "currency": "USD",
+              "provider": "anthropic",
+              "model": "claude-3-5-sonnet",
+              "timestamp": "2026-08-02T11:05:44.626763Z"
+            },
+            "finish_reason": "stop",
+            "citations": [],
+            "metadata": {
+              "region": "GLOBAL",
+              "mock": true
+            },
+            "created_at": "2026-08-02T11:05:44.626781Z",
+            "cached": false,
+            "raw": {
+              "mock": true
+            }
+          },
+          "error": null
+        }
+      ],
+      "output": {
+        "provider": "anthropic",
+        "model": "claude-3-5-sonnet",
+        "content": "[anthropic:claude-3-5-sonnet] Compare OpenAI and Qwen with sources",
+        "usage": {
+          "prompt_tokens": 9,
+          "completion_tokens": 17,
+          "total_tokens": 26,
+          "estimated_cost": 0.000282,
+          "currency": "USD",
+          "provider": "anthropic",
+          "model": "claude-3-5-sonnet",
+          "timestamp": "2026-08-02T11:05:44.626763Z"
+        },
+        "finish_reason": "stop",
+        "citations": [],
+        "metadata": {
+          "region": "GLOBAL",
+          "mock": true
+        },
+        "created_at": "2026-08-02T11:05:44.626781Z",
+        "cached": false,
+        "raw": {
+          "mock": true
+        }
+      },
+      "error": null,
+      "started_at": "2026-08-02T11:05:44.625715Z",
+      "finished_at": "2026-08-02T11:05:44.627080Z",
+      "duration_ms": 1,
+      "telemetry": {
+        "event_count": 5,
+        "events": [
+          {
+            "event": "execution_started",
+            "execution_id": "executor-f4a37ab0-fcd3-44e8-bbe5-a428af63d62d"
+          },
+          {
+            "event": "step_started",
+            "step_id": "model-1",
+            "provider": "anthropic"
+          },
+          {
+            "event": "provider_attempt",
+            "step_id": "model-1",
+            "provider": "anthropic",
+            "attempt": 1,
+            "status": "completed"
+          },
+          {
+            "event": "step_finished",
+            "step_id": "model-1",
+            "provider": "anthropic",
+            "state": "COMPLETED"
+          },
+          {
+            "event": "execution_finished",
+            "execution_id": "executor-f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+            "state": "COMPLETED"
+          }
+        ]
+      },
+      "version": "1.0"
+    },
+    "entity_extraction": {
+      "response_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+      "entities": [],
+      "relations": [],
+      "resolution_logs": [],
+      "version": "1.0",
+      "processed_at": "2026-08-02T11:05:44.627289Z"
+    },
+    "reason": {
+      "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+      "subject": "Compare OpenAI and Qwen with sources",
+      "entity_count": 0,
+      "relation_count": 0,
+      "evidence": [],
+      "conclusion": "Validated evidence for Compare OpenAI and Qwen with sources",
+      "version": "1.0"
+    },
+    "visibility": {
+      "entity_id": "compare-openai-and-qwen-with-sources",
+      "entity": "Compare OpenAI and Qwen with sources",
+      "visibility_score": 20.0,
+      "confidence": 0.3267,
+      "metrics": {
+        "mention_frequency": 0.0,
+        "recommendation_position": 0.0,
+        "citation_count": 0.0,
+        "citation_authority": 0.0,
+        "cross_model_presence": 0.0,
+        "consistency": 100.0,
+        "entity_confidence": 50.0,
+        "freshness": 100.0
+      },
+      "weights": {
+        "mention_frequency": 0.2,
+        "recommendation_position": 0.15,
+        "citation_count": 0.1,
+        "citation_authority": 0.15,
+        "cross_model_presence": 0.15,
+        "consistency": 0.1,
+        "entity_confidence": 0.1,
+        "freshness": 0.05
+      },
+      "version": "1.0",
+      "calculated_at": "2026-08-02T11:05:44.627349Z"
+    },
+    "knowledge_graph": {
+      "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+      "nodes": [],
+      "edges": [],
+      "version": "1.0"
+    },
+    "response": {
+      "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+      "answer": "Validated evidence for Compare OpenAI and Qwen with sources",
+      "visibility_score": 20.0,
+      "knowledge_graph": {
+        "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+        "nodes": [],
+        "edges": [],
+        "version": "1.0"
+      },
+      "version": "1.0"
+    },
+    "timings_ms": {
+      "intent": 4.115,
+      "router": 31.709,
+      "executor": 1.619,
+      "entity_extraction": 0.085,
+      "reason": 0.005,
+      "visibility": 0.131,
+      "knowledge_graph": 0.017,
+      "response": 0.001
+    }
+  }
+}

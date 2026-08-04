@@ -1,0 +1,31 @@
+{
+  "tables": {
+    "segment_definitions": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "code": {"type": "VARCHAR(100)", "nullable": false},
+        "segment_type": {"type": "VARCHAR(30)", "nullable": false},
+        "is_active": {"type": "BOOLEAN", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "unique_constraints": [["code"]]
+    },
+    "segment_evaluations": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "segment_id": {"type": "INTEGER", "nullable": false, "foreign_key": "segment_definitions.id"},
+        "evaluated_at": {"type": "TIMESTAMP WITH TIME ZONE", "nullable": false}
+      },
+      "primary_key": ["id"]
+    },
+    "segment_memberships": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "evaluation_id": {"type": "INTEGER", "nullable": false, "foreign_key": "segment_evaluations.id"},
+        "member_key": {"type": "VARCHAR(64)", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "unique_constraints": [["evaluation_id", "member_key"]]
+    }
+  }
+}

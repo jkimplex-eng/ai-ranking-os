@@ -1,0 +1,8 @@
+version: "2.1"
+regions:
+  GLOBAL:
+    providers: [openai, anthropic, gemini, deepseek, perplexity, mistral, grok, local]
+    default_policy: quality-first
+  RUSSIA:
+    providers: [yandex, gigachat]
+    default_policy: multilingual

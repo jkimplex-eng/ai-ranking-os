@@ -1,0 +1,86 @@
+{
+  "tables": {
+    "recommendation_rules": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false, "unique": true},
+        "code": {"type": "VARCHAR(100)", "nullable": false, "unique": true},
+        "recommendation_type": {"type": "VARCHAR(100)", "nullable": false},
+        "metric": {"type": "VARCHAR(100)", "nullable": false},
+        "operator": {"type": "VARCHAR(20)", "nullable": false},
+        "threshold": {"type": "DOUBLE PRECISION", "nullable": false},
+        "priority": {"type": "VARCHAR(20)", "nullable": false},
+        "explanation_template": {"type": "TEXT", "nullable": false},
+        "expected_effect": {"type": "TEXT", "nullable": false},
+        "version": {"type": "VARCHAR(50)", "nullable": false},
+        "is_active": {"type": "BOOLEAN", "nullable": false},
+        "created_at": {"type": "TIMESTAMP", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "unique_constraints": [["code"]],
+      "indexes": [
+        {
+          "name": "ix_recommendation_rules_active_version",
+          "columns": ["is_active", "version"]
+        }
+      ]
+    },
+    "recommendation_executions": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false, "unique": true},
+        "research_id": {"type": "INTEGER", "nullable": false},
+        "status": {"type": "VARCHAR(20)", "nullable": false},
+        "engine_version": {"type": "VARCHAR(50)", "nullable": false},
+        "input_snapshot": {"type": "JSON", "nullable": false},
+        "generated_count": {"type": "INTEGER", "nullable": false},
+        "error": {"type": "TEXT", "nullable": true},
+        "started_at": {"type": "TIMESTAMP", "nullable": false},
+        "finished_at": {"type": "TIMESTAMP", "nullable": true}
+      },
+      "primary_key": ["id"],
+      "indexes": [
+        {
+          "name": "ix_recommendation_executions_research_started",
+          "columns": ["research_id", "started_at"]
+        }
+      ]
+    },
+    "recommendations": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false, "unique": true},
+        "execution_id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "foreign_key": "recommendation_executions.id"
+        },
+        "rule_id": {
+          "type": "INTEGER",
+          "nullable": true,
+          "foreign_key": "recommendation_rules.id"
+        },
+        "research_id": {"type": "INTEGER", "nullable": false},
+        "recommendation_type": {"type": "VARCHAR(100)", "nullable": false},
+        "priority": {"type": "VARCHAR(20)", "nullable": false},
+        "explanation": {"type": "TEXT", "nullable": false},
+        "metric": {"type": "VARCHAR(100)", "nullable": false},
+        "metric_value": {"type": "DOUBLE PRECISION", "nullable": false},
+        "expected_effect": {"type": "TEXT", "nullable": false},
+        "created_at": {"type": "TIMESTAMP", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "indexes": [
+        {
+          "name": "ix_recommendations_research_created",
+          "columns": ["research_id", "created_at"]
+        },
+        {
+          "name": "ix_recommendations_execution_priority",
+          "columns": ["execution_id", "priority"]
+        },
+        {
+          "name": "ix_recommendations_rule_id",
+          "columns": ["rule_id"]
+        }
+      ]
+    }
+  }
+}

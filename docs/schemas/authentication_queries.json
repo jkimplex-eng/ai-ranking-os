@@ -1,0 +1,7 @@
+{
+  "queries": [
+    {"name": "user_by_email", "table": "auth_users", "where": ["email"]},
+    {"name": "active_sessions", "table": "auth_sessions", "where": ["user_id", "revoked_at"], "order_by": ["expires_at"]},
+    {"name": "revoke_family", "table": "auth_sessions", "where": ["family_id"]}
+  ]
+}

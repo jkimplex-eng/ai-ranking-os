@@ -1,0 +1,30 @@
+version: "1.0"
+policies:
+  - id: cost-optimized
+    name: Cost Optimized
+    execution_mode: FALLBACK
+    top_k: 3
+    weights: {intent: 0.10, cost: 0.45, latency: 0.15, quality: 0.10, context: 0.05, hallucination: 0.05, domain: 0.05, language: 0.05}
+  - id: quality-first
+    name: Quality First
+    execution_mode: SINGLE
+    top_k: 1
+    weights: {intent: 0.10, cost: 0.05, latency: 0.05, quality: 0.40, context: 0.10, hallucination: 0.15, domain: 0.10, language: 0.05}
+  - id: latency-critical
+    name: Latency Critical
+    execution_mode: FALLBACK
+    top_k: 2
+    weights: {intent: 0.10, cost: 0.10, latency: 0.50, quality: 0.10, context: 0.05, hallucination: 0.05, domain: 0.05, language: 0.05}
+  - id: research-grade
+    name: Research Grade
+    execution_mode: ENSEMBLE
+    top_k: 3
+    required_capabilities: [research]
+    weights: {intent: 0.10, cost: 0.02, latency: 0.03, quality: 0.35, context: 0.10, hallucination: 0.25, domain: 0.10, language: 0.05}
+  - id: multilingual
+    name: Multilingual
+    execution_mode: PARALLEL
+    top_k: 2
+    required_capabilities: [multilingual]
+    weights: {intent: 0.10, cost: 0.10, latency: 0.10, quality: 0.20, context: 0.10, hallucination: 0.10, domain: 0.05, language: 0.25}
+

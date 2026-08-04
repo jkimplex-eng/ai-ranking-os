@@ -1,0 +1,58 @@
+{
+  "tables": {
+    "trend_series": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "entity_id": {"type": "UUID", "nullable": false},
+        "model_version": {"type": "VARCHAR(50)", "nullable": false},
+        "moving_average_window": {"type": "INTEGER", "nullable": false},
+        "created_at": {"type": "TIMESTAMPTZ", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "unique_constraints": [["entity_id", "model_version"]]
+    },
+    "trend_snapshots": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "series_id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "foreign_key": "trend_series.id"
+        },
+        "source_count": {"type": "INTEGER", "nullable": false},
+        "built_at": {"type": "TIMESTAMPTZ", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "indexes": [
+        {
+          "name": "ix_trend_snapshots_series_built",
+          "columns": ["series_id", "built_at"]
+        }
+      ]
+    },
+    "trend_points": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "snapshot_id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "foreign_key": "trend_snapshots.id"
+        },
+        "research_id": {"type": "INTEGER", "nullable": false},
+        "metric": {"type": "VARCHAR(30)", "nullable": false},
+        "observed_at": {"type": "TIMESTAMPTZ", "nullable": false},
+        "value": {"type": "DOUBLE PRECISION", "nullable": false},
+        "moving_average": {"type": "DOUBLE PRECISION", "nullable": false},
+        "percentage_change": {"type": "DOUBLE PRECISION", "nullable": true},
+        "direction": {"type": "VARCHAR(10)", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "indexes": [
+        {
+          "name": "ix_trend_points_snapshot_metric_time",
+          "columns": ["snapshot_id", "metric", "observed_at"]
+        }
+      ]
+    }
+  }
+}

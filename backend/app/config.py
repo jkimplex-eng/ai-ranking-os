@@ -1,0 +1,41 @@
+from functools import lru_cache
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Environment-backed application settings."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    app_env: str = "development"
+    app_version: str = "1.0.0-rc2.1"
+    database_url: str = Field(
+        default="postgresql+psycopg://ai_ranking:ai_ranking@localhost:5432/ai_ranking"
+    )
+    redis_url: str = "redis://localhost:6379/0"
+    log_level: str = "INFO"
+    execution_retry_base_seconds: float = Field(default=0.1, ge=0)
+    build_sha: str = "development"
+    release_channel: str = "rc2.1"
+    auth_jwt_secret: str = "development-only-change-me"
+    auth_jwt_algorithm: str = "HS256"
+    auth_jwt_issuer: str = "ai-ranking-os"
+    auth_jwt_audience: str = "ai-ranking-os-api"
+    auth_access_token_minutes: int = Field(default=15, ge=1, le=1440)
+    auth_refresh_token_days: int = Field(default=30, ge=1, le=365)
+    request_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    max_inflight_requests: int = Field(default=500, ge=1)
+    database_pool_size: int = Field(default=10, ge=1, le=100)
+    database_max_overflow: int = Field(default=20, ge=0, le=200)
+    graceful_shutdown_seconds: int = Field(default=30, ge=1, le=300)
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

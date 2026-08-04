@@ -1,0 +1,56 @@
+{
+  "schema_overview": {
+    "total_tables": 3,
+    "total_columns": 7,
+    "tables_with_primary_keys": 3,
+    "total_foreign_keys": 0,
+    "total_indexes": 5
+  },
+  "normalization_analysis": {
+    "total_issues": 0,
+    "by_severity": {
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "warning": 0
+    },
+    "issues": []
+  },
+  "data_type_analysis": {
+    "total_issues": 1,
+    "issues": [
+      {
+        "table": "relationship_candidates",
+        "column": "source_external_id",
+        "current_type": "VARCHAR",
+        "issue": "Numeric ID stored as string",
+        "suggested_type": "INTEGER, BIGINT, or UUID",
+        "rationale": "Numeric types are more efficient for ID columns and enable better indexing"
+      }
+    ]
+  },
+  "constraint_analysis": {
+    "total_issues": 0,
+    "by_severity": {
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "issues": []
+  },
+  "naming_analysis": {
+    "total_issues": 1,
+    "issues": [
+      {
+        "table": "relationship_evidence",
+        "column": null,
+        "issue": "Table name should be plural",
+        "current_name": "relationship_evidence",
+        "suggested_name": "relationship_evidences"
+      }
+    ]
+  },
+  "missing_indexes": [],
+  "recommendations": [],
+  "mermaid_erd": "erDiagram\n    RELATIONSHIP_CANDIDATES {\n        INTEGER id \"PK\"\n        INTEGER graph_snapshot_id \"NOT NULL\"\n        VARCHAR source_external_id\n    }\n    RELATIONSHIP_EVIDENCE {\n        INTEGER id \"PK\"\n        INTEGER candidate_id \"NOT NULL\"\n    }\n    RELATIONSHIP_DECISIONS {\n        INTEGER id \"PK\"\n        INTEGER candidate_id \"NOT NULL\"\n    }"
+}

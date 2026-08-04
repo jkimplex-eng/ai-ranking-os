@@ -1,0 +1,31 @@
+{
+  "tables": {
+    "schedules": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "next_run_at": {"type": "TIMESTAMPTZ", "nullable": false},
+        "is_enabled": {"type": "BOOLEAN", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "indexes": [{"name": "ix_schedules_enabled_next_run", "columns": ["is_enabled", "next_run_at"]}]
+    },
+    "schedule_executions": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "schedule_id": {"type": "INTEGER", "nullable": false, "foreign_key": "schedules.id"},
+        "status": {"type": "VARCHAR(20)", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "indexes": [{"name": "uq_schedule_executions_one_running", "columns": ["schedule_id"], "unique": true}]
+    },
+    "schedule_history": {
+      "columns": {
+        "id": {"type": "INTEGER", "nullable": false},
+        "execution_id": {"type": "INTEGER", "nullable": false, "foreign_key": "schedule_executions.id"},
+        "attempt": {"type": "INTEGER", "nullable": false}
+      },
+      "primary_key": ["id"],
+      "indexes": [{"name": "ix_schedule_history_execution_attempt", "columns": ["execution_id", "attempt"]}]
+    }
+  }
+}

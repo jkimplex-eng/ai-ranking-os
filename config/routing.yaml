@@ -1,0 +1,13 @@
+version: "2.1"
+factors:
+  cost: 0.15
+  latency: 0.15
+  availability: 0.15
+  region: 0.15
+  capabilities: 0.15
+  context: 0.10
+  success: 0.15
+priorities:
+  GLOBAL: [openai, anthropic, gemini, deepseek, perplexity]
+  RUSSIA: [yandex, gigachat]
+execution_modes: [SINGLE, PARALLEL, ENSEMBLE, CONSENSUS, FALLBACK]
