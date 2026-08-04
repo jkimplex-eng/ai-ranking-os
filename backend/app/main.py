@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from time import perf_counter
 
 from fastapi import FastAPI, Request
@@ -7,8 +9,10 @@ from alert.router import router as alert_router
 from analytics.router import router as analytics_router
 from apikeys.router import router as api_keys_router
 from audit.router import router as audit_router
+from authentication.middleware import ProductionAuthenticationMiddleware
 from authentication.router import router as authentication_router
 from backend.app.config import get_settings
+from backend.app.database import engine
 from backend.app.llm_router.api import router as llm_router
 from backend.app.monitoring.metrics import HTTP_LATENCY, HTTP_REQUESTS
 from backend.app.monitoring.router import router as monitoring_router
@@ -24,6 +28,7 @@ from export_engine.router import router as export_router
 from graph.router import router as graph_router
 from graph_search.router import router as graph_search_router
 from hardening.router import router as hardening_router
+from hardening.validation import validate_startup
 from influence.router import router as influence_router
 from insights.router import router as insights_router
 from observability.router import router as observability_router
@@ -42,11 +47,23 @@ from trend.router import router as trend_router
 
 settings = get_settings()
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    errors = validate_startup(settings)
+    if errors:
+        raise RuntimeError("Startup validation failed: " + "; ".join(errors))
+    yield
+    engine.dispose()
+
+
 app = FastAPI(
     title="AI Ranking OS API",
     description="Core API for the AI Ranking OS platform.",
     version=settings.app_version,
+    lifespan=lifespan,
 )
+app.add_middleware(ProductionAuthenticationMiddleware, settings=settings)
 app.include_router(decision_center_router)
 app.include_router(authentication_router)
 app.include_router(rbac_router)
@@ -95,6 +112,14 @@ async def observe_http(request: Request, call_next):
         status=response.status_code,
     ).inc()
     HTTP_LATENCY.labels(method=request.method, path=path).observe(perf_counter() - started)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if request.url.path not in {"/docs", "/redoc", "/openapi.json"}:
+        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    if settings.app_env.lower() in {"production", "prod"}:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 

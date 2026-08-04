@@ -42,6 +42,24 @@ Expected responses:
 Stop the stack with `docker compose down`. To also remove local database and Redis
 volumes, run `docker compose down --volumes`.
 
+### Production process model
+
+The Docker image starts two Uvicorn workers by default (`WEB_CONCURRENCY=2`) and uses
+`exec`, so Uvicorn is PID 1 and receives `SIGTERM` directly. Compose grants a 40-second
+stop window; the application uses a configurable 30-second graceful shutdown timeout.
+The image has its own container `HEALTHCHECK` in addition to Compose probes.
+
+Kubernetes manifests are in `infra/kubernetes`. They intentionally run one worker per pod
+and two replicas: Kubernetes owns horizontal scaling, health isolation, rolling replacement,
+and resource accounting. Database migrations run as a separate Job before rollout, preventing
+multiple pods from racing on Alembic. Production requires `AUTH_JWT_SECRET`, `DATABASE_URL`,
+and `REDIS_URL` through the referenced Secret.
+
+Redis is deliberately not a Compose startup dependency for API or worker. Cache operations
+fail open to bounded process memory, and the worker keeps retrying Redis heartbeats. PostgreSQL
+remains readiness-critical. SQLAlchemy uses pre-ping, connection recycling, bounded overflow,
+and pool acquisition timeouts configured through `DATABASE_POOL_*` variables.
+
 ## Local development
 
 Prerequisites: Python 3.13 and running PostgreSQL/Redis instances.
@@ -54,6 +72,10 @@ cp .env.example .env
 alembic -c backend/alembic.ini upgrade head
 uvicorn backend.app.main:app --reload
 ```
+
+Production images and CI install the committed `requirements.lock` and
+`requirements-dev.lock`. Regenerate them from the human-maintained input files with
+`pip-compile --strip-extras requirements.txt` and the equivalent development command.
 
 On Windows PowerShell, activate the environment with
 `.venv\Scripts\Activate.ps1` and copy the environment file with

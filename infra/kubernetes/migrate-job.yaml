@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ai-ranking-os-migrate
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ghcr.io/jkimplex-eng/ai-ranking-os:latest
+          command: ["alembic", "-c", "backend/alembic.ini", "upgrade", "head"]
+          env:
+            - name: APP_ENV
+              value: production
+          envFrom:
+            - secretRef:
+                name: ai-ranking-os-secrets

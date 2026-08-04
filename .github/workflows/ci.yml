@@ -18,13 +18,47 @@ jobs:
           python-version: "3.13"
           cache: pip
       - name: Install dependencies
-        run: python -m pip install --upgrade pip && pip install -r requirements-dev.txt
+        run: python -m pip install --upgrade pip && pip install -r requirements-dev.lock
       - name: Ruff
         run: ruff check .
       - name: Pytest
         env:
           DATABASE_URL: "sqlite+pysqlite:///:memory:"
         run: pytest
+      - name: Compileall
+        run: python -m compileall -q .
+
+  migrations:
+    name: PostgreSQL Alembic Upgrade and Downgrade
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ai_ranking
+          POSTGRES_USER: ai_ranking
+          POSTGRES_PASSWORD: ai_ranking
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ai_ranking -d ai_ranking"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://ai_ranking:ai_ranking@localhost:5432/ai_ranking
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: python -m pip install --upgrade pip && pip install -r requirements.lock
+      - name: Upgrade, downgrade latest, upgrade
+        run: >-
+          alembic -c backend/alembic.ini upgrade head &&
+          alembic -c backend/alembic.ini downgrade 0040 &&
+          alembic -c backend/alembic.ini upgrade head
 
   docker:
     name: Docker Build
@@ -37,6 +71,22 @@ jobs:
         with:
           context: .
           push: false
+          load: true
           tags: ai-ranking-os:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Runtime smoke and container healthcheck
+        run: |
+          docker run -d --name ai-ranking-api -p 8000:8000 \
+            -e WEB_CONCURRENCY=1 \
+            -e RUN_MIGRATIONS=false \
+            ai-ranking-os:ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/health; then
+              docker inspect --format='{{json .State.Health.Status}}' ai-ranking-api
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs ai-ranking-api
+          exit 1

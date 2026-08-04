@@ -8,13 +8,18 @@ WORKDIR /app
 
 RUN useradd --create-home --uid 10001 appuser
 
-COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
+COPY requirements.txt requirements.lock ./
+RUN pip install --upgrade pip && pip install --requirement requirements.lock
 
-COPY backend ./backend
+COPY . .
+
+RUN chmod +x /app/infra/docker/entrypoint.sh
 
 USER appuser
 EXPOSE 8000
 
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)" || exit 1
 
+ENTRYPOINT ["/app/infra/docker/entrypoint.sh"]
+CMD ["api"]

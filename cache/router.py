@@ -1,11 +1,27 @@
 from fastapi import APIRouter, Depends, HTTPException
+from redis import Redis
 
+from backend.app.config import get_settings
 from cache.backend import MemoryCacheBackend
+from cache.redis_backend import RedisCacheBackend
+from cache.resilient import ResilientCacheBackend
 from cache.schemas import CacheInvalidate, CacheWarmRequest
 from cache.service import CacheService
 
 router = APIRouter(prefix="/cache", tags=["cache"])
-_backend = MemoryCacheBackend()
+_settings = get_settings()
+_backend = ResilientCacheBackend(
+    RedisCacheBackend(
+        Redis.from_url(
+            _settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=0.25,
+            socket_timeout=0.5,
+            health_check_interval=30,
+        )
+    ),
+    MemoryCacheBackend(),
+)
 
 
 def get_cache_service():

@@ -30,16 +30,13 @@ execution_state_type = Enum(
 class Execution(Base):
     __tablename__ = "executions"
     __table_args__ = (
+        Index("ix_executions_state_finished_at", "state", "finished_at"),
         Index(
             "uq_executions_active_task",
             "task_id",
             unique=True,
-            postgresql_where=text(
-                "state IN ('PENDING', 'ASSIGNED', 'RUNNING', 'WAITING_REVIEW')"
-            ),
-            sqlite_where=text(
-                "state IN ('PENDING', 'ASSIGNED', 'RUNNING', 'WAITING_REVIEW')"
-            ),
+            postgresql_where=text("state IN ('PENDING', 'ASSIGNED', 'RUNNING', 'WAITING_REVIEW')"),
+            sqlite_where=text("state IN ('PENDING', 'ASSIGNED', 'RUNNING', 'WAITING_REVIEW')"),
         ),
         Index(
             "uq_executions_active_agent",
@@ -73,4 +70,3 @@ class Execution(Base):
         server_default=text("CURRENT_TIMESTAMP"),
         nullable=False,
     )
-

@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
+from hmac import compare_digest
 from uuid import uuid4
 
 import jwt
@@ -58,7 +59,7 @@ class AuthenticationService:
         claims = self._decode(token, "refresh")
         session = self.repository.get_session(str(claims["sid"]))
         now = self.clock.now()
-        if session is None or session.refresh_token_hash != self._hash(token):
+        if session is None or not compare_digest(session.refresh_token_hash, self._hash(token)):
             raise AuthenticationError("Invalid refresh token")
         if session.revoked_at is not None:
             self.repository.revoke_family(session.family_id, now)

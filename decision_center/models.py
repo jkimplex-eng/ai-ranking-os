@@ -143,6 +143,7 @@ class Task(Base):
 
 class ExecutionLog(Base):
     __tablename__ = "execution_logs"
+    __table_args__ = (Index("ix_execution_logs_created_at", "created_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     entity_type: Mapped[str] = mapped_column(String(50), index=True)

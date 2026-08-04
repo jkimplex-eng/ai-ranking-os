@@ -11,9 +11,11 @@ from authentication.schemas import (
     TokenPair,
 )
 from authentication.service import AuthenticationError
+from rate_limit.backend import MemoryRateLimitBackend
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 AccessToken = Annotated[str, Depends(require_token)]
+_login_limiter = MemoryRateLimitBackend()
 
 
 def _client(request: Request) -> tuple[str | None, str | None]:
@@ -23,6 +25,15 @@ def _client(request: Request) -> tuple[str | None, str | None]:
 
 @router.post("/login", response_model=TokenPair)
 def login(payload: LoginRequest, request: Request, service: AuthServiceDependency) -> TokenPair:
+    client_ip = request.client.host if request.client else "unknown"
+    decision = _login_limiter.token_bucket(f"auth-login:{client_ip}", 10, 60, burst=5)
+    if not decision.allowed:
+        retry_after = max(1, int(decision.retry_after_seconds + 0.999))
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts",
+            headers={"Retry-After": str(retry_after)},
+        )
     try:
         return service.login(payload.email, payload.password, *_client(request))
     except AuthenticationError as error:

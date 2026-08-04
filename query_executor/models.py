@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.database import Base
@@ -9,6 +9,7 @@ from backend.app.database import Base
 
 class QueryExecutionHistory(Base):
     __tablename__ = "query_execution_history"
+    __table_args__ = (Index("ix_query_execution_history_created_at", "created_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     execution_id: Mapped[str] = mapped_column(String(200), unique=True, index=True)
@@ -53,4 +54,3 @@ class QueryProviderMetric(Base):
     attempts: Mapped[int] = mapped_column(Integer)
     latency_ms: Mapped[int] = mapped_column(Integer)
     failure: Mapped[str | None] = mapped_column(Text)
-

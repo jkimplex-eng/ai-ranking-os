@@ -1,0 +1,50 @@
+[
+  {
+    "producer": "Query",
+    "consumer": "Intent",
+    "status": "PASS",
+    "contract": "query:string"
+  },
+  {
+    "producer": "Intent",
+    "consumer": "Router",
+    "status": "PASS",
+    "contract": "IntentResult\u2192ExecutionPlan"
+  },
+  {
+    "producer": "Router",
+    "consumer": "Executor",
+    "status": "PASS",
+    "contract": "ExecutionPlan v1"
+  },
+  {
+    "producer": "Executor",
+    "consumer": "Entity Extraction",
+    "status": "PASS",
+    "contract": "provider output\u2192raw_response"
+  },
+  {
+    "producer": "Entity Extraction",
+    "consumer": "Reason Engine",
+    "status": "PASS",
+    "contract": "ExtractionResult\u2192ReasonContext"
+  },
+  {
+    "producer": "Reason Engine",
+    "consumer": "Visibility Engine",
+    "status": "PASS",
+    "contract": "ReasonContext\u2192VisibilityInput"
+  },
+  {
+    "producer": "Entity Extraction",
+    "consumer": "Knowledge Graph",
+    "status": "PASS",
+    "contract": "entities/relations\u2192nodes/edges"
+  },
+  {
+    "producer": "Knowledge Graph",
+    "consumer": "Response",
+    "status": "PASS",
+    "contract": "PipelineResponse v1"
+  }
+]

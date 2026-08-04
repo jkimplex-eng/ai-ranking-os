@@ -33,7 +33,10 @@ class Settings(BaseSettings):
     max_inflight_requests: int = Field(default=500, ge=1)
     database_pool_size: int = Field(default=10, ge=1, le=100)
     database_max_overflow: int = Field(default=20, ge=0, le=200)
+    database_pool_timeout_seconds: int = Field(default=30, ge=1, le=300)
+    database_pool_recycle_seconds: int = Field(default=1800, ge=30, le=86400)
     graceful_shutdown_seconds: int = Field(default=30, ge=1, le=300)
+    security_enforce_auth: bool = False
 
 
 @lru_cache

@@ -1,0 +1,137 @@
+{
+  "timestamp": "2026-08-04T16:23:41.803968",
+  "project_path": ".",
+  "dependencies": [
+    {
+      "name": "fastapi",
+      "version": "0.116,<1.0",
+      "ecosystem": "pypi",
+      "direct": true,
+      "license": null,
+      "vulnerabilities": []
+    },
+    {
+      "name": "sqlalchemy",
+      "version": "2.0.41,<3.0",
+      "ecosystem": "pypi",
+      "direct": true,
+      "license": null,
+      "vulnerabilities": []
+    },
+    {
+      "name": "alembic",
+      "version": "1.16,<2.0",
+      "ecosystem": "pypi",
+      "direct": true,
+      "license": null,
+      "vulnerabilities": []
+    },
+    {
+      "name": "pydantic",
+      "version": "2.11,<3.0",
+      "ecosystem": "pypi",
+      "direct": true,
+      "license": null,
+      "vulnerabilities": []
+    },
+    {
+      "name": "pydantic-settings",
+      "version": "2.10,<3.0",
+      "ecosystem": "pypi",
+      "direct": true,
+      "license": null,
+      "vulnerabilities": []
+    },
+    {
+      "name": "redis",
+      "version": "6.2,<7.0",
+      "ecosystem": "pypi",
+      "direct": true,
+      "license": null,
+      "vulnerabilities": []
+    },
+    {
+      "name": "PyYAML",
+      "version": "6.0,<7.0",
+      "ecosystem": "pypi",
+      "direct": true,
+      "license": null,
+      "vulnerabilities": []
+    },
+    {
+      "name": "prometheus-client",
+      "version": "0.22,<1.0",
+      "ecosystem": "pypi",
+      "direct": true,
+      "license": null,
+      "vulnerabilities": []
+    },
+    {
+      "name": "httpx",
+      "version": "0.28,<1.0",
+      "ecosystem": "pypi",
+      "direct": true,
+      "license": null,
+      "vulnerabilities": []
+    },
+    {
+      "name": "openpyxl",
+      "version": "3.1,<4.0",
+      "ecosystem": "pypi",
+      "direct": true,
+      "license": null,
+      "vulnerabilities": []
+    },
+    {
+      "name": "pyarrow",
+      "version": "18,<30",
+      "ecosystem": "pypi",
+      "direct": true,
+      "license": null,
+      "vulnerabilities": []
+    },
+    {
+      "name": "PyJWT",
+      "version": "2.10,<3.0",
+      "ecosystem": "pypi",
+      "direct": true,
+      "license": null,
+      "vulnerabilities": []
+    },
+    {
+      "name": "argon2-cffi",
+      "version": "23.1,<26.0",
+      "ecosystem": "pypi",
+      "direct": true,
+      "license": null,
+      "vulnerabilities": []
+    },
+    {
+      "name": "email-validator",
+      "version": "2.2,<3.0",
+      "ecosystem": "pypi",
+      "direct": true,
+      "license": null,
+      "vulnerabilities": []
+    }
+  ],
+  "vulnerabilities_found": 0,
+  "high_severity_count": 0,
+  "medium_severity_count": 0,
+  "low_severity_count": 0,
+  "ecosystems": [
+    "pypi"
+  ],
+  "scan_summary": {
+    "total_dependencies": 14,
+    "unique_dependencies": 14,
+    "ecosystems_found": 1,
+    "vulnerable_dependencies": 0,
+    "vulnerability_breakdown": {
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    }
+  },
+  "recommendations": []
+}

@@ -23,4 +23,13 @@ COMPONENT_RECORDS = Gauge(
     "Persisted records by component",
     ["component"],
 )
-
+BACKEND_ERRORS = Counter(
+    "ai_ranking_os_backend_errors_total",
+    "Backend errors that triggered resilience handling",
+    ["backend", "operation"],
+)
+BACKEND_AVAILABLE = Gauge(
+    "ai_ranking_os_backend_available",
+    "Latest backend health state (1=available)",
+    ["backend"],
+)
