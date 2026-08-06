@@ -32,6 +32,7 @@ from hardening.validation import validate_startup
 from influence.router import router as influence_router
 from insights.router import router as insights_router
 from observability.router import router as observability_router
+from product.router import router as product_router
 from query_executor.router import router as query_executor_router
 from query_intent.router import router as query_intent_router
 from rate_limit.router import router as rate_limit_router
@@ -77,6 +78,7 @@ app.include_router(execution_engine_router)
 app.include_router(ai_visibility_router)
 app.include_router(entity_extraction_router)
 app.include_router(query_intent_router)
+app.include_router(product_router)
 app.include_router(research_router)
 app.include_router(recommendation_router)
 app.include_router(recommendation_simulation_router)

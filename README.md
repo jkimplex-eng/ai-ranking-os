@@ -3,6 +3,14 @@
 AI Ranking OS RC2.1 is a provider-neutral intelligence platform for ranking
 research, decisioning, analytics, and knowledge workflows behind FastAPI.
 
+The first-product workflow now lets a user select a brand, models, language,
+region and versioned prompt, run the research, and receive a unified report.
+For the reproducible Skinjestique demo, see [FIRST_RESEARCH.md](FIRST_RESEARCH.md):
+
+```bash
+python scripts/run_skinjestique_demo.py --output skinjestique-report.json
+```
+
 ## Stack
 
 - Python 3.13
