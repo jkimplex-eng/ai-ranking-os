@@ -77,8 +77,9 @@ constraints, the category/language index and default catalogs. Isolated `0041 â†
 | Sprint migration upgrade/downgrade | PASS |
 | Skinjestique E2E demo | PASS |
 | Provider contract matrix | PASS |
-| Docker build/runtime | Pending authoritative PR CI |
-| PostgreSQL full migration cycle | Pending authoritative PR CI |
+| Docker build/runtime | PASS in GitHub Actions |
+| PostgreSQL full migration cycle | PASS in GitHub Actions |
+| GitHub Actions | PASS ([run 31104496723](https://github.com/jkimplex-eng/ai-ranking-os/actions/runs/31104496723)) |
 
 ## Architecture and compatibility
 
