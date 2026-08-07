@@ -16,7 +16,7 @@ from authentication.router import router as authentication_router
 from backend.app.config import get_settings
 from backend.app.database import engine
 from backend.app.llm_router.api import router as llm_router
-from backend.app.logging import bind_request, configure_logging
+from backend.app.logging import bind_request, configure_logging, user_id_var
 from backend.app.monitoring.metrics import HTTP_LATENCY, HTTP_REQUESTS
 from backend.app.monitoring.router import router as monitoring_router
 from backend.app.schemas import HealthResponse, VersionResponse
@@ -120,6 +120,9 @@ async def observe_http(request: Request, call_next):
             extra={"latency_ms": round((perf_counter() - started) * 1000, 2)},
         )
         raise
+    principal = getattr(request.state, "principal", None)
+    if principal is not None:
+        user_id_var.set(str(getattr(principal, "user_id", getattr(principal, "id", "-"))))
     route = request.scope.get("route")
     path = getattr(route, "path", request.url.path)
     HTTP_REQUESTS.labels(
