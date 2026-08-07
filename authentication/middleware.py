@@ -12,6 +12,8 @@ from backend.app.database import SessionLocal
 
 PUBLIC_PATHS = {
     "/health",
+    "/live",
+    "/ready",
     "/version",
     "/metrics",
     "/openapi.json",

@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     database_pool_recycle_seconds: int = Field(default=1800, ge=30, le=86400)
     graceful_shutdown_seconds: int = Field(default=30, ge=1, le=300)
     security_enforce_auth: bool = False
+    admin_email: str | None = None
+    admin_password: str | None = None
+    admin_display_name: str = "AI Ranking OS Administrator"
 
 
 @lru_cache
