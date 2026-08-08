@@ -1,0 +1,8 @@
+[Unit]
+Description=AI Ranking OS production health audit
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/ai-ranking-os/deployment/production
+ExecStart=/opt/ai-ranking-os/deployment/production/scripts/monitor.sh

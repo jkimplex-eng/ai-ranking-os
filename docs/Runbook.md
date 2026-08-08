@@ -1,36 +1,29 @@
-# RC1 Runbook
+# Production Runbook
 
-## Router unavailable
+## Service status
 
-Check `/system/router` and `/system/providers`. Restore at least one ACTIVE model
-that satisfies required capabilities and context. If circuits are OPEN, inspect
-provider errors; do not force-close until the provider is healthy.
+```sh
+cd /opt/ai-ranking-os/deployment/production
+docker compose --env-file .env ps
+./scripts/monitor.sh
+systemctl list-timers 'ai-ranking-*'
+```
 
-## High error rate
+Use `/health` for liveness, `/ready` for PostgreSQL/Redis readiness and `/metrics` for Prometheus.
+Logs are JSON-limited by Docker rotation. Initial credentials are root-only in
+`/root/.ai-ranking-os-initial-admin` and must be rotated after handoff.
 
-Correlate `/router/history`, executor history, and provider metrics by
-correlation ID. Disable the failing model or route through FALLBACK. Escalate
-when the error budget is exhausted.
+## Deploy and rollback
 
-## Budget exhausted
+Back up first, deploy an immutable reviewed commit with `deploy.sh`, run public smoke and Playwright.
+For application rollback set `ROLLBACK_IMAGE_TAG` to the last known-good immutable tag and execute
+`rollback.sh`. Do not downgrade the database unless the migration's rollback has been reviewed and
+a verified backup exists.
 
-Confirm `/system/costs`, then enable `cost-optimized`, reduce output limits, or
-raise the reviewed policy budget. Cost downgrade is automatic once limits are
-reached.
+## Common incidents
 
-## Database failure
-
-Stop mutations, verify PostgreSQL connectivity and storage, restore from the
-latest backup/PITR, run Alembic to head, then validate counts and a canary route.
-Target RPO is five minutes and RTO thirty minutes.
-
-## Redis failure
-
-The API reports degraded cache health. Restore Redis connectivity and verify
-`/system/cache`; database-backed Router operations remain authoritative.
-
-## Release verification
-
-Run Ruff, Pytest with coverage, Alembic offline SQL generation, the validation
-pipeline, `/system/health`, `/router/status`, and `/metrics`. Record the build
-SHA and report timestamp in the release evidence.
+- `/ready` database unavailable: stop deployments, inspect PostgreSQL health/logs and pool capacity.
+- Redis degraded: core database operations remain available; inspect authentication, memory and AOF.
+- 502 after container recreation: `deploy.sh` recreates edge Nginx to refresh upstream addresses.
+- Certificate warning: run `dns_readiness.sh`, inspect Certbot renewal logs, then `enable_https.sh`.
+- Disk above 85%: preserve backups, rotate application/build cache safely, then investigate growth.

@@ -63,4 +63,13 @@ export class ApiClient {
       body: JSON.stringify(payload),
     });
   }
+  async logout() {
+    const refreshToken = sessionStorage.getItem("refresh_token");
+    await this.request<void>("/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    this.token = undefined;
+    sessionStorage.removeItem("refresh_token");
+  }
 }

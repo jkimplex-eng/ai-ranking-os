@@ -1,0 +1,8 @@
+[Unit]
+Description=AI Ranking OS PostgreSQL and Redis backup
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/ai-ranking-os/deployment/production
+ExecStart=/bin/sh -c './scripts/backup.sh && ./scripts/backup_redis.sh'

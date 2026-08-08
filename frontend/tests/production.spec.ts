@@ -17,4 +17,6 @@ test("authenticated Skinjestique research completes through Web UI", async ({ pa
   await expect(page.getByText("AI VISIBILITY REPORT")).toBeVisible({ timeout: 180_000 });
   await expect(page.getByText("COMPLETED")).toBeVisible();
   await expect(page.getByText("Visibility", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Выйти" }).click();
+  await expect(page.getByRole("heading", { name: "Войдите в рабочее пространство" })).toBeVisible();
 });

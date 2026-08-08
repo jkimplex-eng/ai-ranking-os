@@ -133,7 +133,11 @@ jobs:
         working-directory: deployment/production
         run: |
           docker compose --env-file .env config --quiet
-          docker compose --env-file .env build
+          for attempt in 1 2 3; do
+            if docker compose --env-file .env build; then break; fi
+            if [ "$attempt" = 3 ]; then exit 1; fi
+            sleep $((attempt * 10))
+          done
           docker compose --env-file .env up -d postgres redis
           docker compose --env-file .env run --rm --no-deps backend alembic -c backend/alembic.ini upgrade head
           docker compose --env-file .env up -d
