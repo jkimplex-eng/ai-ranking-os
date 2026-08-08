@@ -13,4 +13,11 @@ build/
 .DS_Store
 .idea/
 .vscode/
-
+node_modules/
+frontend/.vite/
+frontend/test-results/
+frontend/playwright-report/
+frontend/*.tsbuildinfo
+deployment/production/.env
+deployment/production/backups/*.dump
+deployment/production/backups/*.rdb

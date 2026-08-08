@@ -1,6 +1,8 @@
+import logging
+import shutil
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from time import perf_counter
+from time import perf_counter, time
 
 from fastapi import FastAPI, Request
 
@@ -14,6 +16,7 @@ from authentication.router import router as authentication_router
 from backend.app.config import get_settings
 from backend.app.database import engine
 from backend.app.llm_router.api import router as llm_router
+from backend.app.logging import bind_request, configure_logging, user_id_var
 from backend.app.monitoring.metrics import HTTP_LATENCY, HTTP_REQUESTS
 from backend.app.monitoring.router import router as monitoring_router
 from backend.app.schemas import HealthResponse, VersionResponse
@@ -32,6 +35,7 @@ from hardening.validation import validate_startup
 from influence.router import router as influence_router
 from insights.router import router as insights_router
 from observability.router import router as observability_router
+from product.router import router as product_router
 from query_executor.router import router as query_executor_router
 from query_intent.router import router as query_intent_router
 from rate_limit.router import router as rate_limit_router
@@ -46,6 +50,9 @@ from segmentation.router import router as segmentation_router
 from trend.router import router as trend_router
 
 settings = get_settings()
+configure_logging(settings.log_level)
+logger = logging.getLogger("ai_ranking_os.http")
+started_at = time()
 
 
 @asynccontextmanager
@@ -77,6 +84,7 @@ app.include_router(execution_engine_router)
 app.include_router(ai_visibility_router)
 app.include_router(entity_extraction_router)
 app.include_router(query_intent_router)
+app.include_router(product_router)
 app.include_router(research_router)
 app.include_router(recommendation_router)
 app.include_router(recommendation_simulation_router)
@@ -103,7 +111,18 @@ app.include_router(relationship_discovery_router)
 @app.middleware("http")
 async def observe_http(request: Request, call_next):
     started = perf_counter()
-    response = await call_next(request)
+    request_id = bind_request(request)
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception(
+            "request_failed",
+            extra={"latency_ms": round((perf_counter() - started) * 1000, 2)},
+        )
+        raise
+    principal = getattr(request.state, "principal", None)
+    if principal is not None:
+        user_id_var.set(str(getattr(principal, "user_id", getattr(principal, "id", "-"))))
     route = request.scope.get("route")
     path = getattr(route, "path", request.url.path)
     HTTP_REQUESTS.labels(
@@ -112,6 +131,14 @@ async def observe_http(request: Request, call_next):
         status=response.status_code,
     ).inc()
     HTTP_LATENCY.labels(method=request.method, path=path).observe(perf_counter() - started)
+    response.headers["X-Request-ID"] = request_id
+    logger.info(
+        "request_completed method=%s path=%s status=%s",
+        request.method,
+        path,
+        response.status_code,
+        extra={"latency_ms": round((perf_counter() - started) * 1000, 2)},
+    )
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -128,6 +155,46 @@ async def health() -> HealthResponse:
     """Return process liveness."""
 
     return HealthResponse(status="ok")
+
+
+@app.get("/live", tags=["system"])
+async def live() -> dict[str, str]:
+    return {"status": "alive"}
+
+
+@app.get("/ready", tags=["system"])
+async def ready() -> dict[str, object]:
+    from redis import Redis
+    from sqlalchemy import text
+
+    database = "available"
+    redis = "available"
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception:
+        database = "unavailable"
+    try:
+        client = Redis.from_url(settings.redis_url, socket_connect_timeout=0.5, socket_timeout=0.5)
+        client.ping()
+        client.close()
+    except Exception:
+        redis = "degraded"
+    return {
+        "status": "ready" if database == "available" else "not_ready",
+        "database": database,
+        "redis": redis,
+        "uptime_seconds": round(time() - started_at, 3),
+    }
+
+
+@app.get("/system/resources", tags=["system-monitoring"])
+async def resources() -> dict[str, object]:
+    usage = shutil.disk_usage("/")
+    return {
+        "disk": {"total_bytes": usage.total, "used_bytes": usage.used, "free_bytes": usage.free},
+        "memory": {"source": "container_limits", "note": "exported by platform runtime"},
+    }
 
 
 @app.get("/version", response_model=VersionResponse, tags=["system"])

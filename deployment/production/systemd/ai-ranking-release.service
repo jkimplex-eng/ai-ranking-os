@@ -1,0 +1,8 @@
+[Unit]
+Description=Publish AI Ranking OS HTTPS when DNS is ready
+After=network-online.target nginx.service docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/ai-ranking-os/deployment/production
+ExecStart=/opt/ai-ranking-os/deployment/production/scripts/enable_https.sh

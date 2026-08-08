@@ -5,6 +5,20 @@ and Redis 8. The synchronous request path is Query Intent → LLM Router → Que
 Executor → Entity Extraction → Reason Engine → AI Visibility → Knowledge Graph.
 Correlation IDs and typed Pydantic v2 contracts cross every boundary.
 
+## Sprint 10 product orchestration
+
+The `product` module is the application layer for the first user journey. It
+depends on public service and port contracts and orchestrates existing domains;
+it does not reimplement their scoring or extraction logic. Its only owned
+persistence is the versioned Prompt Library and read-only Research Template
+catalog. Wizard state becomes an ordinary Research record, and downstream
+artifacts are recorded in Research metadata for backward-compatible reporting.
+
+Dependency direction remains `product -> public services/ports -> repositories
+-> SQLAlchemy`. The final report is read-only composition: score, trend,
+benchmark, insights, recommendations and graph values come from their owning
+engines. Provider-specific payloads are normalized before extraction/scoring.
+
 The production Router owns model selection. Its repository persists models,
 policies, routing history, cost entries, and circuit state through SQLAlchemy 2.
 YAML files provide bootstrapping and runtime defaults; database records are the

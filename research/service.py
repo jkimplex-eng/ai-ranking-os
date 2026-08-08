@@ -61,6 +61,9 @@ def _provider_worker(
                 metadata={
                     "research_id": research_task.research_id,
                     "research_task_id": research_task.id,
+                    "target_entity": research_task.research.metadata_payload.get(
+                        "target_entity", research_task.research.title
+                    ),
                 },
             )
         )

@@ -1,7 +1,20 @@
 # AI Ranking OS
 
+Production deployment assets are in `deployment/production`. The first isolated installation runs
+on the audited VPS behind loopback port `8100`; see [First Deploy](docs/FIRST_DEPLOY.md),
+[Deployment](docs/Deployment.md), and [Operations](docs/Operations.md). The existing
+`разуммаркета.рф` landing and Ozon Agent are not part of this Compose project.
+
 AI Ranking OS RC2.1 is a provider-neutral intelligence platform for ranking
 research, decisioning, analytics, and knowledge workflows behind FastAPI.
+
+The first-product workflow now lets a user select a brand, models, language,
+region and versioned prompt, run the research, and receive a unified report.
+For the reproducible Skinjestique demo, see [FIRST_RESEARCH.md](FIRST_RESEARCH.md):
+
+```bash
+python scripts/run_skinjestique_demo.py --output skinjestique-report.json
+```
 
 ## Stack
 
@@ -36,7 +49,7 @@ Expected responses:
 
 ```json
 {"status":"ok"}
-{"version":"1.0.0-rc1"}
+{"version":"1.0.0"}
 ```
 
 Stop the stack with `docker compose down`. To also remove local database and Redis

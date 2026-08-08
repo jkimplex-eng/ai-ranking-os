@@ -5,12 +5,10 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from backend.app.config import get_settings
+from backend.app.logging import configure_logging
 
 settings = get_settings()
-logging.basicConfig(
-    level=settings.log_level.upper(),
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
+configure_logging(settings.log_level)
 logger = logging.getLogger(__name__)
 
 

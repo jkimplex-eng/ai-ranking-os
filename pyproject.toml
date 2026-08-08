@@ -1,6 +1,6 @@
 [project]
 name = "ai-ranking-os"
-version = "1.0.0rc2"
+version = "1.0.0"
 description = "Foundation for an AI ranking operating system."
 requires-python = ">=3.13,<3.14"
 dynamic = ["dependencies"]

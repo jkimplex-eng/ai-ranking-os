@@ -1,0 +1,44 @@
+{
+  "title": "AI Ranking OS Production Uptime",
+  "uid": "ai-ranking-os-uptime",
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Service availability",
+      "type": "stat",
+      "targets": [{ "expr": "up{job=\"ai-ranking-os\"}", "legendFormat": "API" }],
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "title": "Request rate",
+      "type": "timeseries",
+      "targets": [{ "expr": "sum(rate(ai_ranking_os_http_requests_total[5m]))", "legendFormat": "requests/s" }],
+      "gridPos": { "h": 8, "w": 9, "x": 6, "y": 0 }
+    },
+    {
+      "id": 3,
+      "title": "p95 latency",
+      "type": "timeseries",
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(ai_ranking_os_http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95" }],
+      "gridPos": { "h": 8, "w": 9, "x": 15, "y": 0 }
+    },
+    {
+      "id": 4,
+      "title": "Backend availability",
+      "type": "timeseries",
+      "targets": [{ "expr": "ai_ranking_os_backend_available", "legendFormat": "{{backend}}" }],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+    },
+    {
+      "id": 5,
+      "title": "Queue depth",
+      "type": "timeseries",
+      "targets": [{ "expr": "ai_ranking_os_queue_depth", "legendFormat": "ready" }],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+    }
+  ]
+}

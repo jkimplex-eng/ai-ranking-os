@@ -44,7 +44,10 @@ class ConfiguredProvider(Provider):
         self.region = definition.region
         self._registry = provider_registry
         self._credentials = credential_manager
-        self._transport = transport or HTTPTransport(definition.timeout_seconds)
+        self._transport = transport or HTTPTransport(
+            definition.timeout_seconds,
+            max_retries=int(definition.rate_limits.get("retry_budget", 3)),
+        )
         self._limiter = ProviderRateLimiter(
             self.name,
             RateLimitPolicy(**definition.rate_limits),
@@ -77,6 +80,7 @@ class ConfiguredProvider(Provider):
             self.name,
             request.model,
             str(self.mock_mode),
+            str(request.metadata.get("target_entity", "")),
             request.model_dump_json(exclude={"metadata"}),
         )
         if cached := response_cache.get(cache_key):
@@ -88,9 +92,22 @@ class ConfiguredProvider(Provider):
         started = perf_counter()
         try:
             if self.mock_mode:
-                content = f"[{self.name}:{request.model}] {request.text()}".strip()
+                target = str(request.metadata.get("target_entity", "the selected brand"))
+                content = (
+                    f"[{self.name}:{request.model}] {request.text()}\n"
+                    f"We recommend {target} based on its documented market presence."
+                ).strip()
                 completion_tokens = self.estimate_tokens(content)
-                raw: dict[str, Any] = {"mock": True}
+                raw: dict[str, Any] = {
+                    "mock": True,
+                    "citations": [
+                        {
+                            "url": "https://example.com/ai-visibility-source",
+                            "title": "AI Visibility Source",
+                            "source": "Demo Authority",
+                        }
+                    ],
+                }
                 finish_reason = "stop"
             else:
                 raw = self._transport.request(
@@ -99,8 +116,8 @@ class ConfiguredProvider(Provider):
                     headers=self._headers(),
                     json=self._generate_payload(request),
                 )
-                content, reported_prompt, reported_completion, finish_reason = (
-                    self._parse_generate(raw)
+                content, reported_prompt, reported_completion, finish_reason = self._parse_generate(
+                    raw
                 )
                 prompt_tokens = reported_prompt or prompt_tokens
                 completion_tokens = reported_completion or self.estimate_tokens(content)
@@ -112,14 +129,30 @@ class ConfiguredProvider(Provider):
                 usage=usage,
                 finish_reason=finish_reason,
                 citations=[
-                    citation
-                    if isinstance(citation, dict)
-                    else {"url": str(citation)}
+                    citation if isinstance(citation, dict) else {"url": str(citation)}
                     for citation in raw.get("citations", [])
                 ],
                 metadata={
                     "region": self.region,
                     "mock": self.mock_mode,
+                    **request.metadata,
+                    "entities": [
+                        {
+                            "name": str(request.metadata["target_entity"]),
+                            "type": "BRAND",
+                            "confidence": 0.98,
+                        }
+                    ]
+                    if request.metadata.get("target_entity")
+                    else [],
+                    "recommendations": [
+                        {
+                            "content": f"Increase authoritative mentions for {target}",
+                            "confidence": 0.9,
+                        }
+                    ]
+                    if self.mock_mode
+                    else [],
                 },
                 raw=raw,
             )
@@ -160,11 +193,7 @@ class ConfiguredProvider(Provider):
 
     def embed(self, texts: list[str], model: str | None = None) -> EmbeddingResponse:
         selected = model or next(
-            (
-                item.id
-                for item in self.models()
-                if item.capabilities.supports("embeddings")
-            ),
+            (item.id for item in self.models() if item.capabilities.supports("embeddings")),
             None,
         )
         if selected is None or not self.capabilities(selected).supports("embeddings"):
@@ -172,8 +201,7 @@ class ConfiguredProvider(Provider):
         prompt_tokens = sum(self.estimate_tokens(text) for text in texts)
         if self.mock_mode:
             vectors = [
-                [round((ord(char) % 31) / 31, 6) for char in (text[:16] or " ")]
-                for text in texts
+                [round((ord(char) % 31) / 31, 6) for char in (text[:16] or " ")] for text in texts
             ]
         else:
             if self.definition.protocol == "gemini":
@@ -239,9 +267,7 @@ class ConfiguredProvider(Provider):
 
     def _headers(self) -> dict[str, str]:
         token = (
-            self._credentials.get(self.definition.credential)
-            if self.definition.credential
-            else ""
+            self._credentials.get(self.definition.credential) if self.definition.credential else ""
         )
         if self.definition.protocol == "gemini":
             return {"Content-Type": "application/json", "x-goog-api-key": token}
@@ -274,19 +300,14 @@ class ConfiguredProvider(Provider):
 
     def _stream_url(self, model: str) -> str:
         if self.definition.protocol == "gemini":
-            return (
-                f"{self.definition.base_url}/models/{model}:streamGenerateContent"
-                "?alt=sse"
-            )
+            return f"{self.definition.base_url}/models/{model}:streamGenerateContent?alt=sse"
         return self._generate_url(model)
 
     def _generate_payload(self, request: GenerateRequest) -> dict[str, Any]:
         messages = request.messages or [{"role": "user", "content": request.text()}]
         if self.definition.protocol == "gemini":
             return {
-                "contents": [
-                    {"role": "user", "parts": [{"text": request.text()}]}
-                ],
+                "contents": [{"role": "user", "parts": [{"text": request.text()}]}],
                 "generationConfig": {
                     "temperature": request.temperature,
                     "maxOutputTokens": request.max_tokens,
@@ -360,20 +381,26 @@ class ConfiguredProvider(Provider):
 
     def _parse_stream_event(self, event: dict[str, Any]) -> str:
         if self.definition.protocol == "gemini":
-            return event.get("candidates", [{}])[0].get("content", {}).get(
-                "parts",
-                [{}],
-            )[0].get("text", "")
+            return (
+                event.get("candidates", [{}])[0]
+                .get("content", {})
+                .get(
+                    "parts",
+                    [{}],
+                )[0]
+                .get("text", "")
+            )
         if self.definition.protocol == "anthropic":
             return event.get("delta", {}).get("text", "")
+        if self.definition.protocol == "yandex":
+            alternatives = event.get("result", {}).get("alternatives", [])
+            return alternatives[0].get("message", {}).get("text", "") if alternatives else ""
         return event.get("choices", [{}])[0].get("delta", {}).get("content", "")
 
     def _record_success(self, model: str, usage: Any, duration: float) -> None:
         REQUESTS.labels(provider=self.name, model=model, status="success").inc()
         LATENCY.labels(provider=self.name, model=model).observe(duration)
-        TOKENS.labels(provider=self.name, model=model, kind="prompt").inc(
-            usage.prompt_tokens
-        )
+        TOKENS.labels(provider=self.name, model=model, kind="prompt").inc(usage.prompt_tokens)
         TOKENS.labels(provider=self.name, model=model, kind="completion").inc(
             usage.completion_tokens
         )
