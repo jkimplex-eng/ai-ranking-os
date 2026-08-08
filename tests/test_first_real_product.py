@@ -117,6 +117,24 @@ def test_skinjestique_end_to_end_wizard(client: TestClient) -> None:
     assert persisted.json()["research"]["id"] == body["research"]["id"]
 
 
+def test_wizard_uses_english_prompt_as_language_fallback(client: TestClient) -> None:
+    response = client.post(
+        "/research/wizard/review",
+        json={
+            "brand": "Skinjestique",
+            "models": [{"provider": "anthropic", "model": "claude-3-5-sonnet"}],
+            "languages": ["ru"],
+            "regions": ["GLOBAL"],
+            "prompt_code": "ai-visibility",
+            "research_template_code": "ai-visibility",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert "Skinjestique" in response.json()["prompt"]
+    assert "ru" in response.json()["prompt"]
+
+
 def test_wizard_rejects_unknown_model(client: TestClient) -> None:
     response = client.post(
         "/research/wizard/review",

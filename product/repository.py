@@ -50,12 +50,19 @@ class PromptRepository:
         return item
 
     def active(self, code: str, language: str | None = None) -> PromptDefinition:
-        statement = select(PromptDefinition).where(
+        base = select(PromptDefinition).where(
             PromptDefinition.code == code, PromptDefinition.active.is_(True)
         )
+        statement = base
         if language:
-            statement = statement.where(PromptDefinition.language == language)
+            statement = base.where(PromptDefinition.language == language)
         item = self.db.scalar(statement.order_by(PromptDefinition.version.desc()))
+        if item is None and language and language != "en":
+            item = self.db.scalar(
+                base.where(PromptDefinition.language == "en").order_by(
+                    PromptDefinition.version.desc()
+                )
+            )
         if item is None:
             raise ProductNotFoundError(f"Active prompt {code} not found")
         return item
