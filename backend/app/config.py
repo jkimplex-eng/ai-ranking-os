@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     )
 
     app_env: str = "development"
-    app_version: str = "1.0.0-rc2.1"
+    app_version: str = "1.0.0"
     database_url: str = Field(
         default="postgresql+psycopg://ai_ranking:ai_ranking@localhost:5432/ai_ranking"
     )
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     execution_retry_base_seconds: float = Field(default=0.1, ge=0)
     build_sha: str = "development"
-    release_channel: str = "rc2.1"
+    release_channel: str = "production"
     auth_jwt_secret: str = "development-only-change-me"
     auth_jwt_algorithm: str = "HS256"
     auth_jwt_issuer: str = "ai-ranking-os"

@@ -49,7 +49,7 @@ Expected responses:
 
 ```json
 {"status":"ok"}
-{"version":"1.0.0-rc1"}
+{"version":"1.0.0"}
 ```
 
 Stop the stack with `docker compose down`. To also remove local database and Redis
