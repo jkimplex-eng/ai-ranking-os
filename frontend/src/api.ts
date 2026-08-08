@@ -22,6 +22,7 @@ export type ReportResult = {
   report_url: string;
   report: Record<string, unknown>;
 };
+export type ResearchItem = { id: number; title: string; status: string };
 
 export class ApiClient {
   private token?: string;
@@ -62,6 +63,10 @@ export class ApiClient {
       method: "POST",
       body: JSON.stringify(payload),
     });
+  }
+  listResearch() { return this.request<ResearchItem[]>("/research"); }
+  finalReport(id: number) {
+    return this.request<Record<string, unknown>>(`/research/${id}/final-report`);
   }
   async logout() {
     const refreshToken = sessionStorage.getItem("refresh_token");
