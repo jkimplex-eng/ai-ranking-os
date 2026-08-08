@@ -9,7 +9,7 @@ test("authenticated Skinjestique research completes through Web UI", async ({ pa
   await page.getByLabel("Email").fill(email!);
   await page.getByLabel("Пароль").fill(password!);
   await page.getByRole("button", { name: "Войти" }).click();
-  await expect(page.getByText("СОСТОЯНИЕ БРЕНДА")).toBeVisible();
+  await expect(page.getByText("СОСТОЯНИЕ БРЕНДА", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Новое исследование" }).click();
   await expect(page.getByLabel("Название бренда")).toHaveValue("Skinjestique");
   await page.getByRole("button", { name: /Продолжить/ }).click();
