@@ -101,6 +101,7 @@ def _response(
         budget_downgraded=budget_downgraded,
         fallback_count=fallback_count,
         router_latency_ms=round(latency_ms, 3),
+        strategy=request.strategy,
     )
 
 

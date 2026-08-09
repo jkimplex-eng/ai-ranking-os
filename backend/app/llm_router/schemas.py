@@ -28,6 +28,16 @@ class CircuitState(StrEnum):
     HALF_OPEN = "HALF_OPEN"
 
 
+class RouterStrategy(StrEnum):
+    FASTEST = "FASTEST"
+    CHEAPEST = "CHEAPEST"
+    LOCAL_ONLY = "LOCAL_ONLY"
+    FREE_ONLY = "FREE_ONLY"
+    HIGHEST_QUALITY = "HIGHEST_QUALITY"
+    BALANCED = "BALANCED"
+    CUSTOM = "CUSTOM"
+
+
 class Pricing(BaseModel):
     input_per_million: float = Field(ge=0)
     output_per_million: float = Field(ge=0)
@@ -154,6 +164,7 @@ class RouteRequest(BaseModel):
     correlation_id: str | None = Field(default=None, max_length=200)
     intent: IntentType | None = None
     policy_id: str | None = Field(default=None, max_length=100)
+    strategy: RouterStrategy = RouterStrategy.BALANCED
     context_tokens: int = Field(default=0, ge=0)
     max_output_tokens: int = Field(default=512, ge=1, le=100_000)
     domain: str = Field(default="general", max_length=100)
@@ -182,6 +193,7 @@ class RouteResponse(BaseModel):
     budget_downgraded: bool
     fallback_count: int
     router_latency_ms: float
+    strategy: RouterStrategy = RouterStrategy.BALANCED
     version: str = "1.0"
 
 
