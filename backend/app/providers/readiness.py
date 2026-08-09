@@ -5,13 +5,13 @@ from typing import ClassVar
 
 from sqlalchemy.orm import Session
 
-from backend.app.llm_router.ports import ModelEvaluationPort, ProviderReadinessPort, ProviderState
+from backend.app.llm_router.ports import ProviderReadinessPort, ProviderState
 from backend.app.providers.credentials import credentials
 from backend.app.providers.registry import registry
 
 
 class RuntimeProviderReadiness(ProviderReadinessPort):
-    """Provider infrastructure adapter kept outside Router decision logic."""
+    """Provider-infrastructure implementation of the Router readiness port."""
 
     _health_cache: ClassVar[dict[str, tuple[float, bool]]] = {}
     _health_lock: ClassVar[Lock] = Lock()
@@ -21,7 +21,6 @@ class RuntimeProviderReadiness(ProviderReadinessPort):
         self.db = db
 
     def state(self, provider_id: str) -> ProviderState:
-        registry_state: ProviderState | None = None
         if self.db is not None:
             from provider_registry.models import ProviderRecord
 
@@ -74,13 +73,3 @@ class RuntimeProviderReadiness(ProviderReadinessPort):
         with cls._health_lock:
             cls._health_cache[provider_id] = (now, available)
         return available
-
-
-class SqlAlchemyModelEvaluation(ModelEvaluationPort):
-    def __init__(self, db: Session) -> None:
-        self.db = db
-
-    def scores(self, task_type: str | None) -> dict[str, float]:
-        from model_evaluation.service import empirical_model_scores
-
-        return empirical_model_scores(self.db, task_type)

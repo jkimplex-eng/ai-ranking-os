@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend.app.database import Base, get_db
-from backend.app.llm_router.adapters import RuntimeProviderReadiness
 from backend.app.llm_router.ports import ProviderState
 from backend.app.main import app
+from backend.app.providers.readiness import RuntimeProviderReadiness
 from research.models import ResearchJobState
 from research.queue import process_next
 

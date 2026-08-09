@@ -4,11 +4,12 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from backend.app.llm_router.adapters import RuntimeProviderReadiness, SqlAlchemyModelEvaluation
 from backend.app.llm_router.cost_optimizer import settle_reservation
 from backend.app.llm_router.models import RouterCostLog
 from backend.app.llm_router.pipeline import route
 from backend.app.llm_router.schemas import RouteRequest
+from backend.app.providers.readiness import RuntimeProviderReadiness
+from model_evaluation.router_adapter import SqlAlchemyModelEvaluation
 from query_executor.dispatcher import Dispatcher
 from query_executor.executor import execute_plan
 

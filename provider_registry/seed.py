@@ -1,5 +1,5 @@
-from backend.app.llm_router.adapters import RuntimeProviderReadiness
 from backend.app.llm_router.ports import ProviderState
+from backend.app.providers.readiness import RuntimeProviderReadiness
 from backend.app.providers.registry import registry
 from provider_registry.schemas import ProviderAvailability, ProviderCreate
 

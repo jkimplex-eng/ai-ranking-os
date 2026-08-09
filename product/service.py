@@ -11,9 +11,9 @@ from analytics.repository import SqlAlchemyAnalyticsRepository
 from analytics.schemas import AnalyticsFilter, AnalyticsQuery, FilterOperator, Statistic
 from analytics.service import AnalyticsService
 from backend.app.analytics_source import PlatformAnalyticsDataSource
-from backend.app.llm_router.adapters import RuntimeProviderReadiness
 from backend.app.llm_router.ports import ProviderState
 from backend.app.llm_router.registry import ModelRepository, RegistryNotFoundError, ensure_seeded
+from backend.app.providers.readiness import RuntimeProviderReadiness
 from benchmark.repository import SqlAlchemyBenchmarkRepository
 from benchmark.schemas import BenchmarkRequest
 from benchmark.service import BenchmarkService
