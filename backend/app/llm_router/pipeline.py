@@ -18,6 +18,7 @@ from backend.app.llm_router.metrics import (
     ROUTER_SCORE,
     ROUTER_SELECTED,
 )
+from backend.app.llm_router.mode import RoutingMode, configured_mode
 from backend.app.llm_router.models import RouterCostLog, RouterHistory
 from backend.app.llm_router.parallel import build_parallel_plan
 from backend.app.llm_router.policy import resolve_policy, strategy_for_task
@@ -27,6 +28,7 @@ from backend.app.llm_router.schemas import (
     PolicyRead,
     RouteRequest,
     RouteResponse,
+    RouterStrategy,
     ScoreBreakdown,
 )
 from backend.app.llm_router.scoring import score_model
@@ -85,9 +87,7 @@ def _response(
     selected_scores = scores[:selected_count]
     mode = policy.execution_mode
     if mode == ExecutionMode.FALLBACK:
-        selected_models, selected_scores = order_failover_models(
-            selected_models, selected_scores
-        )
+        selected_models, selected_scores = order_failover_models(selected_models, selected_scores)
     if mode in {ExecutionMode.ENSEMBLE, ExecutionMode.CONSENSUS} and selected_count < 2:
         mode = ExecutionMode.SINGLE
     fallback_count = max(0, selected_count - 1) if mode == ExecutionMode.FALLBACK else 0
@@ -107,6 +107,7 @@ def _response(
         fallback_count=fallback_count,
         router_latency_ms=round(latency_ms, 3),
         strategy=request.strategy or policy.strategy,
+        routing_mode=request.routing_mode or configured_mode(),
     )
 
 
@@ -114,14 +115,20 @@ def route(db: Session, request: RouteRequest) -> RouteResponse:
     started = perf_counter()
     ensure_seeded(db)
     correlation_id = request.correlation_id or str(uuid4())
-    intent = request.intent or classify_intent(
-        IntentInput(request_id=correlation_id, query=request.query)
-    ).primary_intent
+    intent = (
+        request.intent
+        or classify_intent(
+            IntentInput(request_id=correlation_id, query=request.query)
+        ).primary_intent
+    )
     if request.language is None:
         request.language = classify_intent(
             IntentInput(request_id=correlation_id, query=request.query)
         ).language.code
     policy = resolve_policy(db, request)
+    request.routing_mode = request.routing_mode or configured_mode()
+    if request.routing_mode == RoutingMode.LOCAL:
+        request.strategy = RouterStrategy.LOCAL_ONLY
     request.strategy = request.strategy or strategy_for_task(request.task_type) or policy.strategy
     models, scores = select_models(
         db,
@@ -156,8 +163,7 @@ def route(db: Session, request: RouteRequest) -> RouteResponse:
             selected_models=response.selected_models,
             execution_mode=response.plan.mode,
             routing_scores={
-                score.model_id: score.model_dump(mode="json")
-                for score in response.scores
+                score.model_id: score.model_dump(mode="json") for score in response.scores
             },
             estimated_cost_usd=response.estimated_cost_usd,
             latency_ms=response.router_latency_ms,
@@ -182,9 +188,7 @@ def route(db: Session, request: RouteRequest) -> RouteResponse:
             )
         )
         ROUTER_SELECTED.labels(model=model.id, provider=model.provider).inc()
-        ROUTER_COST.labels(model=model.id, provider=model.provider).inc(
-            score.estimated_cost_usd
-        )
+        ROUTER_COST.labels(model=model.id, provider=model.provider).inc(score.estimated_cost_usd)
         ROUTER_SCORE.labels(model=model.id).observe(score.total)
     db.commit()
     ROUTER_REQUESTS.labels(policy=policy.id, status="success").inc()
@@ -224,9 +228,7 @@ def route_from_config(request: RouteRequest) -> RouteResponse:
             )
         )
     policy_id = request.policy_id or router_config()["defaults"]["policy_id"]
-    raw_policy = next(
-        item for item in policy_config()["policies"] if item["id"] == policy_id
-    )
+    raw_policy = next(item for item in policy_config()["policies"] if item["id"] == policy_id)
     budgets = router_config().get("budgets", {})
     policy = PolicyRead(
         id=raw_policy["id"],
@@ -245,9 +247,7 @@ def route_from_config(request: RouteRequest) -> RouteResponse:
         updated_at=now,
     )
     correlation_id = request.correlation_id or str(uuid4())
-    intent_result = classify_intent(
-        IntentInput(request_id=correlation_id, query=request.query)
-    )
+    intent_result = classify_intent(IntentInput(request_id=correlation_id, query=request.query))
     intent = request.intent or intent_result.primary_intent
     request.language = request.language or intent_result.language.code
     scored = [

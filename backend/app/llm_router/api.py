@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from backend.app.database import get_db
 from backend.app.llm_router.cost_optimizer import current_costs
 from backend.app.llm_router.metrics import ROUTER_ERRORS
+from backend.app.llm_router.mode import configured_mode
 from backend.app.llm_router.models import (
     CircuitBreakerRecord,
     RegisteredModel,
@@ -42,6 +43,14 @@ from query_executor.schemas import ExecutionPlan
 
 router = APIRouter(prefix="/router", tags=["llm-router"])
 DbSession = Annotated[Session, Depends(get_db)]
+
+
+@router.get("/mode")
+def routing_mode() -> dict[str, str]:
+    return {
+        "mode": configured_mode(),
+        "internet_required": str(configured_mode() != "LOCAL").lower(),
+    }
 
 
 def _registry_error(error: Exception) -> HTTPException:
@@ -150,8 +159,7 @@ def get_model_versions(model_id: str, db: DbSession) -> list[ModelVersionRead]:
     ensure_seeded(db)
     try:
         return [
-            ModelVersionRead.model_validate(item)
-            for item in ModelRepository(db).versions(model_id)
+            ModelVersionRead.model_validate(item) for item in ModelRepository(db).versions(model_id)
         ]
     except RegistryNotFoundError as error:
         raise _registry_error(error) from error
@@ -226,10 +234,7 @@ def routing_history(
     )
     count_query = select(func.count()).select_from(RouterHistory).where(*filters)
     return HistoryList(
-        items=[
-            HistoryRead.model_validate(item)
-            for item in db.scalars(query)
-        ],
+        items=[HistoryRead.model_validate(item) for item in db.scalars(query)],
         total=int(db.scalar(count_query) or 0),
         page=page,
         page_size=page_size,
