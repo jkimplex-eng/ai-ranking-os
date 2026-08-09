@@ -19,7 +19,7 @@ from backend.app.llm_router.metrics import (
 )
 from backend.app.llm_router.models import RouterCostLog, RouterHistory
 from backend.app.llm_router.parallel import build_parallel_plan
-from backend.app.llm_router.policy import resolve_policy
+from backend.app.llm_router.policy import resolve_policy, strategy_for_task
 from backend.app.llm_router.registry import ModelRepository, ensure_seeded
 from backend.app.llm_router.schemas import (
     ModelRead,
@@ -101,7 +101,7 @@ def _response(
         budget_downgraded=budget_downgraded,
         fallback_count=fallback_count,
         router_latency_ms=round(latency_ms, 3),
-        strategy=request.strategy,
+        strategy=request.strategy or policy.strategy,
     )
 
 
@@ -117,6 +117,7 @@ def route(db: Session, request: RouteRequest) -> RouteResponse:
             IntentInput(request_id=correlation_id, query=request.query)
         ).language.code
     policy = resolve_policy(db, request)
+    request.strategy = request.strategy or strategy_for_task(request.task_type) or policy.strategy
     models, scores = select_models(
         db,
         ModelRepository(db).all_active(),
@@ -225,6 +226,8 @@ def route_from_config(request: RouteRequest) -> RouteResponse:
     policy = PolicyRead(
         id=raw_policy["id"],
         name=raw_policy["name"],
+        task_type=raw_policy.get("task_type"),
+        strategy=raw_policy.get("strategy", "BALANCED"),
         enabled=True,
         execution_mode=raw_policy["execution_mode"],
         top_k=raw_policy["top_k"],

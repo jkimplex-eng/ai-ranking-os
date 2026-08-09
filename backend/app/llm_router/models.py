@@ -57,6 +57,8 @@ class RoutingPolicy(Base):
 
     id: Mapped[str] = mapped_column(String(100), primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
+    task_type: Mapped[str | None] = mapped_column(String(100), index=True)
+    strategy: Mapped[str] = mapped_column(String(30), default="BALANCED")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     execution_mode: Mapped[str] = mapped_column(String(30))
     top_k: Mapped[int] = mapped_column(Integer)

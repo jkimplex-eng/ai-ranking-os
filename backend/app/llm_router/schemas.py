@@ -131,6 +131,8 @@ class PolicyRead(BaseModel):
 
     id: str
     name: str
+    task_type: str | None = None
+    strategy: RouterStrategy = RouterStrategy.BALANCED
     enabled: bool
     execution_mode: ExecutionMode
     top_k: int
@@ -144,6 +146,8 @@ class PolicyRead(BaseModel):
 
 class PolicyUpdate(BaseModel):
     enabled: bool | None = None
+    task_type: str | None = Field(default=None, max_length=100)
+    strategy: RouterStrategy | None = None
     execution_mode: ExecutionMode | None = None
     top_k: int | None = Field(default=None, ge=1, le=8)
     weights: dict[str, float] | None = None
@@ -164,7 +168,8 @@ class RouteRequest(BaseModel):
     correlation_id: str | None = Field(default=None, max_length=200)
     intent: IntentType | None = None
     policy_id: str | None = Field(default=None, max_length=100)
-    strategy: RouterStrategy = RouterStrategy.BALANCED
+    strategy: RouterStrategy | None = None
+    task_type: str | None = Field(default=None, max_length=100)
     context_tokens: int = Field(default=0, ge=0)
     max_output_tokens: int = Field(default=512, ge=1, le=100_000)
     domain: str = Field(default="general", max_length=100)

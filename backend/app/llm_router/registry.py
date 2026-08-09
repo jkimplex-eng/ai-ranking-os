@@ -279,6 +279,17 @@ class PolicyRepository:
             for policy in self.db.scalars(select(RoutingPolicy).order_by(RoutingPolicy.id))
         ]
 
+    def for_task(self, task_type: str) -> PolicyRead | None:
+        policy = self.db.scalar(
+            select(RoutingPolicy)
+            .where(
+                RoutingPolicy.task_type == task_type.casefold(),
+                RoutingPolicy.enabled.is_(True),
+            )
+            .order_by(RoutingPolicy.id)
+        )
+        return policy_to_read(policy) if policy else None
+
     def update(self, policy_id: str, payload: PolicyUpdate) -> PolicyRead:
         policy = self.db.get(RoutingPolicy, policy_id)
         if policy is None:
@@ -322,6 +333,8 @@ def ensure_seeded(db: Session) -> None:
                 RoutingPolicy(
                     id=raw["id"],
                     name=raw["name"],
+                    task_type=raw.get("task_type"),
+                    strategy=raw.get("strategy", "BALANCED"),
                     enabled=True,
                     execution_mode=raw["execution_mode"],
                     top_k=raw["top_k"],
