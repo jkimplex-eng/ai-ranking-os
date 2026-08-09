@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend.app.database import Base, get_db
+from backend.app.llm_router.adapters import RuntimeProviderReadiness
+from backend.app.llm_router.ports import ProviderState
 from backend.app.main import app
 from research.models import ResearchJobState
 from research.queue import process_next
@@ -58,6 +60,26 @@ def test_profiles_are_the_public_user_routing_contract(client: TestClient) -> No
         "PRIVATE",
         "ENTERPRISE",
     }
+
+
+def test_unavailable_provider_can_recover_after_health_check(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client.get("/providers")
+    with TestingSession() as db:
+        from provider_registry.models import ProviderRecord
+
+        record = db.get(ProviderRecord, "ollama")
+        assert record is not None
+        record.availability = "UNAVAILABLE"
+        db.commit()
+        monkeypatch.setenv("PROVIDER_MOCK_MODE", "false")
+        monkeypatch.setattr(
+            RuntimeProviderReadiness,
+            "_healthy",
+            classmethod(lambda cls, provider_id: True),
+        )
+        assert RuntimeProviderReadiness(db).state("ollama") == ProviderState.READY
 
 
 def test_hard_budget_rejects_plan_when_no_affordable_model_exists(

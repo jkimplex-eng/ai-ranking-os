@@ -31,7 +31,10 @@ class RuntimeProviderReadiness(ProviderReadinessPort):
                 registry_state = ProviderState(
                     aliases.get(record.availability, record.availability)
                 )
-                if registry_state is not ProviderState.READY:
+                if registry_state in {
+                    ProviderState.DISABLED,
+                    ProviderState.NOT_CONFIGURED,
+                }:
                     return registry_state
         try:
             definition = registry.get(provider_id)
