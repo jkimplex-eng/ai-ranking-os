@@ -23,6 +23,12 @@ export type ReportResult = {
   report: Record<string, unknown>;
 };
 export type ResearchItem = { id: number; title: string; status: string };
+export type ProviderItem = {
+  id: string; display_name: string; capabilities: string[];
+  pricing: Record<string, unknown>; context_window: number;
+  availability: string; free_tier: boolean; priority: number;
+  streaming: boolean; reasoning: boolean; vision: boolean;
+};
 
 export class ApiClient {
   private token?: string;
@@ -65,6 +71,10 @@ export class ApiClient {
     });
   }
   listResearch() { return this.request<ResearchItem[]>("/research"); }
+  listProviders() { return this.request<ProviderItem[]>("/providers"); }
+  routerStatus() {
+    return this.request<{status: string; costs: Record<string, number>}>('/router/status');
+  }
   finalReport(id: number) {
     return this.request<Record<string, unknown>>(`/research/${id}/final-report`);
   }

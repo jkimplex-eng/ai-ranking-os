@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ApiClient,
+  type ProviderItem,
   type ReportResult,
   type WizardPayload,
   type WizardReview,
@@ -41,7 +42,7 @@ const metricMeta = [
   ["Confidence", "confidence_score"],
 ] as const;
 
-type Screen = "home" | "wizard" | "report";
+type Screen = "home" | "wizard" | "report" | "providers";
 type ReportShape = {
   executive_summary?: string;
   score?: Record<string, number | string>;
@@ -158,11 +159,15 @@ function Shell({
   user,
   children,
   onHome,
+  onProviders,
+  active,
   onLogout,
 }: {
   user: string;
   children: React.ReactNode;
   onHome: () => void;
+  onProviders: () => void;
+  active: Screen;
   onLogout: () => void;
 }) {
   const nav = [
@@ -173,6 +178,7 @@ function Shell({
     ["⌘", "Knowledge Graph"],
     ["◇", "Competitors"],
     ["↗", "History"],
+    ["✦", "AI Providers"],
     ["⚙", "Settings"],
   ];
   return (
@@ -186,8 +192,11 @@ function Shell({
           {nav.map(([icon, label], index) => (
             <button
               key={label}
-              className={index === 0 ? "active" : ""}
-              onClick={index === 0 ? onHome : undefined}
+              className={
+                (index === 0 && active === "home") ||
+                (label === "AI Providers" && active === "providers") ? "active" : ""
+              }
+              onClick={index === 0 ? onHome : label === "AI Providers" ? onProviders : undefined}
             >
               <span>{icon}</span>
               {label}
@@ -227,6 +236,50 @@ function Shell({
         {children}
       </div>
     </div>
+  );
+}
+
+function ProvidersDashboard() {
+  const [providers, setProviders] = useState<ProviderItem[]>([]);
+  const [costs, setCosts] = useState<Record<string, number>>({});
+  const [error, setError] = useState("");
+  useEffect(() => {
+    Promise.all([api.listProviders(), api.routerStatus()])
+      .then(([items, status]) => { setProviders(items); setCosts(status.costs); })
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки"));
+  }, []);
+  const available = providers.filter((item) => item.availability === "AVAILABLE").length;
+  return (
+    <main className="page providers-page">
+      <div className="page-heading">
+        <div><span className="eyebrow">INTELLIGENT ROUTING</span><h1>AI Providers</h1>
+          <p>Модели, политики, маршрутизация, стоимость и состояние инфраструктуры.</p></div>
+        <Badge tone="success">● {available}/{providers.length || "—"} доступны</Badge>
+      </div>
+      {error && <div className="error" role="alert">{error}</div>}
+      {!providers.length && !error ? <div className="provider-cards">{[1,2,3].map(i => <Skeleton key={i} />)}</div> : (
+        <>
+          <section className="provider-summary">
+            <div className="panel"><span>Провайдеры</span><strong>{providers.length}</strong><small>единый registry</small></div>
+            <div className="panel"><span>Free / Local</span><strong>{providers.filter(p => p.free_tier).length}</strong><small>без платного API</small></div>
+            <div className="panel"><span>Расход сегодня</span><strong>${Number(costs.daily_usd || 0).toFixed(2)}</strong><small>контроль бюджета</small></div>
+            <div className="panel"><span>Streaming</span><strong>{providers.filter(p => p.streaming).length}</strong><small>моделей и шлюзов</small></div>
+          </section>
+          <div className="provider-tabs" role="tablist">
+            {['Models','Policies','Router','Benchmarks','Costs','Failover','Health'].map((tab, i) => <button className={i===0?'active':''} key={tab}>{tab}</button>)}
+          </div>
+          <section className="provider-cards">
+            {providers.map((provider) => <article className="panel provider-card" key={provider.id}>
+              <header><span className="provider-logo">{provider.display_name.slice(0,2).toUpperCase()}</span>
+                <div><h2>{provider.display_name}</h2><small>{provider.id}</small></div>
+                <Badge tone={provider.availability === 'AVAILABLE' ? 'success' : 'warning'}>{provider.availability}</Badge></header>
+              <div className="provider-stats"><div><span>Context</span><b>{Math.round(provider.context_window/1000)}K</b></div><div><span>Priority</span><b>#{provider.priority}</b></div><div><span>Tier</span><b>{provider.free_tier?'FREE':'PAID'}</b></div></div>
+              <div className="capability-tags">{provider.capabilities.slice(0,6).map(cap => <span key={cap}>{cap}</span>)}</div>
+            </article>)}
+          </section>
+        </>
+      )}
+    </main>
   );
 }
 
@@ -1205,6 +1258,8 @@ function App() {
             setScreen("report");
           }}
         />
+      ) : screen === "providers" ? (
+        <ProvidersDashboard />
       ) : screen === "report" && report ? (
         <Report result={report} onHome={() => setScreen("home")} />
       ) : loading ? (
@@ -1230,7 +1285,9 @@ function App() {
   return (
     <Shell
       user={user}
+      active={screen}
       onHome={() => setScreen("home")}
+      onProviders={() => setScreen("providers")}
       onLogout={() => {
         setUser("");
         setReport(undefined);
