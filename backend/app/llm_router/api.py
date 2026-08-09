@@ -28,6 +28,7 @@ from backend.app.llm_router.schemas import (
     ModelList,
     ModelRead,
     ModelUpdate,
+    ModelVersionRead,
     PolicyRead,
     PolicyUpdate,
     RouteRequest,
@@ -94,6 +95,18 @@ def get_model(model_id: str, db: DbSession) -> ModelRead:
     ensure_seeded(db)
     try:
         return ModelRepository(db).get(model_id)
+    except RegistryNotFoundError as error:
+        raise _registry_error(error) from error
+
+
+@router.get("/model/{model_id}/versions", response_model=list[ModelVersionRead])
+def get_model_versions(model_id: str, db: DbSession) -> list[ModelVersionRead]:
+    ensure_seeded(db)
+    try:
+        return [
+            ModelVersionRead.model_validate(item)
+            for item in ModelRepository(db).versions(model_id)
+        ]
     except RegistryNotFoundError as error:
         raise _registry_error(error) from error
 

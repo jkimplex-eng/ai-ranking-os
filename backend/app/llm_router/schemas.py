@@ -37,11 +37,16 @@ class ModelCreate(BaseModel):
     id: str = Field(min_length=1, max_length=200)
     provider: str = Field(min_length=1, max_length=100)
     display_name: str = Field(min_length=1, max_length=300)
+    version: str = Field(default="1.0", min_length=1, max_length=100)
+    release_date: datetime | None = None
     status: ModelStatus = ModelStatus.ACTIVE
     tier: ModelTier = ModelTier.STANDARD
     capabilities: list[str] = Field(default_factory=list)
     pricing: Pricing
     latency_ms: float = Field(gt=0)
+    tokens_per_second: float = Field(default=0, ge=0)
+    average_latency: float = Field(default=0, ge=0)
+    benchmark_score: float = Field(default=0, ge=0, le=100)
     quality: float = Field(ge=0, le=1)
     availability: float = Field(ge=0, le=1)
     context_window: int = Field(gt=0)
@@ -50,16 +55,26 @@ class ModelCreate(BaseModel):
     languages: list[str] = Field(default_factory=lambda: ["en"])
     region: str = Field(default="GLOBAL", pattern="^(GLOBAL|RUSSIA)$")
     success_probability: float = Field(default=0.95, ge=0, le=1)
+    reasoning: bool = False
+    multimodal: bool = False
+    embeddings: bool = False
+    json_mode: bool = False
+    tool_calling: bool = False
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ModelUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=300)
+    version: str | None = Field(default=None, min_length=1, max_length=100)
+    release_date: datetime | None = None
     status: ModelStatus | None = None
     tier: ModelTier | None = None
     capabilities: list[str] | None = None
     pricing: Pricing | None = None
     latency_ms: float | None = Field(default=None, gt=0)
+    tokens_per_second: float | None = Field(default=None, ge=0)
+    average_latency: float | None = Field(default=None, ge=0)
+    benchmark_score: float | None = Field(default=None, ge=0, le=100)
     quality: float | None = Field(default=None, ge=0, le=1)
     availability: float | None = Field(default=None, ge=0, le=1)
     context_window: int | None = Field(default=None, gt=0)
@@ -68,6 +83,11 @@ class ModelUpdate(BaseModel):
     languages: list[str] | None = None
     region: str | None = Field(default=None, pattern="^(GLOBAL|RUSSIA)$")
     success_probability: float | None = Field(default=None, ge=0, le=1)
+    reasoning: bool | None = None
+    multimodal: bool | None = None
+    embeddings: bool | None = None
+    json_mode: bool | None = None
+    tool_calling: bool | None = None
     metadata: dict[str, Any] | None = None
 
 
@@ -84,6 +104,16 @@ class ModelList(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class ModelVersionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    model_id: str
+    version: str
+    snapshot: dict[str, Any]
+    created_at: datetime
 
 
 class PolicyRead(BaseModel):

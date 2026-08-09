@@ -13,12 +13,17 @@ class RegisteredModel(Base):
     id: Mapped[str] = mapped_column(String(200), primary_key=True)
     provider: Mapped[str] = mapped_column(String(100), index=True)
     display_name: Mapped[str] = mapped_column(String(300))
+    version: Mapped[str] = mapped_column(String(100), default="1.0")
+    release_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(30), index=True)
     tier: Mapped[str] = mapped_column(String(30), index=True)
     capabilities: Mapped[list[str]] = mapped_column(JSON)
     input_cost_per_million: Mapped[float] = mapped_column(Float)
     output_cost_per_million: Mapped[float] = mapped_column(Float)
     latency_ms: Mapped[float] = mapped_column(Float)
+    tokens_per_second: Mapped[float] = mapped_column(Float, default=0)
+    average_latency: Mapped[float] = mapped_column(Float, default=0)
+    benchmark_score: Mapped[float] = mapped_column(Float, default=0)
     quality: Mapped[float] = mapped_column(Float)
     availability: Mapped[float] = mapped_column(Float)
     context_window: Mapped[int] = mapped_column(Integer)
@@ -27,9 +32,24 @@ class RegisteredModel(Base):
     languages: Mapped[list[str]] = mapped_column(JSON)
     region: Mapped[str] = mapped_column(String(20), default="GLOBAL", index=True)
     success_probability: Mapped[float] = mapped_column(Float, default=0.95)
+    reasoning: Mapped[bool] = mapped_column(Boolean, default=False)
+    multimodal: Mapped[bool] = mapped_column(Boolean, default=False)
+    embeddings: Mapped[bool] = mapped_column(Boolean, default=False)
+    json_mode: Mapped[bool] = mapped_column(Boolean, default=False)
+    tool_calling: Mapped[bool] = mapped_column(Boolean, default=False)
     metadata_payload: Mapped[dict[str, Any]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ModelVersionRecord(Base):
+    __tablename__ = "router_model_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    model_id: Mapped[str] = mapped_column(String(200), index=True)
+    version: Mapped[str] = mapped_column(String(100), index=True)
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class RoutingPolicy(Base):
