@@ -19,6 +19,7 @@ from backend.app.llm_router.api import router as llm_router
 from backend.app.logging import bind_request, configure_logging, user_id_var
 from backend.app.monitoring.metrics import HTTP_LATENCY, HTTP_REQUESTS
 from backend.app.monitoring.router import router as monitoring_router
+from backend.app.providers.api import router as providers_router
 from backend.app.schemas import HealthResponse, VersionResponse
 from baseline.router import router as baseline_router
 from benchmark.router import router as benchmark_router
@@ -91,6 +92,7 @@ app.include_router(recommendation_simulation_router)
 app.include_router(recommendation_templates_router)
 app.include_router(query_executor_router)
 app.include_router(llm_router)
+app.include_router(providers_router)
 app.include_router(monitoring_router)
 app.include_router(trend_router)
 app.include_router(alert_router)
