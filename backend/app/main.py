@@ -24,6 +24,7 @@ from backend.app.schemas import HealthResponse, VersionResponse
 from baseline.router import router as baseline_router
 from benchmark.router import router as benchmark_router
 from cache.router import router as cache_router
+from cost_analytics.router import router as cost_analytics_router
 from decision_center.router import router as decision_center_router
 from entity_extraction.router import router as entity_extraction_router
 from entity_linking.router import router as entity_linking_router
@@ -99,6 +100,7 @@ app.include_router(llm_router)
 app.include_router(providers_router)
 app.include_router(model_benchmark_router)
 app.include_router(model_evaluation_router)
+app.include_router(cost_analytics_router)
 app.include_router(provider_discovery_router)
 app.include_router(provider_registry_router)
 app.include_router(monitoring_router)
