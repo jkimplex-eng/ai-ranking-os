@@ -60,13 +60,17 @@ def process_next(db: Session) -> ResearchJob | None:
     job.started_at = datetime.now(UTC)
     db.commit()
     try:
-        run_research(
+        research = run_research(
             db,
             job.research_id,
             ResearchRunRequest.model_validate(job.payload),
             allow_active=True,
         )
-        job.state = ResearchJobState.COMPLETED
+        if research.status == ResearchStatus.FAILED:
+            job.state = ResearchJobState.FAILED
+            job.error = "Research execution completed with failed tasks"
+        else:
+            job.state = ResearchJobState.COMPLETED
     except Exception as error:
         job.state = ResearchJobState.FAILED
         job.error = str(error)
