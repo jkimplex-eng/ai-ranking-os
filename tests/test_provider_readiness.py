@@ -14,7 +14,9 @@ EXPECTED_PROVIDERS = {
     "perplexity",
     "mistral",
     "grok",
-    "local",
+    "ollama",
+    "groq",
+    "github",
     "yandex",
     "gigachat",
 }
@@ -39,7 +41,8 @@ def test_provider_contract_matrix() -> None:
         assert response.provider == name
         assert response.usage.total_tokens > 0
         assert response.usage.estimated_cost >= 0
-        assert response.citations
+        if chat_model.capabilities.supports("citations"):
+            assert response.citations
         if provider.supports_streaming(chat_model.id):
             assert list(provider.stream(GenerateRequest(model=chat_model.id, prompt="hello")))
 

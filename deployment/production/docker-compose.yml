@@ -25,6 +25,8 @@ x-backend: &backend
     DATABASE_POOL_RECYCLE_SECONDS: ${DATABASE_POOL_RECYCLE_SECONDS:-1800}
     GRACEFUL_SHUTDOWN_SECONDS: ${GRACEFUL_SHUTDOWN_SECONDS:-30}
   networks: [app]
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
   restart: unless-stopped
   logging:
     driver: json-file

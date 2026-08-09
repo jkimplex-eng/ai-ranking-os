@@ -26,14 +26,14 @@ import {
 import "./styles.css";
 
 const api = new ApiClient();
-const models = [
-  ["openai", "gpt-4o-mini"],
-  ["anthropic", "claude-3-5-sonnet"],
-  ["gemini", "gemini-1.5-pro"],
-  ["deepseek", "deepseek-chat"],
-  ["perplexity", "sonar-pro"],
-  ["mistral", "mistral-large"],
-];
+const routingProfiles = [
+  ["FAST", "Fast", "Минимальная задержка для быстрых проверок", "⚡"],
+  ["BALANCED", "Balanced", "Баланс качества, скорости и цены", "◐"],
+  ["HIGH_QUALITY", "High Quality", "Максимальное качество итогового анализа", "◆"],
+  ["FREE", "Free", "Только бесплатные и локальные модели", "○"],
+  ["PRIVATE", "Private", "Данные не покидают вашу инфраструктуру", "◈"],
+  ["ENTERPRISE", "Enterprise", "Несколько моделей, failover и строгие политики", "▣"],
+] as const;
 const metricMeta = [
   ["Mention", "mention_score"],
   ["Recommendation", "recommendation_score"],
@@ -775,16 +775,13 @@ function Wizard({
   const [brand, setBrand] = useState("Skinjestique");
   const [region, setRegion] = useState("GLOBAL");
   const [language, setLanguage] = useState("ru");
-  const [selected, setSelected] = useState(["openai:gpt-4o-mini"]);
+  const [profile, setProfile] = useState<WizardPayload["routing_profile"]>("BALANCED");
   const [review, setReview] = useState<WizardReview>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const payload = (): WizardPayload => ({
     brand,
-    models: selected.map((item) => {
-      const [provider, model] = item.split(":");
-      return { provider, model };
-    }),
+    routing_profile: profile,
     languages: [language],
     regions: [region],
     prompt_code: "ai-visibility",
@@ -822,7 +819,7 @@ function Wizard({
     "Как называется бренд?",
     "Где вы работаете?",
     "На каком языке искать?",
-    "Какие AI-модели проверить?",
+    "Как провести исследование?",
     "Всё готово к исследованию",
   ];
   return (
@@ -847,7 +844,7 @@ function Wizard({
           {step === 1
             ? "Введите название так, как его видят ваши клиенты."
             : step === 4
-              ? "Рекомендуем выбрать минимум три модели для объективной картины."
+              ? "Выберите режим — Router сам найдёт подходящие доступные модели."
               : "Это поможет сделать исследование точнее."}
         </p>
         {step === 1 && (
@@ -898,32 +895,20 @@ function Wizard({
           </div>
         )}
         {step === 4 && (
-          <div className="model-grid">
-            {models.map(([provider, model]) => {
-              const key = `${provider}:${model}`;
+          <div className="model-grid routing-profile-grid">
+            {routingProfiles.map(([value, title, description, icon]) => {
               return (
-                <label
-                  className={`model ${selected.includes(key) ? "active" : ""}`}
-                  key={key}
+                <button
+                  type="button"
+                  className={`model routing-profile ${profile === value ? "active" : ""}`}
+                  key={value}
+                  onClick={() => setProfile(value)}
                 >
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(key)}
-                    onChange={() =>
-                      setSelected((items) =>
-                        items.includes(key)
-                          ? items.filter((x) => x !== key)
-                          : [...items, key],
-                      )
-                    }
-                  />
-                  <span className="provider-icon">
-                    {provider.slice(0, 1).toUpperCase()}
-                  </span>
-                  <b>{provider}</b>
-                  <small>{model}</small>
-                  <i>{selected.includes(key) ? "✓" : "+"}</i>
-                </label>
+                  <span className="provider-icon">{icon}</span>
+                  <b>{title}</b>
+                  <small>{description}</small>
+                  <i>{profile === value ? "✓" : ""}</i>
+                </button>
               );
             })}
           </div>
@@ -943,8 +928,8 @@ function Wizard({
               <b>{language.toUpperCase()}</b>
             </div>
             <div>
-              <span>Модели</span>
-              <b>{selected.length}</b>
+              <span>Режим</span>
+              <b>{routingProfiles.find(([value]) => value === profile)?.[1]}</b>
             </div>
             <p>{review?.prompt}</p>
           </div>
@@ -958,7 +943,7 @@ function Wizard({
           {step < 5 ? (
             <button
               onClick={next}
-              disabled={busy || !brand || (step === 4 && !selected.length)}
+              disabled={busy || !brand}
             >
               {busy ? "Проверяем…" : step === 4 ? "Проверить" : "Продолжить"} →
             </button>

@@ -11,7 +11,9 @@ from analytics.repository import SqlAlchemyAnalyticsRepository
 from analytics.schemas import AnalyticsFilter, AnalyticsQuery, FilterOperator, Statistic
 from analytics.service import AnalyticsService
 from backend.app.analytics_source import PlatformAnalyticsDataSource
-from backend.app.providers.factory import ProviderFactory, factory
+from backend.app.llm_router.adapters import RuntimeProviderReadiness
+from backend.app.llm_router.ports import ProviderState
+from backend.app.llm_router.registry import ModelRepository, RegistryNotFoundError, ensure_seeded
 from benchmark.repository import SqlAlchemyBenchmarkRepository
 from benchmark.schemas import BenchmarkRequest
 from benchmark.service import BenchmarkService
@@ -108,13 +110,8 @@ class ResearchEntityProvider(EntityProvider, RelationshipProvider):
 
 
 class ProductPipeline:
-    def __init__(
-        self,
-        db: Session,
-        provider_factory: ProviderFactory = factory,
-    ) -> None:
+    def __init__(self, db: Session) -> None:
         self.db = db
-        self.provider_factory = provider_factory
         self.prompts = PromptService(db)
         self.templates = ResearchTemplateRepository(db)
 
@@ -127,23 +124,28 @@ class ProductPipeline:
         selected = []
         estimated_cost = 0.0
         estimated_time = 0.0
+        ensure_seeded(self.db)
+        models = ModelRepository(self.db)
         for item in payload.models:
             try:
-                provider = self.provider_factory.create(item.provider)
-                model = next(model for model in provider.models() if model.id == item.model)
-            except (KeyError, StopIteration, ValueError) as error:
+                model = models.get(item.model)
+            except RegistryNotFoundError as error:
                 raise WizardValidationError(
                     f"Unsupported provider/model: {item.provider}/{item.model}"
                 ) from error
-            if not model.capabilities.supports("chat"):
+            if model.provider != item.provider or "chat" not in model.capabilities:
                 raise WizardValidationError(f"Model {item.model} does not support chat")
-            if not provider.health()["available"]:
+            if RuntimeProviderReadiness(self.db).state(item.provider) != ProviderState.READY:
                 raise WizardValidationError(f"Provider {item.provider} is unavailable")
             selected.append(f"{item.provider}/{item.model}")
-            prompt_tokens = provider.estimate_tokens(prompt)
-            estimate = provider.estimate_cost(item.model, prompt_tokens, 512)
-            estimated_cost += estimate.estimated_cost
-            estimated_time = max(estimated_time, float(getattr(model, "latency_ms", 500)))
+            prompt_tokens = max(1, len(prompt) // 4)
+            estimated_cost += (
+                prompt_tokens * model.pricing.input_per_million
+                + 512 * model.pricing.output_per_million
+            ) / 1_000_000
+            estimated_time = max(estimated_time, model.latency_ms)
+        if not selected:
+            selected = [payload.routing_profile]
         return WizardReview(
             valid=True,
             title=f"{template.title}: {payload.brand}",
@@ -192,8 +194,11 @@ class ProductPipeline:
         run_research(
             self.db,
             research.id,
-            ResearchRunRequest(models=payload.models, query=review.prompt),
-            provider_factory=self.provider_factory,
+            ResearchRunRequest(
+                models=payload.models,
+                routing_profile=payload.routing_profile,
+                query=review.prompt,
+            ),
         )
         self._complete_product_pipeline(research)
         self.db.refresh(research)

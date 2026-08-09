@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.llm_router.circuit_breaker import allow_request
 from backend.app.llm_router.mode import RoutingMode, hybrid_rank, hybrid_tier
+from backend.app.llm_router.ports import ModelEvaluationPort, ProviderReadinessPort, ProviderState
 from backend.app.llm_router.schemas import (
     ModelRead,
     RouteRequest,
@@ -9,7 +10,6 @@ from backend.app.llm_router.schemas import (
     ScoreBreakdown,
 )
 from backend.app.llm_router.scoring import score_model
-from model_evaluation.service import empirical_model_scores
 from query_intent.schemas import IntentType
 
 
@@ -20,6 +20,8 @@ def select_models(
     intent: IntentType,
     weights: dict[str, float],
     required_capabilities: list[str],
+    readiness: ProviderReadinessPort,
+    evaluation: ModelEvaluationPort,
 ) -> tuple[list[ModelRead], list[ScoreBreakdown]]:
     required = set(required_capabilities) | set(request.required_capabilities)
     candidates = [
@@ -29,6 +31,8 @@ def select_models(
         and model.availability >= 0.5
         and model.context_window >= request.context_tokens
         and required.issubset(model.capabilities)
+        and readiness.state(model.provider) == ProviderState.READY
+        and (not request.allowed_models or model.id in request.allowed_models)
         and (request.region is None or model.region == request.region)
         and allow_request(db, model.id)
     ]
@@ -41,7 +45,7 @@ def select_models(
             if model.pricing.input_per_million == 0
             and model.pricing.output_per_million == 0
         ]
-    empirical = empirical_model_scores(db, request.task_type)
+    empirical = evaluation.scores(request.task_type)
     candidates = [
         model.model_copy(
             update={

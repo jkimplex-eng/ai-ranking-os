@@ -1,5 +1,11 @@
 version: "1.0"
 policies:
+  - id: balanced
+    name: Balanced
+    strategy: BALANCED
+    execution_mode: SINGLE
+    top_k: 1
+    weights: {intent: 0.10, cost: 0.20, latency: 0.20, quality: 0.20, context: 0.10, hallucination: 0.08, domain: 0.07, language: 0.05}
   - id: cost-optimized
     name: Cost Optimized
     task_type: embeddings

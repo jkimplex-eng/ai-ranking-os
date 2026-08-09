@@ -14,7 +14,8 @@ from backend.app.llm_router.models import (
     RouterHistory,
     RoutingPolicy,
 )
-from backend.app.llm_router.pipeline import RoutingError, route
+from backend.app.llm_router.pipeline import RoutingError
+from backend.app.llm_router.policy import PROFILE_POLICIES
 from backend.app.llm_router.registry import (
     ModelRepository,
     PolicyRepository,
@@ -37,7 +38,10 @@ from backend.app.llm_router.schemas import (
     RouteRequest,
     RouteResponse,
     RouterStatus,
+    RoutingProfile,
+    RoutingProfileRead,
 )
+from backend.app.llm_router.service import router_service
 from backend.app.providers.models import ProviderUsageRecord
 from query_executor.schemas import ExecutionPlan
 
@@ -65,7 +69,7 @@ def _registry_error(error: Exception) -> HTTPException:
 @router.post("/route", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)
 def route_query(payload: RouteRequest, db: DbSession) -> RouteResponse:
     try:
-        return route(db, payload)
+        return router_service.decide(db, payload)
     except (RegistryNotFoundError, RoutingError, ValueError) as error:
         ROUTER_ERRORS.labels(error_type=type(error).__name__).inc()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
@@ -74,7 +78,7 @@ def route_query(payload: RouteRequest, db: DbSession) -> RouteResponse:
 @router.post("/plan", response_model=ExecutionPlan, status_code=status.HTTP_201_CREATED)
 def build_plan(payload: RouteRequest, db: DbSession) -> ExecutionPlan:
     try:
-        return route(db, payload).plan
+        return router_service.decide(db, payload).plan
     except (RegistryNotFoundError, RoutingError, ValueError) as error:
         ROUTER_ERRORS.labels(error_type=type(error).__name__).inc()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
@@ -83,7 +87,7 @@ def build_plan(payload: RouteRequest, db: DbSession) -> ExecutionPlan:
 @router.post("/estimate", response_model=CostEstimate)
 def estimate_route(payload: RouteRequest, db: DbSession) -> CostEstimate:
     try:
-        result = route(db, payload)
+        result = router_service.decide(db, payload)
     except (RegistryNotFoundError, RoutingError, ValueError) as error:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
     models = [ModelRepository(db).get(model_id) for model_id in result.selected_models]
@@ -197,6 +201,32 @@ def delete_model(model_id: str, db: DbSession) -> Response:
 def list_policies(db: DbSession) -> list[PolicyRead]:
     ensure_seeded(db)
     return PolicyRepository(db).list()
+
+
+@router.get("/profiles", response_model=list[RoutingProfileRead])
+def list_profiles(db: DbSession) -> list[RoutingProfileRead]:
+    ensure_seeded(db)
+    repository = PolicyRepository(db)
+    return [
+        RoutingProfileRead(
+            profile=profile,
+            policy=repository.get(policy_id),
+            strategy=strategy,
+        )
+        for profile, (policy_id, strategy) in PROFILE_POLICIES.items()
+    ]
+
+
+@router.patch("/profiles/{profile}", response_model=RoutingProfileRead)
+def update_profile(
+    profile: RoutingProfile,
+    payload: PolicyUpdate,
+    db: DbSession,
+) -> RoutingProfileRead:
+    ensure_seeded(db)
+    policy_id, strategy = PROFILE_POLICIES[profile]
+    policy = PolicyRepository(db).update(policy_id, payload)
+    return RoutingProfileRead(profile=profile, policy=policy, strategy=strategy)
 
 
 @router.patch("/policies/{policy_id}", response_model=PolicyRead)

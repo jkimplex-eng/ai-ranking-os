@@ -104,6 +104,19 @@ class RouterCostLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
+class BudgetReservation(Base):
+    __tablename__ = "router_budget_reservations"
+
+    id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    correlation_id: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    policy_id: Mapped[str] = mapped_column(String(100), index=True)
+    amount_usd: Mapped[float] = mapped_column(Float)
+    state: Mapped[str] = mapped_column(String(30), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class CircuitBreakerRecord(Base):
     __tablename__ = "router_circuit_breakers"
 

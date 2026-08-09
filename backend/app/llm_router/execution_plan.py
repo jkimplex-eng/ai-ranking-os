@@ -18,7 +18,8 @@ def build_execution_plan(
                 "step_id": f"model-{index}",
                 "provider": model.provider,
                 "payload": {
-                    "model": model.id,
+                    "model": model.metadata.get("runtime_model", model.id),
+                    "registry_model_id": model.id,
                     "query": request.query,
                     "max_tokens": request.max_output_tokens,
                     "metadata": {

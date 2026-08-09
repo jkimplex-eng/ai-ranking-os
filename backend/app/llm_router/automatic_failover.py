@@ -1,7 +1,6 @@
 from enum import StrEnum
 
 from backend.app.llm_router.schemas import ModelRead, ScoreBreakdown
-from backend.app.providers.exceptions import ProviderError, ProviderErrorCategory
 
 FAILOVER_PROVIDER_ORDER = ("ollama", "local", "groq", "gemini", "google", "github", "openai")
 
@@ -15,13 +14,14 @@ class FailoverReason(StrEnum):
 
 
 def classify_failover_reason(error: Exception) -> FailoverReason:
-    if isinstance(error, ProviderError):
-        if error.category == ProviderErrorCategory.TIMEOUT:
+    category = str(getattr(error, "category", "")).casefold()
+    if category:
+        if category.endswith("timeout"):
             return FailoverReason.TIMEOUT
-        if error.category == ProviderErrorCategory.RATE_LIMIT:
+        if category.endswith("rate_limit"):
             text = str(error).casefold()
             return FailoverReason.QUOTA_EXCEEDED if "quota" in text else FailoverReason.RATE_LIMIT
-        if error.category in {ProviderErrorCategory.NETWORK, ProviderErrorCategory.CONFIGURATION}:
+        if category.endswith(("network", "configuration")):
             return FailoverReason.UNAVAILABLE
     return FailoverReason.PROVIDER_ERROR
 

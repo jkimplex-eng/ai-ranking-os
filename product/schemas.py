@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from backend.app.llm_router.schemas import RoutingProfile
 from research.schemas import ResearchModelSelection, ResearchRead
 
 PROMPT_CATEGORIES = {"Visibility", "Brand", "Product", "Competitor", "Reputation", "GEO"}
@@ -78,7 +79,8 @@ class ResearchTemplateRead(BaseModel):
 class WizardRequest(BaseModel):
     brand: str = Field(min_length=1, max_length=300)
     entity_id: UUID | None = None
-    models: list[ResearchModelSelection] = Field(min_length=1, max_length=20)
+    models: list[ResearchModelSelection] = Field(default_factory=list, max_length=20)
+    routing_profile: RoutingProfile = RoutingProfile.BALANCED
     languages: list[str] = Field(default_factory=lambda: ["en"], min_length=1)
     regions: list[str] = Field(default_factory=lambda: ["GLOBAL"], min_length=1)
     prompt_code: str = "ai-visibility"

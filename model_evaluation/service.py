@@ -4,8 +4,9 @@ from time import perf_counter
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.app.providers.base import GenerateRequest
-from backend.app.providers.factory import ProviderFactory, factory
+from backend.app.llm_router.ports import LLMRouterPort
+from backend.app.llm_router.schemas import RouteRequest
+from backend.app.llm_router.service import router_service
 from model_evaluation.models import ModelEvaluationScore
 from model_evaluation.schemas import (
     CapabilityMatrixRead,
@@ -39,9 +40,9 @@ def empirical_model_scores(db: Session, task: str | None) -> dict[str, float]:
 
 
 class ModelEvaluationService:
-    def __init__(self, db: Session, provider_factory: ProviderFactory = factory) -> None:
+    def __init__(self, db: Session, router: LLMRouterPort = router_service) -> None:
         self.db = db
-        self.providers = provider_factory
+        self.router = router
 
     def evaluate(self, payload: EvaluationRequest) -> list[EvaluationScoreRead]:
         tasks = payload.tasks or list(EVALUATIONS)
@@ -51,13 +52,18 @@ class ModelEvaluationService:
         results = []
         now = datetime.now(UTC)
         for selected in payload.models:
-            provider = self.providers.create(selected.provider)
             for task in tasks:
                 prompt, keywords = EVALUATIONS[task]
                 started = perf_counter()
-                response = provider.generate(GenerateRequest(model=selected.model, prompt=prompt))
+                response = self.router.generate(
+                    self.db,
+                    RouteRequest(
+                        query=prompt,
+                        allowed_models=[selected.model],
+                    ),
+                )
                 latency = (perf_counter() - started) * 1000
-                content = response.content.casefold()
+                content = str(response.get("content", "")).casefold()
                 score = round(100 * sum(word in content for word in keywords) / len(keywords), 3)
                 record = ModelEvaluationScore(
                     provider=selected.provider,

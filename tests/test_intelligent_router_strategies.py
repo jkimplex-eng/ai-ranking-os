@@ -31,10 +31,10 @@ def client() -> Generator[TestClient]:
 @pytest.mark.parametrize(
     ("strategy", "expected"),
     [
-        ("FASTEST", "local-llama"),
-        ("CHEAPEST", "local-llama"),
+        ("FASTEST", "groq-llama-3.3-70b"),
+        ("CHEAPEST", "groq-llama-3.3-70b"),
         ("LOCAL_ONLY", "local-llama"),
-        ("FREE_ONLY", "local-llama"),
+        ("FREE_ONLY", "groq-llama-3.3-70b"),
         ("HIGHEST_QUALITY", "claude-3-5-sonnet"),
     ],
 )

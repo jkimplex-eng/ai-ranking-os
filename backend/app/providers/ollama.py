@@ -71,6 +71,16 @@ class OllamaProvider(Provider):
         if self.mock_mode:
             self._discovered = [
                 OllamaModelInfo(
+                    name="qwen2.5:3b",
+                    size=1_900_000_000,
+                    family="qwen2",
+                    parameter_size="3B",
+                    quantization_level="Q4_K_M",
+                    context_length=32768,
+                    tools=True,
+                    reasoning=True,
+                ),
+                OllamaModelInfo(
                     name="llama3.2:latest",
                     size=2_000_000_000,
                     family="llama",

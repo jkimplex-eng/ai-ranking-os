@@ -39,6 +39,15 @@ class RouterStrategy(StrEnum):
     CUSTOM = "CUSTOM"
 
 
+class RoutingProfile(StrEnum):
+    FAST = "FAST"
+    BALANCED = "BALANCED"
+    HIGH_QUALITY = "HIGH_QUALITY"
+    FREE = "FREE"
+    PRIVATE = "PRIVATE"
+    ENTERPRISE = "ENTERPRISE"
+
+
 class Pricing(BaseModel):
     input_per_million: float = Field(ge=0)
     output_per_million: float = Field(ge=0)
@@ -146,6 +155,12 @@ class PolicyRead(BaseModel):
     updated_at: datetime
 
 
+class RoutingProfileRead(BaseModel):
+    profile: RoutingProfile
+    policy: PolicyRead
+    strategy: RouterStrategy
+
+
 class PolicyUpdate(BaseModel):
     enabled: bool | None = None
     task_type: str | None = Field(default=None, max_length=100)
@@ -172,6 +187,7 @@ class RouteRequest(BaseModel):
     intent: IntentType | None = None
     policy_id: str | None = Field(default=None, max_length=100)
     strategy: RouterStrategy | None = None
+    profile: RoutingProfile = RoutingProfile.BALANCED
     task_type: str | None = Field(default=None, max_length=100)
     routing_mode: RoutingMode | None = None
     hybrid_order: HybridOrder | None = None
@@ -181,6 +197,7 @@ class RouteRequest(BaseModel):
     language: str | None = Field(default=None, max_length=20)
     region: str | None = Field(default=None, pattern="^(GLOBAL|RUSSIA)$")
     required_capabilities: list[str] = Field(default_factory=list)
+    allowed_models: list[str] = Field(default_factory=list, max_length=20)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

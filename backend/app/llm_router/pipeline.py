@@ -5,7 +5,6 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from backend.app.llm_router.automatic_failover import order_failover_models
-from backend.app.llm_router.config_loader import policy_config, provider_config, router_config
 from backend.app.llm_router.cost_optimizer import optimize_for_budget
 from backend.app.llm_router.ensemble import build_ensemble_plan
 from backend.app.llm_router.execution_plan import build_execution_plan
@@ -25,7 +24,8 @@ from backend.app.llm_router.mode import (
 )
 from backend.app.llm_router.models import RouterCostLog, RouterHistory
 from backend.app.llm_router.parallel import build_parallel_plan
-from backend.app.llm_router.policy import resolve_policy, strategy_for_task
+from backend.app.llm_router.policy import profile_policy, resolve_policy, strategy_for_task
+from backend.app.llm_router.ports import ModelEvaluationPort, ProviderReadinessPort
 from backend.app.llm_router.registry import ModelRepository, ensure_seeded
 from backend.app.llm_router.schemas import (
     ModelRead,
@@ -35,7 +35,6 @@ from backend.app.llm_router.schemas import (
     RouterStrategy,
     ScoreBreakdown,
 )
-from backend.app.llm_router.scoring import score_model
 from backend.app.llm_router.selector import select_models
 from query_executor.schemas import ExecutionMode, ExecutionPlan
 from query_intent.pipeline import run_pipeline as classify_intent
@@ -116,7 +115,13 @@ def _response(
     )
 
 
-def route(db: Session, request: RouteRequest) -> RouteResponse:
+def route(
+    db: Session,
+    request: RouteRequest,
+    *,
+    readiness: ProviderReadinessPort,
+    evaluation: ModelEvaluationPort,
+) -> RouteResponse:
     started = perf_counter()
     ensure_seeded(db)
     correlation_id = request.correlation_id or str(uuid4())
@@ -135,7 +140,12 @@ def route(db: Session, request: RouteRequest) -> RouteResponse:
     request.hybrid_order = request.hybrid_order or configured_hybrid_order()
     if request.routing_mode == RoutingMode.LOCAL:
         request.strategy = RouterStrategy.LOCAL_ONLY
-    request.strategy = request.strategy or strategy_for_task(request.task_type) or policy.strategy
+    _, profile_strategy = profile_policy(request.profile)
+    request.strategy = (
+        request.strategy
+        or strategy_for_task(request.task_type)
+        or (policy.strategy if request.policy_id else profile_strategy)
+    )
     models, scores = select_models(
         db,
         ModelRepository(db).all_active(),
@@ -143,11 +153,15 @@ def route(db: Session, request: RouteRequest) -> RouteResponse:
         intent,
         policy.weights,
         policy.required_capabilities,
+        readiness,
+        evaluation,
     )
     if not models:
         ROUTER_REQUESTS.labels(policy=policy.id, status="error").inc()
         raise RoutingError("No available model satisfies routing constraints")
-    models, scores, downgraded = optimize_for_budget(db, models, scores, policy)
+    models, scores, downgraded = optimize_for_budget(
+        db, models, scores, policy, correlation_id=correlation_id
+    )
     latency_ms = (perf_counter() - started) * 1000
     response = _response(
         request,
@@ -204,75 +218,3 @@ def route(db: Session, request: RouteRequest) -> RouteResponse:
     return response
 
 
-def route_from_config(request: RouteRequest) -> RouteResponse:
-    """Production config-backed routing for offline validation and bootstrap."""
-
-    started = perf_counter()
-    now = datetime.now(UTC)
-    models = []
-    for raw in provider_config().get("models", []):
-        models.append(
-            ModelRead(
-                id=raw["id"],
-                provider=raw["provider"],
-                display_name=raw["display_name"],
-                status=raw["status"],
-                tier=raw["tier"],
-                capabilities=raw["capabilities"],
-                pricing=raw["pricing"],
-                latency_ms=raw["latency_ms"],
-                quality=raw["quality"],
-                availability=raw["availability"],
-                context_window=raw["context_window"],
-                hallucination_rate=raw["hallucination_rate"],
-                domains=raw["domains"],
-                languages=raw["languages"],
-                region=raw.get("region", "GLOBAL"),
-                success_probability=raw.get("success_probability", 0.95),
-                created_at=now,
-                updated_at=now,
-            )
-        )
-    policy_id = request.policy_id or router_config()["defaults"]["policy_id"]
-    raw_policy = next(item for item in policy_config()["policies"] if item["id"] == policy_id)
-    budgets = router_config().get("budgets", {})
-    policy = PolicyRead(
-        id=raw_policy["id"],
-        name=raw_policy["name"],
-        task_type=raw_policy.get("task_type"),
-        strategy=raw_policy.get("strategy", "BALANCED"),
-        enabled=True,
-        execution_mode=raw_policy["execution_mode"],
-        top_k=raw_policy["top_k"],
-        weights=raw_policy["weights"],
-        required_capabilities=raw_policy.get("required_capabilities", []),
-        daily_budget_usd=budgets.get("daily_usd"),
-        monthly_budget_usd=budgets.get("monthly_usd"),
-        per_research_budget_usd=budgets.get("per_research_usd"),
-        settings={},
-        updated_at=now,
-    )
-    correlation_id = request.correlation_id or str(uuid4())
-    intent_result = classify_intent(IntentInput(request_id=correlation_id, query=request.query))
-    intent = request.intent or intent_result.primary_intent
-    request.language = request.language or intent_result.language.code
-    scored = [
-        score_model(model, request, intent, policy.weights)
-        for model in models
-        if model.status == "ACTIVE"
-        and model.context_window >= request.context_tokens
-        and set(policy.required_capabilities).issubset(model.capabilities)
-    ]
-    scored.sort(key=lambda item: (-item.total, item.estimated_cost_usd))
-    by_id = {model.id: model for model in models}
-    ordered = [by_id[score.model_id] for score in scored]
-    return _response(
-        request,
-        correlation_id=correlation_id,
-        intent=intent,
-        policy=policy,
-        models=ordered,
-        scores=scored,
-        budget_downgraded=False,
-        latency_ms=(perf_counter() - started) * 1000,
-    )

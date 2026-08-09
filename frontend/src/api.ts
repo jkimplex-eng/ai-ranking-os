@@ -2,7 +2,8 @@ export type TokenPair = { access_token: string; refresh_token: string };
 export type ModelSelection = { provider: string; model: string };
 export type WizardPayload = {
   brand: string;
-  models: ModelSelection[];
+  models?: ModelSelection[];
+  routing_profile: "FAST" | "BALANCED" | "HIGH_QUALITY" | "FREE" | "PRIVATE" | "ENTERPRISE";
   languages: string[];
   regions: string[];
   prompt_code: string;

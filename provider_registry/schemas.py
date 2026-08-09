@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ProviderAvailability(StrEnum):
+    READY = "READY"
+    NOT_CONFIGURED = "NOT_CONFIGURED"
     AVAILABLE = "AVAILABLE"
     DEGRADED = "DEGRADED"
     UNAVAILABLE = "UNAVAILABLE"

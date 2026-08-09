@@ -1,5 +1,8 @@
 # AI Ranking OS
 
+> Intelligent Routing consolidation details and validation evidence are maintained in
+> [EPIC_10_1_INTELLIGENT_ROUTING_CONSOLIDATION.md](EPIC_10_1_INTELLIGENT_ROUTING_CONSOLIDATION.md).
+
 ## Intelligent LLM Routing
 
 The platform supports provider-independent routing across local, free-tier and paid models.

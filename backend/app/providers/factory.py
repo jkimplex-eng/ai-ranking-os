@@ -8,15 +8,13 @@ class ProviderFactory:
         self.registry = provider_registry
 
     def create(self, provider: str) -> ConfiguredProvider | OllamaProvider:
-        if provider.casefold() == "ollama":
+        canonical = "ollama" if provider.casefold() == "local" else provider.casefold()
+        if canonical == "ollama":
             return OllamaProvider()
-        return ConfiguredProvider(self.registry.get(provider), provider_registry=self.registry)
+        return ConfiguredProvider(self.registry.get(canonical), provider_registry=self.registry)
 
-    def all(self) -> list[ConfiguredProvider]:
-        return [
-            ConfiguredProvider(definition, provider_registry=self.registry)
-            for definition in self.registry.all()
-        ]
+    def all(self) -> list[ConfiguredProvider | OllamaProvider]:
+        return [self.create(definition.name) for definition in self.registry.enabled()]
 
 
 factory = ProviderFactory()

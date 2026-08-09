@@ -3,8 +3,9 @@ from time import perf_counter
 
 from sqlalchemy.orm import Session
 
-from backend.app.providers.base import GenerateRequest
-from backend.app.providers.factory import ProviderFactory, factory
+from backend.app.llm_router.ports import LLMRouterPort
+from backend.app.llm_router.schemas import RouteRequest
+from backend.app.llm_router.service import router_service
 from model_benchmark.models import ModelBenchmarkResult, ModelBenchmarkRun
 from model_benchmark.repository import ModelBenchmarkRepository
 from model_benchmark.schemas import (
@@ -15,9 +16,9 @@ from model_benchmark.schemas import (
 
 
 class ModelBenchmarkService:
-    def __init__(self, db: Session, provider_factory: ProviderFactory = factory) -> None:
+    def __init__(self, db: Session, router: LLMRouterPort = router_service) -> None:
         self.db = db
-        self.providers = provider_factory
+        self.router = router
         self.repository = ModelBenchmarkRepository(db)
 
     def run(self, payload: ModelBenchmarkRequest) -> ModelBenchmarkRead:
@@ -28,18 +29,22 @@ class ModelBenchmarkService:
         self.db.add(run)
         self.db.flush()
         for selection in payload.models:
-            provider = self.providers.create(selection.provider)
             responses = []
             latencies = []
             costs = []
             for _ in range(payload.iterations):
                 started = perf_counter()
-                response = provider.generate(
-                    GenerateRequest(model=selection.model, prompt=payload.prompt)
+                response = self.router.generate(
+                    self.db,
+                    RouteRequest(
+                        query=payload.prompt,
+                        allowed_models=[selection.model],
+                    ),
                 )
                 latencies.append((perf_counter() - started) * 1000)
-                responses.append(response.content)
-                costs.append(response.usage.estimated_cost)
+                responses.append(str(response.get("content", "")))
+                usage = response.get("usage", {})
+                costs.append(float(usage.get("estimated_cost", usage.get("cost", 0))))
             stability = 1.0 - (len(set(responses)) - 1) / len(responses)
             coverage = len(
                 set(payload.prompt.casefold().split()) & set(responses[0].casefold().split())

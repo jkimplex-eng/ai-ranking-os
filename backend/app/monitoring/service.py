@@ -16,13 +16,13 @@ from backend.app.llm_router.models import (
     RouterCostLog,
     RouterHistory,
 )
-from backend.app.llm_router.providers import provider_health
 from backend.app.llm_router.registry import ensure_seeded
 from backend.app.monitoring.metrics import (
     COMPONENT_RECORDS,
     PIPELINE_STATUS,
     QUEUE_DEPTH,
 )
+from backend.app.providers.health import provider_health
 from backend.app.providers.models import ProviderUsageRecord
 from decision_center.models import Task, TaskStatus
 from entity_extraction.models import EntityExtractionRun

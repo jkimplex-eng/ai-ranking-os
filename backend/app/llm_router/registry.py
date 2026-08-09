@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -302,49 +302,54 @@ class PolicyRepository:
 
 
 def ensure_seeded(db: Session) -> None:
-    if not db.scalar(select(func.count()).select_from(RegisteredModel)):
-        repository = ModelRepository(db)
-        for raw in provider_config().get("models", []):
-            repository.create(
-                ModelCreate(
-                    id=raw["id"],
-                    provider=raw["provider"],
-                    display_name=raw["display_name"],
-                    status=raw["status"],
-                    tier=raw["tier"],
-                    capabilities=raw["capabilities"],
-                    pricing=raw["pricing"],
-                    latency_ms=raw["latency_ms"],
-                    quality=raw["quality"],
-                    availability=raw["availability"],
-                    context_window=raw["context_window"],
-                    hallucination_rate=raw["hallucination_rate"],
-                    domains=raw["domains"],
-                    languages=raw["languages"],
-                    region=raw.get("region", "GLOBAL"),
-                    success_probability=raw.get("success_probability", 0.95),
-                )
+    repository = ModelRepository(db)
+    existing_models = set(db.scalars(select(RegisteredModel.id)))
+    for raw in provider_config().get("models", []):
+        if raw.get("status", "ACTIVE") != "ACTIVE" or raw["id"] in existing_models:
+            continue
+        repository.create(
+            ModelCreate(
+                id=raw["id"],
+                provider=raw["provider"],
+                display_name=raw["display_name"],
+                status=raw["status"],
+                tier=raw["tier"],
+                capabilities=raw["capabilities"],
+                pricing=raw["pricing"],
+                latency_ms=raw["latency_ms"],
+                quality=raw["quality"],
+                availability=raw["availability"],
+                context_window=raw["context_window"],
+                hallucination_rate=raw["hallucination_rate"],
+                domains=raw["domains"],
+                languages=raw["languages"],
+                region=raw.get("region", "GLOBAL"),
+                success_probability=raw.get("success_probability", 0.95),
+                metadata=raw.get("metadata", {}),
             )
-    if not db.scalar(select(func.count()).select_from(RoutingPolicy)):
-        budgets = router_config().get("budgets", {})
-        now = _now()
-        for raw in policy_config().get("policies", []):
-            db.add(
-                RoutingPolicy(
-                    id=raw["id"],
-                    name=raw["name"],
-                    task_type=raw.get("task_type"),
-                    strategy=raw.get("strategy", "BALANCED"),
-                    enabled=True,
-                    execution_mode=raw["execution_mode"],
-                    top_k=raw["top_k"],
-                    weights=raw["weights"],
-                    required_capabilities=raw.get("required_capabilities", []),
-                    daily_budget_usd=budgets.get("daily_usd"),
-                    monthly_budget_usd=budgets.get("monthly_usd"),
-                    per_research_budget_usd=budgets.get("per_research_usd"),
-                    settings={},
-                    updated_at=now,
-                )
+        )
+    existing_policies = set(db.scalars(select(RoutingPolicy.id)))
+    budgets = router_config().get("budgets", {})
+    now = _now()
+    for raw in policy_config().get("policies", []):
+        if raw["id"] in existing_policies:
+            continue
+        db.add(
+            RoutingPolicy(
+                id=raw["id"],
+                name=raw["name"],
+                task_type=raw.get("task_type"),
+                strategy=raw.get("strategy", "BALANCED"),
+                enabled=True,
+                execution_mode=raw["execution_mode"],
+                top_k=raw["top_k"],
+                weights=raw["weights"],
+                required_capabilities=raw.get("required_capabilities", []),
+                daily_budget_usd=budgets.get("daily_usd"),
+                monthly_budget_usd=budgets.get("monthly_usd"),
+                per_research_budget_usd=budgets.get("per_research_usd"),
+                settings={},
+                updated_at=now,
             )
-        db.commit()
+        )
+    db.commit()
