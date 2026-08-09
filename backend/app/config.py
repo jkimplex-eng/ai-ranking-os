@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     )
 
     app_env: str = "development"
-    app_version: str = "1.0.0-rc2.1"
+    app_version: str = "1.0.0"
     database_url: str = Field(
         default="postgresql+psycopg://ai_ranking:ai_ranking@localhost:5432/ai_ranking"
     )
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     execution_retry_base_seconds: float = Field(default=0.1, ge=0)
     build_sha: str = "development"
-    release_channel: str = "rc2.1"
+    release_channel: str = "production"
     auth_jwt_secret: str = "development-only-change-me"
     auth_jwt_algorithm: str = "HS256"
     auth_jwt_issuer: str = "ai-ranking-os"
@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     database_pool_recycle_seconds: int = Field(default=1800, ge=30, le=86400)
     graceful_shutdown_seconds: int = Field(default=30, ge=1, le=300)
     security_enforce_auth: bool = False
+    admin_email: str | None = None
+    admin_password: str | None = None
+    admin_display_name: str = "AI Ranking OS Administrator"
 
 
 @lru_cache

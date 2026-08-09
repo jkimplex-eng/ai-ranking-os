@@ -16,4 +16,4 @@ def test_version_returns_configured_version() -> None:
     response = client.get("/version")
 
     assert response.status_code == 200
-    assert response.json() == {"version": "1.0.0-rc2.1"}
+    assert response.json() == {"version": "1.0.0"}

@@ -43,7 +43,7 @@ def client() -> Generator[TestClient]:
 def test_registry_crud_filtering_and_pagination(client: TestClient) -> None:
     seeded = client.get("/router/models", params={"page_size": 3})
     assert seeded.status_code == 200
-    assert seeded.json()["total"] == 10
+    assert seeded.json()["total"] == 12
     assert len(seeded.json()["items"]) == 3
 
     capable = client.get("/router/models", params={"capability": "research"})
@@ -130,7 +130,7 @@ def test_router_history_status_policy_update_and_openapi(client: TestClient) -> 
 
     policies = client.get("/router/policies")
     assert policies.status_code == 200
-    assert len(policies.json()) == 5
+    assert len(policies.json()) == 6
     updated = client.patch(
         "/router/policies/quality-first",
         json={"daily_budget_usd": 25, "top_k": 1},
@@ -140,7 +140,7 @@ def test_router_history_status_policy_update_and_openapi(client: TestClient) -> 
 
     status = client.get("/router/status")
     assert status.status_code == 200
-    assert status.json()["models"]["ACTIVE"] == 10
+    assert status.json()["models"]["ACTIVE"] == 12
     paths = client.get("/openapi.json").json()["paths"]
     for path in (
         "/router/route",

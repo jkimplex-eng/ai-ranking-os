@@ -1,0 +1,10 @@
+[Unit]
+Description=Run AI Ranking OS production health audit
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

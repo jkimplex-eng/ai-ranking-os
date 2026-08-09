@@ -12,4 +12,4 @@ thresholds:
 budgets:
   daily_usd: 100.0
   monthly_usd: 2000.0
-
+  per_research_usd: 10.0

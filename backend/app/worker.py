@@ -5,12 +5,12 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from backend.app.config import get_settings
+from backend.app.database import SessionLocal
+from backend.app.logging import configure_logging
+from research.queue import process_next
 
 settings = get_settings()
-logging.basicConfig(
-    level=settings.log_level.upper(),
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
+configure_logging(settings.log_level)
 logger = logging.getLogger(__name__)
 
 
@@ -21,12 +21,16 @@ async def run_worker() -> None:
     logger.info("AI Ranking OS worker starting")
     try:
         while True:
+            with SessionLocal() as db:
+                job = process_next(db)
+                if job is not None:
+                    logger.info("Research job processed id=%s state=%s", job.id, job.state)
             try:
                 await client.ping()
                 logger.info("Worker heartbeat: Redis is available")
             except RedisError:
                 logger.exception("Worker heartbeat failed")
-            await asyncio.sleep(30)
+            await asyncio.sleep(1 if job is not None else 5)
     finally:
         await client.aclose()
 

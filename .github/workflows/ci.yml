@@ -8,6 +8,26 @@ permissions:
   contents: read
 
 jobs:
+  frontend:
+    name: Frontend Quality and Playwright
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
   quality:
     name: Ruff and Pytest
     runs-on: ubuntu-latest
@@ -90,3 +110,46 @@ jobs:
           done
           docker logs ai-ranking-api
           exit 1
+
+  production-compose:
+    name: Production Compose Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create isolated CI environment
+        working-directory: deployment/production
+        run: |
+          cp .env.example .env
+          sed -i 's/replace-with-postgres-password/ci-postgres-password-123/g' .env
+          sed -i 's/replace-with-postgres-url-password/ci-postgres-password-123/g' .env
+          sed -i 's/replace-with-redis-password/ci-redis-password-123/g' .env
+          sed -i 's/replace-with-redis-url-password/ci-redis-password-123/g' .env
+          sed -i 's/replace-with-at-least-32-random-bytes/ci-jwt-secret-123456789012345678901234567890/g' .env
+          sed -i 's/admin@example.com/ci@example.com/g' .env
+          sed -i 's/replace-with-strong-password/ci-admin-password-123/g' .env
+          sed -i 's/replace-with-git-sha/${{ github.sha }}/g' .env
+          sed -i 's/replace-with-immutable-tag/ci/g' .env
+      - name: Validate and start production stack
+        working-directory: deployment/production
+        run: |
+          docker compose --env-file .env config --quiet
+          for attempt in 1 2 3; do
+            if docker compose --env-file .env build; then break; fi
+            if [ "$attempt" = 3 ]; then exit 1; fi
+            sleep $((attempt * 10))
+          done
+          docker compose --env-file .env up -d postgres redis
+          docker compose --env-file .env run --rm --no-deps backend alembic -c backend/alembic.ini upgrade head
+          docker compose --env-file .env up -d
+          docker compose --env-file .env ps
+      - name: Production API smoke
+        working-directory: deployment/production
+        env:
+          SMOKE_BASE_URL: http://127.0.0.1:8100
+          SMOKE_EMAIL: ci@example.com
+          SMOKE_PASSWORD: ci-admin-password-123
+        run: python scripts/smoke_test.py
+      - name: Container logs
+        if: failure()
+        working-directory: deployment/production
+        run: docker compose --env-file .env logs --no-color

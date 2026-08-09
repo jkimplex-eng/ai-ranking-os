@@ -13,12 +13,17 @@ class RegisteredModel(Base):
     id: Mapped[str] = mapped_column(String(200), primary_key=True)
     provider: Mapped[str] = mapped_column(String(100), index=True)
     display_name: Mapped[str] = mapped_column(String(300))
+    version: Mapped[str] = mapped_column(String(100), default="1.0")
+    release_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(30), index=True)
     tier: Mapped[str] = mapped_column(String(30), index=True)
     capabilities: Mapped[list[str]] = mapped_column(JSON)
     input_cost_per_million: Mapped[float] = mapped_column(Float)
     output_cost_per_million: Mapped[float] = mapped_column(Float)
     latency_ms: Mapped[float] = mapped_column(Float)
+    tokens_per_second: Mapped[float] = mapped_column(Float, default=0)
+    average_latency: Mapped[float] = mapped_column(Float, default=0)
+    benchmark_score: Mapped[float] = mapped_column(Float, default=0)
     quality: Mapped[float] = mapped_column(Float)
     availability: Mapped[float] = mapped_column(Float)
     context_window: Mapped[int] = mapped_column(Integer)
@@ -27,9 +32,24 @@ class RegisteredModel(Base):
     languages: Mapped[list[str]] = mapped_column(JSON)
     region: Mapped[str] = mapped_column(String(20), default="GLOBAL", index=True)
     success_probability: Mapped[float] = mapped_column(Float, default=0.95)
+    reasoning: Mapped[bool] = mapped_column(Boolean, default=False)
+    multimodal: Mapped[bool] = mapped_column(Boolean, default=False)
+    embeddings: Mapped[bool] = mapped_column(Boolean, default=False)
+    json_mode: Mapped[bool] = mapped_column(Boolean, default=False)
+    tool_calling: Mapped[bool] = mapped_column(Boolean, default=False)
     metadata_payload: Mapped[dict[str, Any]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ModelVersionRecord(Base):
+    __tablename__ = "router_model_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    model_id: Mapped[str] = mapped_column(String(200), index=True)
+    version: Mapped[str] = mapped_column(String(100), index=True)
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class RoutingPolicy(Base):
@@ -37,6 +57,8 @@ class RoutingPolicy(Base):
 
     id: Mapped[str] = mapped_column(String(100), primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
+    task_type: Mapped[str | None] = mapped_column(String(100), index=True)
+    strategy: Mapped[str] = mapped_column(String(30), default="BALANCED")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     execution_mode: Mapped[str] = mapped_column(String(30))
     top_k: Mapped[int] = mapped_column(Integer)
@@ -44,6 +66,7 @@ class RoutingPolicy(Base):
     required_capabilities: Mapped[list[str]] = mapped_column(JSON)
     daily_budget_usd: Mapped[float | None] = mapped_column(Float)
     monthly_budget_usd: Mapped[float | None] = mapped_column(Float)
+    per_research_budget_usd: Mapped[float | None] = mapped_column(Float)
     settings: Mapped[dict[str, Any]] = mapped_column(JSON)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
@@ -79,6 +102,19 @@ class RouterCostLog(Base):
     cost_usd: Mapped[float] = mapped_column(Float)
     cost_type: Mapped[str] = mapped_column(String(30))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class BudgetReservation(Base):
+    __tablename__ = "router_budget_reservations"
+
+    id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    correlation_id: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    policy_id: Mapped[str] = mapped_column(String(100), index=True)
+    amount_usd: Mapped[float] = mapped_column(Float)
+    state: Mapped[str] = mapped_column(String(30), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class CircuitBreakerRecord(Base):

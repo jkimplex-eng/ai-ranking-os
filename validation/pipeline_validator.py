@@ -9,7 +9,7 @@ from prometheus_client import generate_latest
 
 from ai_visibility.pipeline import run_pipeline as visibility_pipeline
 from ai_visibility.schemas import VisibilityInput
-from backend.app.llm_router.pipeline import route_from_config
+from backend.app.llm_router.offline import route_offline
 from backend.app.llm_router.schemas import RouteRequest
 from backend.app.main import app
 from backend.app.providers.factory import factory
@@ -76,7 +76,7 @@ def execute_pipeline(
     stages["intent"] = intent
     routed = measure(
         "router",
-        lambda: route_from_config(
+        lambda: route_offline(
             RouteRequest(
                 query=query,
                 correlation_id=correlation,
@@ -235,7 +235,9 @@ def validate_pipeline(query: str = "Compare OpenAI and Qwen with sources") -> di
         "perplexity",
         "mistral",
         "grok",
-        "local",
+        "ollama",
+        "groq",
+        "github",
         "yandex",
         "gigachat",
     } and {
