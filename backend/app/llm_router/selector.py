@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 
 from backend.app.llm_router.circuit_breaker import allow_request
+from backend.app.llm_router.mode import RoutingMode, hybrid_rank, hybrid_tier
 from backend.app.llm_router.schemas import (
     ModelRead,
     RouteRequest,
@@ -44,6 +45,24 @@ def select_models(
         for model in candidates
     ]
     by_id = {model.id: model for model in candidates}
+    allowed: dict[str, int | None] = {}
+    if (
+        request.routing_mode == RoutingMode.HYBRID
+        and request.hybrid_order
+        and request.strategy in {RouterStrategy.BALANCED, RouterStrategy.CUSTOM}
+    ):
+        allowed = {
+            model.id: hybrid_rank(
+                request.hybrid_order,
+                hybrid_tier(
+                    model.tier,
+                    model.pricing.input_per_million,
+                    model.pricing.output_per_million,
+                ),
+            )
+            for model in candidates
+        }
+        scores = [score for score in scores if allowed[score.model_id] is not None]
     if request.strategy == RouterStrategy.FASTEST:
         scores.sort(key=lambda item: (by_id[item.model_id].latency_ms, -item.total))
     elif request.strategy in {RouterStrategy.CHEAPEST, RouterStrategy.FREE_ONLY}:
@@ -52,4 +71,6 @@ def select_models(
         scores.sort(key=lambda item: (-by_id[item.model_id].quality, -item.total))
     else:
         scores.sort(key=lambda item: (-item.total, item.estimated_cost_usd, item.model_id))
+    if allowed:
+        scores.sort(key=lambda item: (allowed[item.model_id], -item.total))
     return [by_id[score.model_id] for score in scores], scores

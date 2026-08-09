@@ -18,7 +18,11 @@ from backend.app.llm_router.metrics import (
     ROUTER_SCORE,
     ROUTER_SELECTED,
 )
-from backend.app.llm_router.mode import RoutingMode, configured_mode
+from backend.app.llm_router.mode import (
+    RoutingMode,
+    configured_hybrid_order,
+    configured_mode,
+)
 from backend.app.llm_router.models import RouterCostLog, RouterHistory
 from backend.app.llm_router.parallel import build_parallel_plan
 from backend.app.llm_router.policy import resolve_policy, strategy_for_task
@@ -108,6 +112,7 @@ def _response(
         router_latency_ms=round(latency_ms, 3),
         strategy=request.strategy or policy.strategy,
         routing_mode=request.routing_mode or configured_mode(),
+        hybrid_order=request.hybrid_order or configured_hybrid_order(),
     )
 
 
@@ -127,6 +132,7 @@ def route(db: Session, request: RouteRequest) -> RouteResponse:
         ).language.code
     policy = resolve_policy(db, request)
     request.routing_mode = request.routing_mode or configured_mode()
+    request.hybrid_order = request.hybrid_order or configured_hybrid_order()
     if request.routing_mode == RoutingMode.LOCAL:
         request.strategy = RouterStrategy.LOCAL_ONLY
     request.strategy = request.strategy or strategy_for_task(request.task_type) or policy.strategy

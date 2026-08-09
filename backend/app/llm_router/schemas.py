@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from backend.app.llm_router.mode import RoutingMode
+from backend.app.llm_router.mode import HybridOrder, RoutingMode
 from query_executor.schemas import ExecutionMode, ExecutionPlan
 from query_intent.schemas import IntentType
 
@@ -174,6 +174,7 @@ class RouteRequest(BaseModel):
     strategy: RouterStrategy | None = None
     task_type: str | None = Field(default=None, max_length=100)
     routing_mode: RoutingMode | None = None
+    hybrid_order: HybridOrder | None = None
     context_tokens: int = Field(default=0, ge=0)
     max_output_tokens: int = Field(default=512, ge=1, le=100_000)
     domain: str = Field(default="general", max_length=100)
@@ -204,6 +205,7 @@ class RouteResponse(BaseModel):
     router_latency_ms: float
     strategy: RouterStrategy = RouterStrategy.BALANCED
     routing_mode: RoutingMode = RoutingMode.HYBRID
+    hybrid_order: HybridOrder = HybridOrder.LOCAL_FREE_PAID
     version: str = "1.0"
 
 
