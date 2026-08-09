@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
+from backend.app.llm_router.automatic_failover import order_failover_models
 from backend.app.llm_router.config_loader import policy_config, provider_config, router_config
 from backend.app.llm_router.cost_optimizer import optimize_for_budget
 from backend.app.llm_router.ensemble import build_ensemble_plan
@@ -83,6 +84,10 @@ def _response(
     selected_models = models[:selected_count]
     selected_scores = scores[:selected_count]
     mode = policy.execution_mode
+    if mode == ExecutionMode.FALLBACK:
+        selected_models, selected_scores = order_failover_models(
+            selected_models, selected_scores
+        )
     if mode in {ExecutionMode.ENSEMBLE, ExecutionMode.CONSENSUS} and selected_count < 2:
         mode = ExecutionMode.SINGLE
     fallback_count = max(0, selected_count - 1) if mode == ExecutionMode.FALLBACK else 0
