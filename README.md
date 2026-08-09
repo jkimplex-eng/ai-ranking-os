@@ -1,5 +1,12 @@
 # AI Ranking OS
 
+## Intelligent LLM Routing
+
+The platform supports provider-independent routing across local, free-tier and paid models.
+Configure `AI_ROUTING_MODE` (`LOCAL`, `HYBRID`, `CLOUD`) and `AI_HYBRID_ORDER` in the environment.
+See [EPIC_10_INTELLIGENT_LLM_ROUTING.md](EPIC_10_INTELLIGENT_LLM_ROUTING.md) and
+[Local AI Mode](docs/LOCAL_AI_MODE.md) for architecture and operations.
+
 Production deployment assets are in `deployment/production`. The first isolated installation runs
 on the audited VPS behind loopback port `8100`; see [First Deploy](docs/FIRST_DEPLOY.md),
 [Deployment](docs/Deployment.md), and [Operations](docs/Operations.md). The existing
