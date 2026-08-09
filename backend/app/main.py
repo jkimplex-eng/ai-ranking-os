@@ -37,6 +37,7 @@ from influence.router import router as influence_router
 from insights.router import router as insights_router
 from observability.router import router as observability_router
 from product.router import router as product_router
+from provider_registry.router import router as provider_registry_router
 from query_executor.router import router as query_executor_router
 from query_intent.router import router as query_intent_router
 from rate_limit.router import router as rate_limit_router
@@ -93,6 +94,7 @@ app.include_router(recommendation_templates_router)
 app.include_router(query_executor_router)
 app.include_router(llm_router)
 app.include_router(providers_router)
+app.include_router(provider_registry_router)
 app.include_router(monitoring_router)
 app.include_router(trend_router)
 app.include_router(alert_router)
