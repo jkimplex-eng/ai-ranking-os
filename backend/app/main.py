@@ -35,6 +35,7 @@ from hardening.router import router as hardening_router
 from hardening.validation import validate_startup
 from influence.router import router as influence_router
 from insights.router import router as insights_router
+from model_benchmark.router import router as model_benchmark_router
 from observability.router import router as observability_router
 from product.router import router as product_router
 from provider_registry.router import router as provider_registry_router
@@ -95,6 +96,7 @@ app.include_router(query_executor_router)
 app.include_router(llm_router)
 app.include_router(providers_router)
 app.include_router(provider_registry_router)
+app.include_router(model_benchmark_router)
 app.include_router(monitoring_router)
 app.include_router(trend_router)
 app.include_router(alert_router)
