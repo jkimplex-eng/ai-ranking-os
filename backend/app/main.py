@@ -1,4 +1,5 @@
 import logging
+import os
 import shutil
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -14,7 +15,7 @@ from audit.router import router as audit_router
 from authentication.middleware import ProductionAuthenticationMiddleware
 from authentication.router import router as authentication_router
 from backend.app.config import get_settings
-from backend.app.database import engine
+from backend.app.database import SessionLocal, engine
 from backend.app.llm_router.api import router as llm_router
 from backend.app.logging import bind_request, configure_logging, user_id_var
 from backend.app.monitoring.metrics import HTTP_LATENCY, HTTP_REQUESTS
@@ -67,6 +68,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     errors = validate_startup(settings)
     if errors:
         raise RuntimeError("Startup validation failed: " + "; ".join(errors))
+    if os.getenv("PROVIDER_CATALOG_URL"):
+        from provider_discovery.service import ProviderDiscoveryService
+
+        with SessionLocal() as db:
+            ProviderDiscoveryService(db).sync()
     yield
     engine.dispose()
 

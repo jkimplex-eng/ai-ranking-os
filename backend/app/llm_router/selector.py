@@ -9,6 +9,7 @@ from backend.app.llm_router.schemas import (
     ScoreBreakdown,
 )
 from backend.app.llm_router.scoring import score_model
+from model_evaluation.service import empirical_model_scores
 from query_intent.schemas import IntentType
 
 
@@ -40,6 +41,20 @@ def select_models(
             if model.pricing.input_per_million == 0
             and model.pricing.output_per_million == 0
         ]
+    empirical = empirical_model_scores(db, request.task_type)
+    candidates = [
+        model.model_copy(
+            update={
+                "quality": round(
+                    (model.quality + empirical[f"{model.provider}/{model.id}"]) / 2,
+                    6,
+                )
+            }
+        )
+        if f"{model.provider}/{model.id}" in empirical
+        else model
+        for model in candidates
+    ]
     scores = [
         score_model(model, request, intent, weights)
         for model in candidates

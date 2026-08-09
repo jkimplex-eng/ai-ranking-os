@@ -23,6 +23,21 @@ EVALUATIONS = {
 }
 
 
+def empirical_model_scores(db: Session, task: str | None) -> dict[str, float]:
+    if not task or task not in EVALUATIONS:
+        return {}
+    rows = db.execute(
+        select(
+            ModelEvaluationScore.provider,
+            ModelEvaluationScore.model,
+            func.avg(ModelEvaluationScore.score),
+        )
+        .where(ModelEvaluationScore.task == task)
+        .group_by(ModelEvaluationScore.provider, ModelEvaluationScore.model)
+    )
+    return {f"{provider}/{model}": float(score) / 100 for provider, model, score in rows}
+
+
 class ModelEvaluationService:
     def __init__(self, db: Session, provider_factory: ProviderFactory = factory) -> None:
         self.db = db
