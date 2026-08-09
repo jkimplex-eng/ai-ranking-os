@@ -140,6 +140,7 @@ class PolicyRead(BaseModel):
     required_capabilities: list[str]
     daily_budget_usd: float | None
     monthly_budget_usd: float | None
+    per_research_budget_usd: float | None = None
     settings: dict[str, Any]
     updated_at: datetime
 
@@ -154,6 +155,7 @@ class PolicyUpdate(BaseModel):
     required_capabilities: list[str] | None = None
     daily_budget_usd: float | None = Field(default=None, gt=0)
     monthly_budget_usd: float | None = Field(default=None, gt=0)
+    per_research_budget_usd: float | None = Field(default=None, gt=0)
     settings: dict[str, Any] | None = None
 
     @model_validator(mode="after")
@@ -235,3 +237,22 @@ class RouterStatus(BaseModel):
     circuit_breakers: dict[str, int]
     costs: dict[str, float]
     version: str = "1.0"
+
+
+class CostEstimate(BaseModel):
+    selected_models: list[str]
+    estimated_cost_usd: float
+    estimated_time_ms: float
+    estimated_input_tokens: int
+    estimated_output_tokens: int
+    within_budget: bool
+    currency: str = "USD"
+
+
+class ActualCostSummary(BaseModel):
+    execution_id: str
+    actual_cost: float
+    actual_tokens: int
+    actual_time_ms: float
+    providers: list[str]
+    currency: str = "USD"

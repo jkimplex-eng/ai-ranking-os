@@ -37,7 +37,11 @@ def optimize_for_budget(
         policy.monthly_budget_usd is None
         or monthly + predicted <= policy.monthly_budget_usd
     )
-    if within_daily and within_monthly:
+    within_research = (
+        policy.per_research_budget_usd is None
+        or predicted <= policy.per_research_budget_usd
+    )
+    if within_daily and within_monthly and within_research:
         return models, scores, False
     paired = sorted(
         zip(models, scores, strict=True),

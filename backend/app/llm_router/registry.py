@@ -342,6 +342,7 @@ def ensure_seeded(db: Session) -> None:
                     required_capabilities=raw.get("required_capabilities", []),
                     daily_budget_usd=budgets.get("daily_usd"),
                     monthly_budget_usd=budgets.get("monthly_usd"),
+                    per_research_budget_usd=budgets.get("per_research_usd"),
                     settings={},
                     updated_at=now,
                 )

@@ -22,6 +22,8 @@ from backend.app.llm_router.registry import (
     ensure_seeded,
 )
 from backend.app.llm_router.schemas import (
+    ActualCostSummary,
+    CostEstimate,
     HistoryList,
     HistoryRead,
     ModelCreate,
@@ -35,6 +37,7 @@ from backend.app.llm_router.schemas import (
     RouteResponse,
     RouterStatus,
 )
+from backend.app.providers.models import ProviderUsageRecord
 from query_executor.schemas import ExecutionPlan
 
 router = APIRouter(prefix="/router", tags=["llm-router"])
@@ -66,6 +69,49 @@ def build_plan(payload: RouteRequest, db: DbSession) -> ExecutionPlan:
     except (RegistryNotFoundError, RoutingError, ValueError) as error:
         ROUTER_ERRORS.labels(error_type=type(error).__name__).inc()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+
+
+@router.post("/estimate", response_model=CostEstimate)
+def estimate_route(payload: RouteRequest, db: DbSession) -> CostEstimate:
+    try:
+        result = route(db, payload)
+    except (RegistryNotFoundError, RoutingError, ValueError) as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+    models = [ModelRepository(db).get(model_id) for model_id in result.selected_models]
+    policy = PolicyRepository(db).get(result.policy_id)
+    return CostEstimate(
+        selected_models=result.selected_models,
+        estimated_cost_usd=result.estimated_cost_usd,
+        estimated_time_ms=max((model.latency_ms for model in models), default=0),
+        estimated_input_tokens=payload.context_tokens,
+        estimated_output_tokens=payload.max_output_tokens,
+        within_budget=(
+            policy.per_research_budget_usd is None
+            or result.estimated_cost_usd <= policy.per_research_budget_usd
+        ),
+    )
+
+
+@router.get("/costs/{execution_id}", response_model=ActualCostSummary)
+def actual_costs(execution_id: str, db: DbSession) -> ActualCostSummary:
+    records = list(
+        db.scalars(
+            select(ProviderUsageRecord).where(ProviderUsageRecord.execution_id == execution_id)
+        )
+    )
+    if not records:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Execution usage not found",
+        )
+    return ActualCostSummary(
+        execution_id=execution_id,
+        actual_cost=round(sum(record.estimated_cost for record in records), 8),
+        actual_tokens=sum(record.total_tokens for record in records),
+        actual_time_ms=0,
+        providers=sorted({record.provider for record in records}),
+        currency=records[0].currency,
+    )
 
 
 @router.get("/models", response_model=ModelList)

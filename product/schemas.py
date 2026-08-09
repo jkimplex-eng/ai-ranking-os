@@ -94,6 +94,9 @@ class WizardReview(BaseModel):
     languages: list[str]
     regions: list[str]
     pipeline: list[str]
+    estimated_cost_usd: float = 0
+    estimated_time_ms: float = 0
+    selected_models: list[str] = Field(default_factory=list)
 
 
 class WizardRunResult(BaseModel):

@@ -123,6 +123,8 @@ class ProductPipeline:
             payload.prompt_code or template.prompt_code, payload.languages[0], values
         )
         selected = []
+        estimated_cost = 0.0
+        estimated_time = 0.0
         for item in payload.models:
             try:
                 provider = self.provider_factory.create(item.provider)
@@ -136,6 +138,10 @@ class ProductPipeline:
             if not provider.health()["available"]:
                 raise WizardValidationError(f"Provider {item.provider} is unavailable")
             selected.append(f"{item.provider}/{item.model}")
+            prompt_tokens = provider.estimate_tokens(prompt)
+            estimate = provider.estimate_cost(item.model, prompt_tokens, 512)
+            estimated_cost += estimate.estimated_cost
+            estimated_time = max(estimated_time, float(getattr(model, "latency_ms", 500)))
         return WizardReview(
             valid=True,
             title=f"{template.title}: {payload.brand}",
@@ -144,6 +150,9 @@ class ProductPipeline:
             languages=payload.languages,
             regions=payload.regions,
             pipeline=template.pipeline,
+            estimated_cost_usd=round(estimated_cost, 8),
+            estimated_time_ms=estimated_time,
+            selected_models=selected,
         )
 
     def run(self, payload: WizardRequest) -> Research:

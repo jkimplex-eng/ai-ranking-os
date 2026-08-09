@@ -66,6 +66,7 @@ class RoutingPolicy(Base):
     required_capabilities: Mapped[list[str]] = mapped_column(JSON)
     daily_budget_usd: Mapped[float | None] = mapped_column(Float)
     monthly_budget_usd: Mapped[float | None] = mapped_column(Float)
+    per_research_budget_usd: Mapped[float | None] = mapped_column(Float)
     settings: Mapped[dict[str, Any]] = mapped_column(JSON)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
