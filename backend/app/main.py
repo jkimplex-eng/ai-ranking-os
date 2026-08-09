@@ -41,6 +41,7 @@ from model_evaluation.router import router as model_evaluation_router
 from observability.router import router as observability_router
 from product.router import router as product_router
 from provider_discovery.router import router as provider_discovery_router
+from provider_recommendation.router import router as provider_recommendation_router
 from provider_registry.router import router as provider_registry_router
 from query_executor.router import router as query_executor_router
 from query_intent.router import router as query_intent_router
@@ -102,6 +103,7 @@ app.include_router(model_benchmark_router)
 app.include_router(model_evaluation_router)
 app.include_router(cost_analytics_router)
 app.include_router(provider_discovery_router)
+app.include_router(provider_recommendation_router)
 app.include_router(provider_registry_router)
 app.include_router(monitoring_router)
 app.include_router(trend_router)

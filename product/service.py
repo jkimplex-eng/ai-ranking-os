@@ -31,6 +31,8 @@ from insights.schemas import InsightRequest
 from insights.service import InsightService
 from product.repository import ProductNotFoundError, PromptRepository, ResearchTemplateRepository
 from product.schemas import WizardRequest, WizardReview
+from provider_recommendation.research_adapter import SqlAlchemyResearchUsageSource
+from provider_recommendation.service import SmartProviderRecommendationService
 from recommendation.engine import RecommendationEngine
 from recommendation.research_adapter import SqlAlchemyResearchScoreAdapter
 from research.models import ExtractedEntity, Research, ResearchTask, Response
@@ -240,6 +242,12 @@ class ProductPipeline:
         artifacts["insights"] = insights.model_dump(mode="json")
         trend = build_trend_engine(self.db).build(research.entity_id)
         artifacts["trend"] = trend.model_dump(mode="json")
+        provider_advice = SmartProviderRecommendationService(
+            self.db, SqlAlchemyResearchUsageSource(self.db)
+        ).generate(research.id)
+        artifacts["provider_recommendations"] = [
+            item.model_dump(mode="json") for item in provider_advice
+        ]
         research.metadata_payload = {**research.metadata_payload, "product_artifacts": artifacts}
         self.db.commit()
 
