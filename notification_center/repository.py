@@ -41,3 +41,4 @@ class NotificationRepository:
                 )
             )
         )
+from __future__ import annotations

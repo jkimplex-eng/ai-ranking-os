@@ -64,3 +64,4 @@ class ProviderRepository:
                 "metadata": record.metadata_payload,
             }
         )
+from __future__ import annotations

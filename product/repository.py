@@ -200,3 +200,4 @@ class ResearchTemplateRepository:
                 active=False,
             )
         )
+from __future__ import annotations

@@ -76,3 +76,4 @@ class NotificationService:
             raise NotificationNotFoundError("Notification not found")
         item.is_read = True
         return self._read(self.repository.save(item))
+from __future__ import annotations

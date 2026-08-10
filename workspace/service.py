@@ -434,3 +434,4 @@ class ProjectService:
 
 
 __all__ = ["ProjectNotFoundError", "ProjectService", "WorkspaceService"]
+from __future__ import annotations

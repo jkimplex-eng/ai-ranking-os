@@ -49,3 +49,4 @@ class ProviderRegistryService:
             capabilities={key: sorted(value) for key, value in sorted(matrix.items())},
             providers=len(providers),
         )
+from __future__ import annotations

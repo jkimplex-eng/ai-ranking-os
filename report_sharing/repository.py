@@ -44,3 +44,4 @@ class ShareRepository:
     def add_view(self, view: ReportShareView) -> None:
         self.db.add(view)
         self.db.commit()
+from __future__ import annotations

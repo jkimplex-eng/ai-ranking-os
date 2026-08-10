@@ -167,3 +167,4 @@ class ShareService:
             user_agent=user_agent,
         )
         return SharedReportRead(report=report)
+from __future__ import annotations

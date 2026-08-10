@@ -247,3 +247,4 @@ class BulkResearchRepository:
                 changed = True
         if changed:
             self.db.commit()
+from __future__ import annotations
