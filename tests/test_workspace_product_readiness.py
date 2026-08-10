@@ -332,3 +332,31 @@ def test_report_center_search_tags_archive_and_json_export(client: TestClient) -
     ).status_code == 200
     assert client.get("/reports").json()["total"] == 0
     assert client.get("/reports", params={"archived": True}).json()["total"] == 1
+
+
+def test_report_versioning_is_immutable_deduplicated_and_comparable(
+    client: TestClient,
+) -> None:
+    project_id = client.post(
+        "/workspace/projects", json={"name": "Versioned reports"}
+    ).json()["id"]
+    research = client.post(
+        "/research", json={"project_id": project_id, "title": "Weekly audit"}
+    ).json()
+    url = f"/reports/{research['id']}/versions"
+    first = client.post(url)
+    assert first.status_code == 200
+    assert first.json()["version"] == 1
+    assert client.post(url).json()["version"] == 1
+
+    assert client.patch(
+        f"/research/{research['id']}", json={"title": "Monthly audit"}
+    ).status_code == 200
+    second = client.post(url)
+    assert second.json()["version"] == 2
+    assert [item["version"] for item in client.get(url).json()] == [2, 1]
+    comparison = client.get(
+        f"{url}/compare", params={"left": 1, "right": 2}
+    )
+    assert comparison.status_code == 200
+    assert comparison.json()["score_deltas"]["visibility_score"] is None

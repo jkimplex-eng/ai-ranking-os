@@ -1,7 +1,7 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from report_center.models import ReportCatalogEntry
+from report_center.models import ReportCatalogEntry, ReportVersion
 
 
 class ReportCatalogRepository:
@@ -36,3 +36,51 @@ class ReportCatalogRepository:
         self.db.commit()
         self.db.refresh(item)
         return item
+
+    def versions(self, research_id: int) -> list[ReportVersion]:
+        return list(
+            self.db.scalars(
+                select(ReportVersion)
+                .where(ReportVersion.research_id == research_id)
+                .order_by(ReportVersion.version.desc())
+            )
+        )
+
+    def version(self, research_id: int, version: int) -> ReportVersion | None:
+        return self.db.scalar(
+            select(ReportVersion).where(
+                ReportVersion.research_id == research_id,
+                ReportVersion.version == version,
+            )
+        )
+
+    def add_version(
+        self, entry: ReportCatalogEntry, checksum: str, payload: dict
+    ) -> ReportVersion:
+        existing = self.db.scalar(
+            select(ReportVersion).where(
+                ReportVersion.research_id == entry.research_id,
+                ReportVersion.checksum == checksum,
+            )
+        )
+        if existing is not None:
+            return existing
+        latest = int(
+            self.db.scalar(
+                select(func.max(ReportVersion.version)).where(
+                    ReportVersion.research_id == entry.research_id
+                )
+            )
+            or 0
+        )
+        version = ReportVersion(
+            research_id=entry.research_id,
+            catalog_entry_id=entry.id,
+            version=latest + 1,
+            checksum=checksum,
+            payload=payload,
+        )
+        self.db.add(version)
+        self.db.commit()
+        self.db.refresh(version)
+        return version

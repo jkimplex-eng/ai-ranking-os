@@ -6,6 +6,8 @@ from report_center.schemas import (
     ReportCatalogPage,
     ReportCatalogRead,
     ReportCatalogUpdate,
+    ReportVersionComparison,
+    ReportVersionRead,
 )
 from report_center.service import ReportNotFoundError
 
@@ -53,5 +55,40 @@ def export_report(research_id: int, service: ReportCenterDependency) -> JSONResp
                 "Content-Disposition": f'attachment; filename="report-{research_id}.json"'
             },
         )
+    except ReportNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/{research_id}/versions", response_model=ReportVersionRead)
+def create_report_version(
+    research_id: int, service: ReportCenterDependency
+) -> ReportVersionRead:
+    try:
+        return service.snapshot(research_id)
+    except ReportNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.get("/{research_id}/versions", response_model=list[ReportVersionRead])
+def list_report_versions(
+    research_id: int, service: ReportCenterDependency
+) -> list[ReportVersionRead]:
+    try:
+        return service.versions(research_id)
+    except ReportNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.get(
+    "/{research_id}/versions/compare", response_model=ReportVersionComparison
+)
+def compare_report_versions(
+    research_id: int,
+    service: ReportCenterDependency,
+    left: int = Query(ge=1),
+    right: int = Query(ge=1),
+) -> ReportVersionComparison:
+    try:
+        return service.compare_versions(research_id, left, right)
     except ReportNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
