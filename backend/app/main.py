@@ -56,6 +56,7 @@ from research.router import router as research_router
 from scheduler.router import router as scheduler_router
 from segmentation.router import router as segmentation_router
 from trend.router import router as trend_router
+from workspace.router import router as workspace_router
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -86,6 +87,7 @@ app = FastAPI(
 app.add_middleware(ProductionAuthenticationMiddleware, settings=settings)
 app.include_router(decision_center_router)
 app.include_router(authentication_router)
+app.include_router(workspace_router)
 app.include_router(rbac_router)
 app.include_router(api_keys_router)
 app.include_router(audit_router)

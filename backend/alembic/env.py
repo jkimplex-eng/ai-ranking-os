@@ -39,6 +39,7 @@ from research import models as research_models  # noqa: F401
 from scheduler import models as scheduler_models  # noqa: F401
 from segmentation import models as segmentation_models  # noqa: F401
 from trend import models as trend_models  # noqa: F401
+from workspace import models as workspace_models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)
