@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, select
@@ -75,4 +77,3 @@ class SmartProviderRecommendationService:
             .order_by(ProviderRecommendation.id)
         )
         return [ProviderRecommendationRead.model_validate(item) for item in records]
-from __future__ import annotations

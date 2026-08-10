@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from urllib.parse import urlsplit
 
 from sqlalchemy.orm import Session
@@ -434,4 +436,3 @@ class ProjectService:
 
 
 __all__ = ["ProjectNotFoundError", "ProjectService", "WorkspaceService"]
-from __future__ import annotations

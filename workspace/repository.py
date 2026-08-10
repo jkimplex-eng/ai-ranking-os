@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -247,4 +249,3 @@ class BulkResearchRepository:
                 changed = True
         if changed:
             self.db.commit()
-from __future__ import annotations

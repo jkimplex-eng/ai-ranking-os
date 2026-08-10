@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import secrets
 from datetime import UTC, datetime
@@ -167,4 +169,3 @@ class ShareService:
             user_agent=user_agent,
         )
         return SharedReportRead(report=report)
-from __future__ import annotations

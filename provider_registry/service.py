@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sqlalchemy.orm import Session
 
 from provider_registry.models import ProviderRecord
@@ -11,7 +13,7 @@ class ProviderRegistryService:
         self.repository = repository
 
     @classmethod
-    def from_session(cls, db: Session) -> "ProviderRegistryService":
+    def from_session(cls, db: Session) -> ProviderRegistryService:
         return cls(ProviderRepository(db))
 
     def ensure_seeded(self) -> None:
@@ -49,4 +51,3 @@ class ProviderRegistryService:
             capabilities={key: sorted(value) for key, value in sorted(matrix.items())},
             providers=len(providers),
         )
-from __future__ import annotations

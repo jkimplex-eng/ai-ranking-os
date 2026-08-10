@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -200,4 +202,3 @@ class ResearchTemplateRepository:
                 active=False,
             )
         )
-from __future__ import annotations

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import json
 
@@ -144,4 +146,3 @@ class ReportCenterService:
             added_recommendations=sorted(right_recommendations - left_recommendations),
             removed_recommendations=sorted(left_recommendations - right_recommendations),
         )
-from __future__ import annotations

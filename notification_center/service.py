@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from notification_center.models import Notification, NotificationDelivery, NotificationEventType
 from notification_center.repository import NotificationRepository
 from notification_center.schemas import DeliveryRead, NotificationRead
@@ -76,4 +78,3 @@ class NotificationService:
             raise NotificationNotFoundError("Notification not found")
         item.is_read = True
         return self._read(self.repository.save(item))
-from __future__ import annotations
