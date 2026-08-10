@@ -45,7 +45,7 @@ const metricMeta = [
   ["Confidence", "confidence_score"],
 ] as const;
 
-type Screen = "home" | "wizard" | "report" | "providers" | "analytics" | "notifications" | "organization";
+type Screen = "home" | "wizard" | "report" | "providers" | "analytics" | "notifications" | "organization" | "settings";
 type ReportShape = {
   executive_summary?: string;
   score?: Record<string, number | string>;
@@ -166,6 +166,7 @@ function Shell({
   onAnalytics,
   onNotifications,
   onOrganization,
+  onSettings,
   active,
   onLogout,
 }: {
@@ -176,6 +177,7 @@ function Shell({
   onAnalytics: () => void;
   onNotifications: () => void;
   onOrganization: () => void;
+  onSettings: () => void;
   active: Screen;
   onLogout: () => void;
 }) {
@@ -210,6 +212,7 @@ function Shell({
                 (label === "Product Analytics" && active === "analytics")
                 || (label === "Notifications" && active === "notifications")
                 || (label === "Organization" && active === "organization")
+                || (label === "Settings" && active === "settings")
                   ? "active"
                   : ""
               }
@@ -224,6 +227,8 @@ function Shell({
                         ? onNotifications
                         : label === "Organization"
                           ? onOrganization
+                          : label === "Settings"
+                            ? onSettings
                       : undefined
               }
             >
@@ -266,6 +271,28 @@ function Shell({
       </div>
     </div>
   );
+}
+
+function SettingsScreen({ user }: { user: string }) {
+  const [tab, setTab] = useState("profile");
+  const [settings, setSettings] = useState<Record<string, unknown>>({ language: "ru", region: "GLOBAL", theme: "dark", notifications: { email: true, in_app: true } });
+  const [providers, setProviders] = useState<ProviderItem[]>([]);
+  const [keys, setKeys] = useState<Array<{ id: number; name: string; prefix: string }>>([]);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { Promise.all([api.workspace(), api.listProviders(), api.apiKeys()]).then(([workspace, providerItems, apiKeyItems]) => { setSettings((current) => ({ ...current, ...workspace.settings })); setProviders(providerItems); setKeys(apiKeyItems); }).catch(() => undefined); }, []);
+  const tabs = [["profile", "Профиль"], ["security", "Безопасность"], ["api", "API Keys"], ["providers", "LLM Providers"], ["preferences", "Язык и регион"], ["notifications", "Уведомления"], ["theme", "Тема"], ["organization", "Организация"]];
+  const set = (key: string, value: unknown) => { setSaved(false); setSettings((current) => ({ ...current, [key]: value })); };
+  return <main className="analytics-page settings-page"><header className="analytics-hero"><div><span className="eyebrow">PREFERENCES</span><h1>Настройки</h1><p>Единый центр персональных и системных настроек.</p></div><button className="primary-action" onClick={() => api.updateWorkspace(settings).then(() => setSaved(true))}>{saved ? "Сохранено ✓" : "Сохранить"}</button></header>
+    <div className="settings-layout"><nav className="settings-nav">{tabs.map(([key, label]) => <button className={tab === key ? "active" : ""} onClick={() => setTab(key)} key={key}>{label}</button>)}</nav><section className="analytics-card settings-panel">
+      {tab === "profile" && <><h2>Профиль</h2><label>Имя<input value={user} disabled /></label><p className="empty-state">Контактные данные управляются Authentication.</p></>}
+      {tab === "security" && <><h2>Безопасность</h2><div className="setting-row"><span>JWT-сессии и refresh rotation</span><b>Активно</b></div><div className="setting-row"><span>Отзыв токенов при выходе</span><b>Активно</b></div></>}
+      {tab === "api" && <><h2>API Keys</h2>{keys.map((key) => <div className="setting-row" key={key.id}><span>{key.name}</span><code>{key.prefix}••••</code></div>)}</>}
+      {tab === "providers" && <><h2>LLM Providers</h2>{providers.map((provider) => <div className="setting-row" key={provider.id}><span>{provider.display_name}</span><b>{provider.availability}</b></div>)}</>}
+      {tab === "preferences" && <><h2>Язык и регион</h2><label>Язык<select value={String(settings.language)} onChange={(event) => set("language", event.target.value)}><option value="ru">Русский</option><option value="en">English</option></select></label><label>Регион<select value={String(settings.region)} onChange={(event) => set("region", event.target.value)}><option>GLOBAL</option><option>RU</option><option>EU</option><option>US</option></select></label></>}
+      {tab === "notifications" && <><h2>Уведомления</h2><label className="toggle-row"><input type="checkbox" checked={Boolean((settings.notifications as Record<string, boolean>)?.in_app)} onChange={(event) => set("notifications", { ...(settings.notifications as object), in_app: event.target.checked })}/>In-app</label><label className="toggle-row"><input type="checkbox" checked={Boolean((settings.notifications as Record<string, boolean>)?.email)} onChange={(event) => set("notifications", { ...(settings.notifications as object), email: event.target.checked })}/>Email</label></>}
+      {tab === "theme" && <><h2>Тема</h2><div className="theme-options">{["dark", "light", "system"].map((theme) => <button className={settings.theme === theme ? "active" : ""} onClick={() => set("theme", theme)} key={theme}>{theme}</button>)}</div></>}
+      {tab === "organization" && <><h2>Организация</h2><p>Профиль, участники, роли и лимиты доступны в Organization Workspace.</p></>}
+    </section></div></main>;
 }
 
 function OrganizationScreen() {
@@ -1379,6 +1406,8 @@ function App() {
         <NotificationsScreen />
       ) : screen === "organization" ? (
         <OrganizationScreen />
+      ) : screen === "settings" ? (
+        <SettingsScreen user={user} />
       ) : screen === "report" && report ? (
         <Report result={report} onHome={() => setScreen("home")} />
       ) : loading ? (
@@ -1390,7 +1419,7 @@ function App() {
           onOpen={() => setScreen("report")}
         />
       ),
-    [screen, report, loading],
+    [screen, report, loading, user],
   );
   if (!user)
     return (
@@ -1410,6 +1439,7 @@ function App() {
       onAnalytics={() => setScreen("analytics")}
       onNotifications={() => setScreen("notifications")}
       onOrganization={() => setScreen("organization")}
+      onSettings={() => setScreen("settings")}
       onLogout={() => {
         setUser("");
         setReport(undefined);

@@ -64,6 +64,21 @@ def test_workspace_is_provisioned_and_aggregates_recent_work(client: TestClient)
     assert "/workspace" in client.get("/openapi.json").json()["paths"]
 
 
+def test_workspace_persists_settings_center_preferences(client: TestClient) -> None:
+    preferences = {
+        "language": "ru",
+        "region": "RU",
+        "theme": "system",
+        "notifications": {"in_app": True, "email": False},
+    }
+
+    updated = client.patch("/workspace", json={"settings": preferences})
+
+    assert updated.status_code == 200
+    assert updated.json()["settings"] == preferences
+    assert client.get("/workspace").json()["settings"] == preferences
+
+
 def test_project_crud_and_research_ownership(client: TestClient) -> None:
     created = client.post(
         "/workspace/projects",

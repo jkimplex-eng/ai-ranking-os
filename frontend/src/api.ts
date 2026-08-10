@@ -62,6 +62,8 @@ export type OrganizationItem = {
 export type OrganizationMember = {
   id: number; user_id: number; role: string; is_default: boolean; joined_at: string;
 };
+export type WorkspaceSettings = { id: number; name: string; settings: Record<string, unknown> };
+export type ApiKeyItem = { id: number; name: string; prefix: string; scopes: string[]; revoked_at?: string };
 
 export class ApiClient {
   private token?: string;
@@ -91,6 +93,9 @@ export class ApiClient {
     });
   }
   me() { return this.request<{ display_name: string; email: string }>("/auth/me"); }
+  workspace() { return this.request<WorkspaceSettings>("/workspace"); }
+  updateWorkspace(settings: Record<string, unknown>) { return this.request<WorkspaceSettings>("/workspace", { method: "PATCH", body: JSON.stringify({ settings }) }); }
+  apiKeys() { return this.request<ApiKeyItem[]>("/api-keys"); }
   review(payload: WizardPayload) {
     return this.request<WizardReview>("/research/wizard/review", {
       method: "POST",
