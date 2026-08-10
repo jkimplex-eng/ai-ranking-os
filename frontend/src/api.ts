@@ -64,6 +64,9 @@ export type OrganizationMember = {
 };
 export type WorkspaceSettings = { id: number; name: string; settings: Record<string, unknown> };
 export type ApiKeyItem = { id: number; name: string; prefix: string; scopes: string[]; revoked_at?: string };
+export type AdminUser = { user_id: number; email: string; display_name: string; status: string; is_active: boolean; research_count: number; last_seen_at?: string };
+export type AdminFeedback = { id: number; title: string; feedback_type: string; priority: string; status: string; user_id: number; created_at: string };
+export type AdminAudit = { id: number; actor_id: string; action: string; category: string; resource: string; created_at: string };
 
 export class ApiClient {
   private token?: string;
@@ -96,6 +99,12 @@ export class ApiClient {
   workspace() { return this.request<WorkspaceSettings>("/workspace"); }
   updateWorkspace(settings: Record<string, unknown>) { return this.request<WorkspaceSettings>("/workspace", { method: "PATCH", body: JSON.stringify({ settings }) }); }
   apiKeys() { return this.request<ApiKeyItem[]>("/api-keys"); }
+  adminUsers(search = "") { return this.request<AdminUser[]>(`/admin/beta/users${search ? `?search=${encodeURIComponent(search)}` : ""}`); }
+  adminFeedback() { return this.request<AdminFeedback[]>("/admin/feedback"); }
+  adminAudit() { return this.request<{ items: AdminAudit[]; total: number }>("/audit/events?page_size=20"); }
+  adminReports() { return this.request<{ items: Array<{ research_id: number; title: string; status: string; visibility_score?: number }>; total: number }>("/reports?limit=20"); }
+  adminJobs() { return this.request<Array<{ id: number; state: string; agent_id?: number; attempts: number }>>("/execution/history"); }
+  systemHealth() { return this.request<Record<string, unknown>>("/system/health"); }
   review(payload: WizardPayload) {
     return this.request<WizardReview>("/research/wizard/review", {
       method: "POST",

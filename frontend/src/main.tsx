@@ -2,6 +2,9 @@ import { StrictMode, useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ApiClient,
+  type AdminAudit,
+  type AdminFeedback,
+  type AdminUser,
   type ProductAnalyticsDashboard as AnalyticsDashboard,
   type NotificationItem,
   type OrganizationItem,
@@ -45,7 +48,7 @@ const metricMeta = [
   ["Confidence", "confidence_score"],
 ] as const;
 
-type Screen = "home" | "wizard" | "report" | "providers" | "analytics" | "notifications" | "organization" | "settings";
+type Screen = "home" | "wizard" | "report" | "providers" | "analytics" | "notifications" | "organization" | "settings" | "admin";
 type ReportShape = {
   executive_summary?: string;
   score?: Record<string, number | string>;
@@ -167,6 +170,7 @@ function Shell({
   onNotifications,
   onOrganization,
   onSettings,
+  onAdmin,
   active,
   onLogout,
 }: {
@@ -178,6 +182,7 @@ function Shell({
   onNotifications: () => void;
   onOrganization: () => void;
   onSettings: () => void;
+  onAdmin: () => void;
   active: Screen;
   onLogout: () => void;
 }) {
@@ -194,6 +199,7 @@ function Shell({
     ["♢", "Notifications"],
     ["◎", "Organization"],
     ["⚙", "Settings"],
+    ["▦", "Admin Console"],
   ];
   return (
     <div className="app-shell">
@@ -213,6 +219,7 @@ function Shell({
                 || (label === "Notifications" && active === "notifications")
                 || (label === "Organization" && active === "organization")
                 || (label === "Settings" && active === "settings")
+                || (label === "Admin Console" && active === "admin")
                   ? "active"
                   : ""
               }
@@ -229,6 +236,8 @@ function Shell({
                           ? onOrganization
                           : label === "Settings"
                             ? onSettings
+                            : label === "Admin Console"
+                              ? onAdmin
                       : undefined
               }
             >
@@ -292,6 +301,45 @@ function SettingsScreen({ user }: { user: string }) {
       {tab === "notifications" && <><h2>Уведомления</h2><label className="toggle-row"><input type="checkbox" checked={Boolean((settings.notifications as Record<string, boolean>)?.in_app)} onChange={(event) => set("notifications", { ...(settings.notifications as object), in_app: event.target.checked })}/>In-app</label><label className="toggle-row"><input type="checkbox" checked={Boolean((settings.notifications as Record<string, boolean>)?.email)} onChange={(event) => set("notifications", { ...(settings.notifications as object), email: event.target.checked })}/>Email</label></>}
       {tab === "theme" && <><h2>Тема</h2><div className="theme-options">{["dark", "light", "system"].map((theme) => <button className={settings.theme === theme ? "active" : ""} onClick={() => set("theme", theme)} key={theme}>{theme}</button>)}</div></>}
       {tab === "organization" && <><h2>Организация</h2><p>Профиль, участники, роли и лимиты доступны в Organization Workspace.</p></>}
+    </section></div></main>;
+}
+
+type AdminData = {
+  users: AdminUser[];
+  organizations: OrganizationItem[];
+  research: Array<{ id: number; title: string; status: string }>;
+  reports: Array<{ research_id: number; title: string; status: string; visibility_score?: number }>;
+  providers: ProviderItem[];
+  jobs: Array<{ id: number; state: string; attempts: number }>;
+  feedback: AdminFeedback[];
+  audit: AdminAudit[];
+  health: Record<string, unknown>;
+};
+
+function AdminConsoleScreen() {
+  const [section, setSection] = useState("Users");
+  const [search, setSearch] = useState("");
+  const [error, setError] = useState("");
+  const [data, setData] = useState<AdminData>();
+  const load = useCallback(() => Promise.all([
+    api.adminUsers(search), api.organizations(), api.listResearch(), api.adminReports(),
+    api.listProviders(), api.adminJobs(), api.adminFeedback(), api.adminAudit(), api.systemHealth(),
+  ]).then(([users, organizations, research, reportPage, providers, jobs, feedback, auditPage, health]) =>
+    setData({ users, organizations, research, reports: reportPage.items, providers, jobs, feedback, audit: auditPage.items, health })
+  ).catch((reason) => setError(reason instanceof Error ? reason.message : "Admin Console недоступен")), [search]);
+  useEffect(() => { load(); }, [load]);
+  const sections = ["Users", "Organizations", "Research", "Reports", "Providers", "Jobs", "Feedback", "Product Analytics", "Audit", "Health", "Settings"];
+  const rows = section === "Users" ? data?.users.map((item) => [item.display_name, item.email, item.status, `${item.research_count} исследований`])
+    : section === "Organizations" ? data?.organizations.map((item) => [item.name, item.role, item.country ?? "GLOBAL", item.timezone])
+      : section === "Research" ? data?.research.map((item) => [item.title, item.status, `#${item.id}`])
+        : section === "Reports" ? data?.reports.map((item) => [item.title, item.status, item.visibility_score?.toFixed(1) ?? "—"])
+          : section === "Providers" ? data?.providers.map((item) => [item.display_name, item.availability, item.free_tier ? "FREE" : "PAID"])
+            : section === "Jobs" ? data?.jobs.map((item) => [`Execution #${item.id}`, item.state, `${item.attempts} попыток`])
+              : section === "Feedback" ? data?.feedback.map((item) => [item.title, item.feedback_type, item.priority, item.status])
+                : section === "Audit" ? data?.audit.map((item) => [item.action, item.category, item.resource, item.actor_id]) : undefined;
+  return <main className="analytics-page admin-page"><header className="analytics-hero"><div><span className="eyebrow">CONTROL PLANE</span><h1>Admin Console</h1><p>Пользователи, инфраструктура и продукт — в едином операционном контуре.</p></div><Badge tone={error ? "warning" : "success"}>● {error ? "Требует внимания" : "Система работает"}</Badge></header>
+    <div className="admin-layout"><nav className="admin-nav">{sections.map((item) => <button key={item} className={section === item ? "active" : ""} onClick={() => setSection(item)}>{item}</button>)}</nav><section className="analytics-card admin-content"><div className="admin-toolbar"><div><span className="eyebrow">{section.toUpperCase()}</span><h2>{section}</h2></div>{section === "Users" && <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск пользователя" />}</div>
+      {error ? <div className="error">{error}</div> : !data ? <Skeleton /> : section === "Product Analytics" ? <div className="admin-summary"><strong>{numeric(data.users as unknown as Record<string, unknown>, "length")}</strong><p>Подробная продуктовая аналитика доступна в основном разделе Product Analytics.</p></div> : section === "Health" ? <pre className="health-json">{JSON.stringify(data.health, null, 2)}</pre> : section === "Settings" ? <p className="empty-state">Системные и пользовательские параметры доступны через Settings Center.</p> : <div className="admin-table">{rows?.length ? rows.map((row, index) => <div className="admin-row" key={`${section}-${index}`}>{row.map((value, cell) => <span key={cell}>{value}</span>)}</div>) : <p className="empty-state">Нет данных для отображения.</p>}</div>}
     </section></div></main>;
 }
 
@@ -1408,6 +1456,8 @@ function App() {
         <OrganizationScreen />
       ) : screen === "settings" ? (
         <SettingsScreen user={user} />
+      ) : screen === "admin" ? (
+        <AdminConsoleScreen />
       ) : screen === "report" && report ? (
         <Report result={report} onHome={() => setScreen("home")} />
       ) : loading ? (
@@ -1440,6 +1490,7 @@ function App() {
       onNotifications={() => setScreen("notifications")}
       onOrganization={() => setScreen("organization")}
       onSettings={() => setScreen("settings")}
+      onAdmin={() => setScreen("admin")}
       onLogout={() => {
         setUser("");
         setReport(undefined);
