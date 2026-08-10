@@ -1,5 +1,7 @@
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from research.models import Research
 from research.ports import ResearchLaunchReceipt, ResearchLaunchRequest
 from research.queue import enqueue
 from research.repositories import ResearchRepository
@@ -39,3 +41,14 @@ class SqlAlchemyResearchLauncher:
             job_id=job.id,
             state=job.state,
         )
+
+    def statuses(self, research_ids: list[int]) -> dict[int, str]:
+        if not research_ids:
+            return {}
+        rows = self.db.execute(
+            select(Research.id, Research.status).where(Research.id.in_(research_ids))
+        )
+        return {
+            research_id: status.value if hasattr(status, "value") else str(status)
+            for research_id, status in rows
+        }

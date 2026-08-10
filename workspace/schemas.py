@@ -183,3 +183,44 @@ class SavedConfigurationRunRead(BaseModel):
     research_id: int
     job_id: int
     state: str
+
+
+class BulkResearchTarget(BaseModel):
+    brand: str = Field(min_length=1, max_length=200)
+    domain_id: int | None = Field(default=None, ge=1)
+    query: str | None = Field(default=None, min_length=1, max_length=100_000)
+
+
+class BulkResearchCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    targets: list[BulkResearchTarget] = Field(min_length=1, max_length=100)
+    template_code: str = Field(default="ai-visibility", min_length=1, max_length=100)
+    routing_profile: RoutingProfile = RoutingProfile.BALANCED
+    languages: list[str] = Field(default_factory=lambda: ["ru"], min_length=1)
+    regions: list[str] = Field(default_factory=lambda: ["GLOBAL"], min_length=1)
+
+
+class BulkResearchItemRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    brand: str
+    domain_id: int | None
+    research_id: int
+    job_id: int
+    state: str
+
+
+class BulkResearchRead(BaseModel):
+    id: int
+    project_id: int
+    name: str
+    template_code: str
+    routing_profile: RoutingProfile
+    total_items: int
+    pending_items: int
+    completed_items: int
+    failed_items: int
+    progress_percent: float
+    items: list[BulkResearchItemRead]
+    created_at: datetime

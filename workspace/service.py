@@ -5,12 +5,15 @@ from sqlalchemy.orm import Session
 from backend.app.llm_router.schemas import RoutingProfile
 from research.ports import ResearchLaunchPort, ResearchLaunchRequest
 from workspace.models import (
+    BulkResearchItem,
+    BulkResearchRun,
     Project,
     ProjectCompetitor,
     ProjectDomain,
     SavedResearchConfiguration,
 )
 from workspace.repository import (
+    BulkResearchRepository,
     CompetitorRepository,
     DomainRepository,
     ProjectNotFoundError,
@@ -19,6 +22,9 @@ from workspace.repository import (
     WorkspaceRepository,
 )
 from workspace.schemas import (
+    BulkResearchCreate,
+    BulkResearchItemRead,
+    BulkResearchRead,
     CompetitorCreate,
     CompetitorImport,
     CompetitorRead,
@@ -97,6 +103,7 @@ class ProjectService:
         self.competitors = CompetitorRepository(db)
         self.domains = DomainRepository(db)
         self.configurations = SavedConfigurationRepository(db)
+        self.bulk_runs = BulkResearchRepository(db)
         self.launcher = launcher
 
     def _workspace_id(self, user_id: int) -> int:
@@ -332,6 +339,98 @@ class ProjectService:
             job_id=receipt.job_id,
             state=receipt.state,
         )
+
+    @staticmethod
+    def _bulk_state(research_state: str) -> str:
+        if research_state == "COMPLETED":
+            return "COMPLETED"
+        if research_state in {"FAILED", "ARCHIVED"}:
+            return "FAILED"
+        return "PENDING"
+
+    def _read_bulk_run(self, run: BulkResearchRun) -> BulkResearchRead:
+        items = self.bulk_runs.items(run.id)
+        if self.launcher is not None:
+            states = self.launcher.statuses([item.research_id for item in items])
+            normalized = {
+                research_id: self._bulk_state(state)
+                for research_id, state in states.items()
+            }
+            self.bulk_runs.update_states(items, normalized)
+        completed = sum(item.state == "COMPLETED" for item in items)
+        failed = sum(item.state == "FAILED" for item in items)
+        finished = completed + failed
+        return BulkResearchRead(
+            id=run.id,
+            project_id=run.project_id,
+            name=run.name,
+            template_code=run.template_code,
+            routing_profile=RoutingProfile(run.routing_profile),
+            total_items=run.total_items,
+            pending_items=run.total_items - finished,
+            completed_items=completed,
+            failed_items=failed,
+            progress_percent=round(finished / run.total_items * 100, 2),
+            items=[BulkResearchItemRead.model_validate(item) for item in items],
+            created_at=run.created_at,
+        )
+
+    def create_bulk_run(
+        self, user_id: int, project_id: int, payload: BulkResearchCreate
+    ) -> BulkResearchRead:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        if self.launcher is None:
+            raise RuntimeError("Research launcher is not configured")
+        brands = [target.brand.strip() for target in payload.targets]
+        if len(set(brands)) != len(brands):
+            raise ValueError("Bulk research brands must be unique")
+        for target in payload.targets:
+            if target.domain_id is not None:
+                self.domains.get(project_id, target.domain_id)
+        run = self.bulk_runs.save_run(
+            BulkResearchRun(
+                project_id=project_id,
+                name=payload.name,
+                template_code=payload.template_code,
+                routing_profile=payload.routing_profile.value,
+                total_items=len(payload.targets),
+            )
+        )
+        for target in payload.targets:
+            query = target.query or f"Analyze AI visibility for {target.brand}"
+            receipt = self.launcher.launch(
+                ResearchLaunchRequest(
+                    project_id=project_id,
+                    domain_id=target.domain_id,
+                    title=f"{payload.name}: {target.brand}",
+                    query=query,
+                    routing_profile=payload.routing_profile,
+                    languages=payload.languages,
+                    regions=payload.regions,
+                    template_code=payload.template_code,
+                )
+            )
+            self.bulk_runs.add_item(
+                BulkResearchItem(
+                    bulk_run_id=run.id,
+                    brand=target.brand.strip(),
+                    domain_id=target.domain_id,
+                    research_id=receipt.research_id,
+                    job_id=receipt.job_id,
+                    state=receipt.state,
+                )
+            )
+        return self._read_bulk_run(run)
+
+    def list_bulk_runs(self, user_id: int, project_id: int) -> list[BulkResearchRead]:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        return [self._read_bulk_run(run) for run in self.bulk_runs.list_runs(project_id)]
+
+    def get_bulk_run(
+        self, user_id: int, project_id: int, run_id: int
+    ) -> BulkResearchRead:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        return self._read_bulk_run(self.bulk_runs.get_run(project_id, run_id))
 
 
 __all__ = ["ProjectNotFoundError", "ProjectService", "WorkspaceService"]

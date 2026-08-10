@@ -255,3 +255,48 @@ def test_saved_configuration_crud_and_durable_launch(client: TestClient) -> None
 
     assert client.delete(f"{base_url}/{configuration_id}").status_code == 204
     assert client.get(base_url).json() == []
+
+
+def test_bulk_research_uses_common_queue_and_returns_summary(client: TestClient) -> None:
+    project_id = client.post(
+        "/workspace/projects", json={"name": "Brand portfolio"}
+    ).json()["id"]
+    domain_id = client.post(
+        f"/workspace/projects/{project_id}/domains",
+        json={"hostname": "skinjestique.ru"},
+    ).json()["id"]
+    url = f"/workspace/projects/{project_id}/bulk-research"
+    created = client.post(
+        url,
+        json={
+            "name": "Weekly portfolio",
+            "template_code": "geo-analysis",
+            "routing_profile": "BALANCED",
+            "languages": ["ru"],
+            "regions": ["RU"],
+            "targets": [
+                {"brand": "Skinjestique", "domain_id": domain_id},
+                {"brand": "Разум Маркета"},
+                {"brand": "AI Ranking OS"},
+            ],
+        },
+    )
+    assert created.status_code == 202
+    report = created.json()
+    assert report["total_items"] == 3
+    assert report["pending_items"] == 3
+    assert report["progress_percent"] == 0
+    assert len({item["job_id"] for item in report["items"]}) == 3
+    assert len({item["research_id"] for item in report["items"]}) == 3
+
+    run_id = report["id"]
+    assert client.get(f"{url}/{run_id}").json()["name"] == "Weekly portfolio"
+    assert len(client.get(url).json()) == 1
+    duplicate = client.post(
+        url,
+        json={
+            "name": "Invalid",
+            "targets": [{"brand": "Same"}, {"brand": "Same"}],
+        },
+    )
+    assert duplicate.status_code == 422

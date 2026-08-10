@@ -7,6 +7,8 @@ from workspace.dependencies import (
 )
 from workspace.repository import ProjectNotFoundError
 from workspace.schemas import (
+    BulkResearchCreate,
+    BulkResearchRead,
     CompetitorCreate,
     CompetitorImport,
     CompetitorRead,
@@ -323,5 +325,54 @@ def run_configuration(
         return service.run_configuration(
             user_id, project_id, configuration_id, payload
         )
+    except ProjectNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post(
+    "/projects/{project_id}/bulk-research",
+    response_model=BulkResearchRead,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def create_bulk_research(
+    project_id: int,
+    payload: BulkResearchCreate,
+    user_id: CurrentUserId,
+    service: ProjectServiceDependency,
+) -> BulkResearchRead:
+    try:
+        return service.create_bulk_run(user_id, project_id, payload)
+    except ProjectNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.get(
+    "/projects/{project_id}/bulk-research", response_model=list[BulkResearchRead]
+)
+def list_bulk_research(
+    project_id: int,
+    user_id: CurrentUserId,
+    service: ProjectServiceDependency,
+) -> list[BulkResearchRead]:
+    try:
+        return service.list_bulk_runs(user_id, project_id)
+    except ProjectNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.get(
+    "/projects/{project_id}/bulk-research/{run_id}",
+    response_model=BulkResearchRead,
+)
+def get_bulk_research(
+    project_id: int,
+    run_id: int,
+    user_id: CurrentUserId,
+    service: ProjectServiceDependency,
+) -> BulkResearchRead:
+    try:
+        return service.get_bulk_run(user_id, project_id, run_id)
     except ProjectNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error

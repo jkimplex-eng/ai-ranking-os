@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 
 from research.models import Research, ResearchScore
 from workspace.models import (
+    BulkResearchItem,
+    BulkResearchRun,
     Project,
     ProjectCompetitor,
     ProjectDomain,
@@ -189,3 +191,59 @@ class SavedConfigurationRepository:
         self.db.commit()
         self.db.refresh(item)
         return item
+
+
+class BulkResearchRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def save_run(self, run: BulkResearchRun) -> BulkResearchRun:
+        self.db.add(run)
+        self.db.commit()
+        self.db.refresh(run)
+        return run
+
+    def add_item(self, item: BulkResearchItem) -> BulkResearchItem:
+        self.db.add(item)
+        self.db.commit()
+        self.db.refresh(item)
+        return item
+
+    def get_run(self, project_id: int, run_id: int) -> BulkResearchRun:
+        run = self.db.scalar(
+            select(BulkResearchRun).where(
+                BulkResearchRun.id == run_id,
+                BulkResearchRun.project_id == project_id,
+            )
+        )
+        if run is None:
+            raise ProjectNotFoundError(f"Bulk research run {run_id} not found")
+        return run
+
+    def list_runs(self, project_id: int) -> list[BulkResearchRun]:
+        return list(
+            self.db.scalars(
+                select(BulkResearchRun)
+                .where(BulkResearchRun.project_id == project_id)
+                .order_by(BulkResearchRun.created_at.desc())
+            )
+        )
+
+    def items(self, run_id: int) -> list[BulkResearchItem]:
+        return list(
+            self.db.scalars(
+                select(BulkResearchItem)
+                .where(BulkResearchItem.bulk_run_id == run_id)
+                .order_by(BulkResearchItem.id)
+            )
+        )
+
+    def update_states(self, items: list[BulkResearchItem], states: dict[int, str]) -> None:
+        changed = False
+        for item in items:
+            state = states.get(item.research_id)
+            if state is not None and state != item.state:
+                item.state = state
+                changed = True
+        if changed:
+            self.db.commit()

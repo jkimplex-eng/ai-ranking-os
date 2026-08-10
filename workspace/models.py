@@ -152,3 +152,41 @@ class SavedResearchConfiguration(Base):
         onupdate=text("CURRENT_TIMESTAMP"),
         nullable=False,
     )
+
+
+class BulkResearchRun(Base):
+    __tablename__ = "bulk_research_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("workspace_projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    template_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    routing_profile: Mapped[str] = mapped_column(String(30), nullable=False)
+    total_items: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False
+    )
+
+
+class BulkResearchItem(Base):
+    __tablename__ = "bulk_research_items"
+    __table_args__ = (
+        UniqueConstraint("bulk_run_id", "brand", name="uq_bulk_research_item_brand"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bulk_run_id: Mapped[int] = mapped_column(
+        ForeignKey("bulk_research_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    brand: Mapped[str] = mapped_column(String(200), nullable=False)
+    domain_id: Mapped[int | None] = mapped_column(
+        ForeignKey("project_domains.id", ondelete="SET NULL"), nullable=True
+    )
+    research_id: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
+    job_id: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
+    state: Mapped[str] = mapped_column(String(30), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False
+    )
