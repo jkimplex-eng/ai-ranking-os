@@ -25,6 +25,7 @@ from backend.app.schemas import HealthResponse, VersionResponse
 from baseline.router import router as baseline_router
 from benchmark.router import router as benchmark_router
 from cache.router import router as cache_router
+from change_detection.router import router as change_detection_router
 from cost_analytics.router import router as cost_analytics_router
 from decision_center.router import router as decision_center_router
 from entity_extraction.router import router as entity_extraction_router
@@ -98,6 +99,7 @@ app.include_router(api_keys_router)
 app.include_router(audit_router)
 app.include_router(observability_router)
 app.include_router(cache_router)
+app.include_router(change_detection_router)
 app.include_router(rate_limit_router)
 app.include_router(hardening_router)
 app.include_router(execution_engine_router)

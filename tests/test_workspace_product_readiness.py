@@ -468,3 +468,67 @@ def test_project_monitoring_delegates_to_existing_scheduler(client: TestClient) 
     ).status_code == 422
     assert client.delete(url).status_code == 204
     assert not any(item["id"] == schedule_id for item in client.get("/schedules").json())
+
+
+def test_change_detection_persists_metric_and_graph_deltas(client: TestClient) -> None:
+    project_id = client.post(
+        "/workspace/projects", json={"name": "Changing project"}
+    ).json()["id"]
+    with TestingSession() as db:
+        previous = Research(
+            project_id=project_id,
+            title="Previous",
+            status=ResearchStatus.COMPLETED,
+        )
+        current = Research(
+            project_id=project_id,
+            title="Current",
+            status=ResearchStatus.COMPLETED,
+        )
+        db.add_all([previous, current])
+        db.flush()
+        db.add_all(
+            [
+                ResearchScore(
+                    research_id=previous.id,
+                    mention_score=70,
+                    recommendation_score=60,
+                    citation_score=50,
+                    coverage_score=80,
+                    confidence_score=90,
+                    visibility_score=65,
+                    version="1.0",
+                ),
+                ResearchScore(
+                    research_id=current.id,
+                    mention_score=75,
+                    recommendation_score=72,
+                    citation_score=58,
+                    coverage_score=77,
+                    confidence_score=92,
+                    visibility_score=74,
+                    version="1.0",
+                ),
+            ]
+        )
+        db.commit()
+        current_id = current.id
+        previous_id = previous.id
+
+    detected = client.post(f"/research/{current_id}/changes")
+    assert detected.status_code == 200
+    result = detected.json()
+    assert result["previous_research_id"] == previous_id
+    assert result["metric_deltas"] == {
+        "visibility_score": 9.0,
+        "recommendation_score": 12.0,
+        "citation_score": 8.0,
+        "coverage_score": -3.0,
+    }
+    assert result["graph_changes"] == {
+        "added_nodes": [],
+        "removed_nodes": [],
+        "added_edges": [],
+        "removed_edges": [],
+    }
+    assert client.get(f"/research/{current_id}/changes").json()["id"] == result["id"]

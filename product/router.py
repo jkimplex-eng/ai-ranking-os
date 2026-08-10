@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
+from change_detection.dependencies import build_change_detection
 from product.repository import (
     ProductConflictError,
     ProductNotFoundError,
@@ -151,7 +152,7 @@ def review_wizard(payload: WizardRequest, db: DbSession) -> WizardReview:
 )
 def run_wizard(payload: WizardRequest, db: DbSession) -> WizardRunResult:
     try:
-        research = ProductPipeline(db).run(payload)
+        research = ProductPipeline(db, build_change_detection(db)).run(payload)
         report = FinalReportService(db).get(research.id)
         return WizardRunResult(
             research=ResearchRead.model_validate(research),

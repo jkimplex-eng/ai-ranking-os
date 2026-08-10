@@ -17,6 +17,7 @@ from backend.app.providers import models as provider_models  # noqa: F401
 from baseline import models as baseline_models  # noqa: F401
 from benchmark import models as benchmark_models  # noqa: F401
 from cache import models as cache_models  # noqa: F401
+from change_detection import models as change_detection_models  # noqa: F401
 from decision_center import models as decision_center_models  # noqa: F401
 from entity_extraction import models as entity_extraction_models  # noqa: F401
 from entity_linking import models as entity_linking_models  # noqa: F401

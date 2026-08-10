@@ -17,6 +17,7 @@ from backend.app.providers.readiness import RuntimeProviderReadiness
 from benchmark.repository import SqlAlchemyBenchmarkRepository
 from benchmark.schemas import BenchmarkRequest
 from benchmark.service import BenchmarkService
+from change_detection.ports import ChangeDetectorPort
 from decision_center import service as decision_service
 from decision_center.models import AgentType
 from decision_center.schemas import AgentCreate
@@ -110,10 +111,11 @@ class ResearchEntityProvider(EntityProvider, RelationshipProvider):
 
 
 class ProductPipeline:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, change_detector: ChangeDetectorPort | None = None) -> None:
         self.db = db
         self.prompts = PromptService(db)
         self.templates = ResearchTemplateRepository(db)
+        self.change_detector = change_detector
 
     def review(self, payload: WizardRequest) -> WizardReview:
         template = self.templates.get(payload.research_template_code)
@@ -255,6 +257,8 @@ class ProductPipeline:
         ]
         research.metadata_payload = {**research.metadata_payload, "product_artifacts": artifacts}
         self.db.commit()
+        if self.change_detector is not None:
+            self.change_detector.detect(research.id)
 
     @staticmethod
     def _values(payload: WizardRequest) -> dict[str, str]:
