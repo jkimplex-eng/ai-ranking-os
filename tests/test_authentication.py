@@ -14,6 +14,8 @@ from authentication.service import AuthenticationError, AuthenticationService
 from backend.app.config import get_settings
 from backend.app.database import Base, get_db
 from backend.app.main import app
+from rbac.models import Role, UserRole
+from scripts.create_admin import ensure_superadmin
 
 
 @pytest.fixture
@@ -53,6 +55,18 @@ def test_password_hash_and_login(auth_context) -> None:
     assert "correct horse" not in user.password_hash
     pair = service.login("analyst@example.com", "correct horse battery staple", "127.0.0.1", "test")
     assert service.me(pair.access_token).email == "analyst@example.com"
+
+
+def test_admin_bootstrap_assigns_superadmin_idempotently(auth_context) -> None:
+    db, _, _ = auth_context
+    user = db.query(AuthUser).one()
+
+    ensure_superadmin(db, user.id)
+    ensure_superadmin(db, user.id)
+
+    role = db.query(Role).filter(Role.code == "superadmin").one()
+    assert role.is_system is True
+    assert db.query(UserRole).filter_by(user_id=user.id, role_id=role.id).count() == 1
 
 
 def test_refresh_rotation_and_replay_revokes_family(auth_context) -> None:
