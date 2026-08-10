@@ -91,3 +91,43 @@ def test_project_crud_and_research_ownership(client: TestClient) -> None:
     assert updated.json()["description"] == "Daily internal analysis"
     assert client.delete(f"/workspace/projects/{project_id}").status_code == 204
     assert client.get(f"/workspace/projects/{project_id}").status_code == 404
+
+
+def test_competitor_management_and_idempotent_import(client: TestClient) -> None:
+    project_id = client.post("/workspace/projects", json={"name": "Client"}).json()["id"]
+    created = client.post(
+        f"/workspace/projects/{project_id}/competitors",
+        json={
+            "name": "Competitor A",
+            "domains": ["competitor.example"],
+            "brands": ["Competitor"],
+        },
+    )
+    assert created.status_code == 201
+    competitor_id = created.json()["id"]
+    assert client.patch(
+        f"/workspace/projects/{project_id}/competitors/{competitor_id}",
+        json={"notes": "Track weekly"},
+    ).json()["notes"] == "Track weekly"
+
+    imported = client.post(
+        f"/workspace/projects/{project_id}/competitors/import",
+        json={
+            "competitors": [
+                {
+                    "name": "Competitor A",
+                    "domains": ["new.example"],
+                    "brands": ["A"],
+                },
+                {"name": "Competitor B", "domains": ["b.example"]},
+            ]
+        },
+    )
+    assert imported.status_code == 200
+    assert len(imported.json()) == 2
+    assert next(item for item in imported.json() if item["id"] == competitor_id)["domains"] == [
+        "new.example"
+    ]
+    assert client.delete(
+        f"/workspace/projects/{project_id}/competitors/{competitor_id}"
+    ).status_code == 204

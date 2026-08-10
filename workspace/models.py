@@ -61,3 +61,30 @@ class Project(Base):
         onupdate=text("CURRENT_TIMESTAMP"),
         nullable=False,
     )
+
+
+class ProjectCompetitor(Base):
+    __tablename__ = "project_competitors"
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_project_competitors_name"),
+        Index("ix_project_competitors_project_active", "project_id", "active"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("workspace_projects.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    domains: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    brands: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("CURRENT_TIMESTAMP"),
+        onupdate=text("CURRENT_TIMESTAMP"),
+        nullable=False,
+    )

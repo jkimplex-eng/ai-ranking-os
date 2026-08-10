@@ -2,7 +2,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from research.models import Research, ResearchScore
-from workspace.models import Project, UserWorkspace
+from workspace.models import Project, ProjectCompetitor, UserWorkspace
 
 
 class WorkspaceRepository:
@@ -86,3 +86,34 @@ class ProjectRepository:
             .group_by(Research.project_id)
         )
         return {int(project_id): int(count) for project_id, count in rows}
+
+
+class CompetitorRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def list(self, project_id: int) -> list[ProjectCompetitor]:
+        return list(
+            self.db.scalars(
+                select(ProjectCompetitor)
+                .where(ProjectCompetitor.project_id == project_id)
+                .order_by(ProjectCompetitor.name)
+            )
+        )
+
+    def get(self, project_id: int, competitor_id: int) -> ProjectCompetitor:
+        item = self.db.scalar(
+            select(ProjectCompetitor).where(
+                ProjectCompetitor.id == competitor_id,
+                ProjectCompetitor.project_id == project_id,
+            )
+        )
+        if item is None:
+            raise ProjectNotFoundError(f"Competitor {competitor_id} not found")
+        return item
+
+    def save(self, item: ProjectCompetitor) -> ProjectCompetitor:
+        self.db.add(item)
+        self.db.commit()
+        self.db.refresh(item)
+        return item

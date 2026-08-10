@@ -1,8 +1,17 @@
 from sqlalchemy.orm import Session
 
-from workspace.models import Project
-from workspace.repository import ProjectNotFoundError, ProjectRepository, WorkspaceRepository
+from workspace.models import Project, ProjectCompetitor
+from workspace.repository import (
+    CompetitorRepository,
+    ProjectNotFoundError,
+    ProjectRepository,
+    WorkspaceRepository,
+)
 from workspace.schemas import (
+    CompetitorCreate,
+    CompetitorImport,
+    CompetitorRead,
+    CompetitorUpdate,
     ProjectCreate,
     ProjectRead,
     ProjectUpdate,
@@ -65,6 +74,7 @@ class ProjectService:
         self.db = db
         self.workspaces = WorkspaceRepository(db)
         self.projects = ProjectRepository(db)
+        self.competitors = CompetitorRepository(db)
 
     def _workspace_id(self, user_id: int) -> int:
         return self.workspaces.get_or_create(user_id).id
@@ -102,6 +112,53 @@ class ProjectService:
         project = self.projects.get(self._workspace_id(user_id), project_id)
         self.db.delete(project)
         self.db.commit()
+
+    def list_competitors(self, user_id: int, project_id: int) -> list[CompetitorRead]:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        return [CompetitorRead.model_validate(item) for item in self.competitors.list(project_id)]
+
+    def create_competitor(
+        self, user_id: int, project_id: int, payload: CompetitorCreate
+    ) -> CompetitorRead:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        return CompetitorRead.model_validate(
+            self.competitors.save(ProjectCompetitor(project_id=project_id, **payload.model_dump()))
+        )
+
+    def update_competitor(
+        self,
+        user_id: int,
+        project_id: int,
+        competitor_id: int,
+        payload: CompetitorUpdate,
+    ) -> CompetitorRead:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        item = self.competitors.get(project_id, competitor_id)
+        for field, value in payload.model_dump(exclude_unset=True).items():
+            setattr(item, field, value)
+        return CompetitorRead.model_validate(self.competitors.save(item))
+
+    def delete_competitor(self, user_id: int, project_id: int, competitor_id: int) -> None:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        item = self.competitors.get(project_id, competitor_id)
+        self.db.delete(item)
+        self.db.commit()
+
+    def import_competitors(
+        self, user_id: int, project_id: int, payload: CompetitorImport
+    ) -> list[CompetitorRead]:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        existing = {item.name.casefold(): item for item in self.competitors.list(project_id)}
+        for incoming in payload.competitors:
+            item = existing.get(incoming.name.casefold())
+            if item is None:
+                item = ProjectCompetitor(project_id=project_id, **incoming.model_dump())
+            else:
+                for field, value in incoming.model_dump().items():
+                    setattr(item, field, value)
+            self.db.add(item)
+        self.db.commit()
+        return self.list_competitors(user_id, project_id)
 
 
 __all__ = ["ProjectNotFoundError", "ProjectService", "WorkspaceService"]

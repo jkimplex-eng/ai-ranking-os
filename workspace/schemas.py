@@ -72,3 +72,32 @@ class ProjectRead(BaseModel):
     research_count: int = 0
     created_at: datetime
     updated_at: datetime
+
+
+class CompetitorCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    domains: list[str] = Field(default_factory=list, max_length=100)
+    brands: list[str] = Field(default_factory=list, max_length=100)
+    notes: str = Field(default="", max_length=10_000)
+    active: bool = True
+
+
+class CompetitorUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    domains: list[str] | None = Field(default=None, max_length=100)
+    brands: list[str] | None = Field(default=None, max_length=100)
+    notes: str | None = Field(default=None, max_length=10_000)
+    active: bool | None = None
+
+
+class CompetitorRead(CompetitorCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    project_id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class CompetitorImport(BaseModel):
+    competitors: list[CompetitorCreate] = Field(min_length=1, max_length=500)
