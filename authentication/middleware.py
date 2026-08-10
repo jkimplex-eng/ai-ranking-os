@@ -40,6 +40,10 @@ class ProductionAuthenticationMiddleware(BaseHTTPMiddleware):
             not self.settings.security_enforce_auth
             or request.url.path in PUBLIC_PATHS
             or request.url.path.startswith("/shared/reports/")
+            or (
+                request.url.path.startswith("/beta/invitations/")
+                and request.url.path.endswith("/accept")
+            )
         ):
             return await call_next(request)
         with SessionLocal() as db:

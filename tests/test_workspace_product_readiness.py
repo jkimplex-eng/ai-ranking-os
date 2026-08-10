@@ -567,3 +567,72 @@ def test_notification_center_ui_email_telegram_outbox(client: TestClient) -> Non
         },
     )
     assert invalid.status_code == 422
+
+
+def test_closed_beta_invitation_access_limits_search_and_audit(client: TestClient) -> None:
+    created = client.post(
+        "/admin/beta/invitations",
+        json={"email": "analyst@example.com", "expires_in_hours": 24},
+    )
+    assert created.status_code == 201
+    invitation = created.json()
+    resent = client.post(
+        f"/admin/beta/invitations/{invitation['id']}/resend"
+    )
+    assert resent.status_code == 200
+    assert resent.json()["send_count"] == 2
+    assert resent.json()["token"] != invitation["token"]
+    assert client.post(
+        f"/beta/invitations/{invitation['token']}/accept",
+        json={"display_name": "Old token", "password": "strong-password"},
+    ).status_code == 404
+
+    accepted = client.post(
+        f"/beta/invitations/{resent.json()['token']}/accept",
+        json={"display_name": "Beta Analyst", "password": "strong-password"},
+    )
+    assert accepted.status_code == 200
+    user_id = accepted.json()["user_id"]
+    assert accepted.json()["status"] == "ACTIVE"
+    assert client.post(
+        f"/beta/invitations/{resent.json()['token']}/accept",
+        json={"display_name": "Again", "password": "strong-password"},
+    ).status_code == 404
+
+    users = client.get(
+        "/admin/beta/users", params={"search": "analyst", "status": "ACTIVE"}
+    )
+    assert users.status_code == 200
+    assert users.json()[0]["last_seen_at"] is None
+    updated = client.patch(
+        f"/admin/beta/users/{user_id}",
+        json={
+            "status": "SUSPENDED",
+            "limits": {
+                "daily_research_limit": 2,
+                "monthly_research_limit": 20,
+                "max_projects": 3,
+                "max_domains": 6,
+                "max_organization_users": 2,
+            },
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "SUSPENDED"
+    assert updated.json()["limits"]["max_projects"] == 3
+    audit = client.get(
+        "/audit/events", params={"category": "closed_beta"}
+    ).json()
+    assert audit["total"] >= 4
+
+    revoked = client.post(
+        "/admin/beta/invitations",
+        json={"email": "revoked@example.com"},
+    ).json()
+    assert client.post(
+        f"/admin/beta/invitations/{revoked['id']}/revoke"
+    ).status_code == 200
+    assert client.post(
+        f"/beta/invitations/{revoked['token']}/accept",
+        json={"display_name": "Revoked", "password": "strong-password"},
+    ).status_code == 404
