@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ApiClient,
+  type ProductAnalyticsDashboard as AnalyticsDashboard,
   type ProviderItem,
   type ReportResult,
   type WizardPayload,
@@ -42,7 +43,7 @@ const metricMeta = [
   ["Confidence", "confidence_score"],
 ] as const;
 
-type Screen = "home" | "wizard" | "report" | "providers";
+type Screen = "home" | "wizard" | "report" | "providers" | "analytics";
 type ReportShape = {
   executive_summary?: string;
   score?: Record<string, number | string>;
@@ -160,6 +161,7 @@ function Shell({
   children,
   onHome,
   onProviders,
+  onAnalytics,
   active,
   onLogout,
 }: {
@@ -167,6 +169,7 @@ function Shell({
   children: React.ReactNode;
   onHome: () => void;
   onProviders: () => void;
+  onAnalytics: () => void;
   active: Screen;
   onLogout: () => void;
 }) {
@@ -179,6 +182,7 @@ function Shell({
     ["◇", "Competitors"],
     ["↗", "History"],
     ["✦", "AI Providers"],
+    ["◫", "Product Analytics"],
     ["⚙", "Settings"],
   ];
   return (
@@ -194,9 +198,20 @@ function Shell({
               key={label}
               className={
                 (index === 0 && active === "home") ||
-                (label === "AI Providers" && active === "providers") ? "active" : ""
+                (label === "AI Providers" && active === "providers") ||
+                (label === "Product Analytics" && active === "analytics")
+                  ? "active"
+                  : ""
               }
-              onClick={index === 0 ? onHome : label === "AI Providers" ? onProviders : undefined}
+              onClick={
+                index === 0
+                  ? onHome
+                  : label === "AI Providers"
+                    ? onProviders
+                    : label === "Product Analytics"
+                      ? onAnalytics
+                      : undefined
+              }
             >
               <span>{icon}</span>
               {label}
@@ -236,6 +251,65 @@ function Shell({
         {children}
       </div>
     </div>
+  );
+}
+
+function numeric(section: Record<string, unknown>, key: string) {
+  const value = Number(section[key] ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function ProductAnalyticsScreen() {
+  const [period, setPeriod] = useState("DAILY");
+  const [provider, setProvider] = useState("");
+  const [data, setData] = useState<AnalyticsDashboard>();
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api.productAnalytics(period, provider)
+      .then(setData)
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки"));
+  }, [period, provider]);
+  if (error) return <main className="analytics-page"><div className="error">{error}</div></main>;
+  if (!data) return <main className="analytics-page"><DashboardSkeleton /></main>;
+  const trendPoints = data.trends.map((point, index) => ({
+    label: String(point.bucket ?? index),
+    value: Number(point.events ?? 0),
+  }));
+  const usage = (data.providers.usage as Array<{ key: string; count: number }> | undefined) ?? [];
+  const topUsers = (data.users.top_users as Array<{ key: string; count: number }> | undefined) ?? [];
+  return (
+    <main className="analytics-page">
+      <header className="analytics-hero">
+        <div><span className="eyebrow">PRODUCT INTELLIGENCE</span><h1>Product Analytics</h1>
+          <p>Как команды используют AI Ranking OS — от активности до стоимости моделей.</p></div>
+        <div className="analytics-filters">
+          <label>Период<select value={period} onChange={(event) => { setError(""); setPeriod(event.target.value); }}>
+            <option value="HOURLY">По часам</option><option value="DAILY">По дням</option>
+            <option value="WEEKLY">По неделям</option><option value="MONTHLY">По месяцам</option>
+          </select></label>
+          <label>Провайдер<input value={provider} onChange={(event) => { setError(""); setProvider(event.target.value); }} placeholder="Все провайдеры" /></label>
+        </div>
+      </header>
+      <section className="analytics-kpis" aria-label="Основные показатели">
+        <article className="analytics-card metric"><span>Активны сегодня</span><strong>{numeric(data.users, "dau")}</strong><small>WAU {numeric(data.users, "wau")}</small></article>
+        <article className="analytics-card metric"><span>Исследования</span><strong>{numeric(data.research, "count")}</strong><small>{numeric(data.research, "success_rate")}% успешно</small></article>
+        <article className="analytics-card metric"><span>Отчёты</span><strong>{numeric(data.reports, "count")}</strong><small>{numeric(data.reports, "average_generation_ms")} ms</small></article>
+        <article className="analytics-card metric"><span>Стоимость</span><strong>${numeric(data.overview, "cost").toFixed(2)}</strong><small>{numeric(data.providers, "average_tokens")} токенов</small></article>
+      </section>
+      <section className="analytics-grid">
+        <ChartContainer title="Динамика использования" caption="Все события продукта">
+          {trendPoints.length ? <AreaLineChart values={trendPoints.map((point) => point.value)} /> : <p className="empty-state">События появятся после первого действия.</p>}
+        </ChartContainer>
+        <article className="analytics-card"><span className="eyebrow">RESEARCH HEALTH</span><h2>{numeric(data.research, "success_rate")}%</h2>
+          <p>успешных исследований</p><div className="success-track"><span style={{ width: `${numeric(data.research, "success_rate")}%` }} /></div>
+          <dl><div><dt>Среднее время</dt><dd>{numeric(data.research, "average_duration_ms")} ms</dd></div><div><dt>Ошибки</dt><dd>{numeric(data.errors, "count")}</dd></div></dl></article>
+      </section>
+      <section className="analytics-three">
+        <article className="analytics-card"><h3>Провайдеры</h3>{usage.length ? usage.map((item) => <div className="rank-row" key={item.key}><span>{item.key}</span><b>{item.count}</b></div>) : <p className="empty-state">Нет данных</p>}</article>
+        <article className="analytics-card"><h3>Пользователи</h3><div className="metric-pair"><span>DAU / WAU / MAU</span><b>{numeric(data.users, "dau")} / {numeric(data.users, "wau")} / {numeric(data.users, "mau")}</b></div><div className="metric-pair"><span>Retention</span><b>{numeric(data.users, "retention_percent")}%</b></div>{topUsers.slice(0, 3).map((item) => <div className="rank-row" key={item.key}><span>User {item.key}</span><b>{item.count}</b></div>)}</article>
+        <article className="analytics-card"><h3>Обратная связь и ошибки</h3><div className="signal-number">{numeric(data.feedback, "count")}<small> отзывов</small></div><div className={`analytics-signal ${numeric(data.errors, "count") ? "danger" : "safe"}`}>{numeric(data.errors, "count") ? `${numeric(data.errors, "count")} ошибок требуют внимания` : "Критических ошибок нет"}</div></article>
+      </section>
+    </main>
   );
 }
 
@@ -1245,6 +1319,8 @@ function App() {
         />
       ) : screen === "providers" ? (
         <ProvidersDashboard />
+      ) : screen === "analytics" ? (
+        <ProductAnalyticsScreen />
       ) : screen === "report" && report ? (
         <Report result={report} onHome={() => setScreen("home")} />
       ) : loading ? (
@@ -1273,6 +1349,7 @@ function App() {
       active={screen}
       onHome={() => setScreen("home")}
       onProviders={() => setScreen("providers")}
+      onAnalytics={() => setScreen("analytics")}
       onLogout={() => {
         setUser("");
         setReport(undefined);

@@ -7,7 +7,14 @@ from rbac.repository import SqlAlchemyRbacRepository
 
 
 class RbacBetaRoles(RolePort):
-    ADMIN_CODES = {"superadmin", "admin", "SUPERADMIN", "ADMIN"}
+    ADMIN_CODES = {
+        "superadmin",
+        "admin",
+        "organization_admin",
+        "SUPERADMIN",
+        "ADMIN",
+        "ORGANIZATION_ADMIN",
+    }
 
     def __init__(self, db: Session) -> None:
         self.db = db

@@ -30,6 +30,20 @@ export type ProviderItem = {
   availability: string; free_tier: boolean; priority: number;
   streaming: boolean; reasoning: boolean; vision: boolean;
 };
+export type ProductAnalyticsDashboard = {
+  period: "HOURLY" | "DAILY" | "WEEKLY" | "MONTHLY";
+  overview: Record<string, number>;
+  users: Record<string, unknown>;
+  organizations: Record<string, unknown>;
+  sessions: Record<string, unknown>;
+  research: Record<string, unknown>;
+  reports: Record<string, unknown>;
+  providers: Record<string, unknown>;
+  feedback: Record<string, unknown>;
+  errors: Record<string, unknown>;
+  trends: Array<Record<string, number | string>>;
+  cached: boolean;
+};
 
 export class ApiClient {
   private token?: string;
@@ -75,6 +89,13 @@ export class ApiClient {
   listProviders() { return this.request<ProviderItem[]>("/providers"); }
   routerStatus() {
     return this.request<{status: string; costs: Record<string, number>}>('/router/status');
+  }
+  productAnalytics(period = "DAILY", provider = "") {
+    const query = new URLSearchParams({ period });
+    if (provider) query.set("provider", provider);
+    return this.request<ProductAnalyticsDashboard>(
+      `/product-analytics/dashboard?${query.toString()}`,
+    );
   }
   finalReport(id: number) {
     return this.request<Record<string, unknown>>(`/research/${id}/final-report`);

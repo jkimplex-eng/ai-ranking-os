@@ -36,3 +36,22 @@ and Redis are independently deployable containers.
 RC1 targets 99.9% service availability. Router overhead objectives are p50 ≤50
 ms, p95 ≤150 ms, and p99 ≤500 ms excluding provider latency. Recovery objectives
 are RPO ≤5 minutes and RTO ≤30 minutes.
+## Product Analytics bounded context
+
+`product_analytics` is an independent telemetry bounded context. HTTP and domain
+producers submit normalized `AnalyticsEvent` records through one service; the
+module never imports Research models or UI components. Its repository owns the
+append-only event stream, sessions, and materialized `AnalyticsReport` aggregates.
+The engine computes usage, retention, operational research/report indicators,
+provider consumption, feedback, errors, and time buckets. Cached aggregates avoid
+replaying the complete event stream on every dashboard request.
+
+```text
+HTTP/domain producers -> ProductAnalyticsService -> AnalyticsEvent repository
+                                             |-> aggregation engine
+                                             |-> cached AnalyticsReport
+                                             `-> dashboard/export API -> Web UI
+```
+
+Authorization is applied at the API adapter through the platform administrator
+dependency. The core service and repository remain transport- and screen-neutral.

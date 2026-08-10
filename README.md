@@ -379,7 +379,18 @@ alembic -c backend/alembic.ini revision --autogenerate -m "describe change"
 - `benchmark/` — comparative rankings, percentiles, and metric deltas
 - `export_engine/` — streaming CSV, XLSX, JSON, and Parquet exports
 - `insights/` — deterministic growth, decline, anomaly, leader, and recommendation detection
+- `product_analytics/` — privacy-aware product events, sessions, cached aggregates,
+  dashboard metrics, filters, and CSV/JSON/XLSX exports
 - `knowledge/` — retrieval assets and taxonomies
 - `infra/` — deployment and infrastructure definitions
 - `docs/` — architecture and operating documentation
 - `tests/` — automated tests
+
+## Product Analytics
+
+System and organization administrators can open **Product Analytics** in the
+application or request `GET /product-analytics/dashboard`. The dashboard supports
+hourly, daily, weekly, and monthly periods plus organization, user, provider,
+template, region, language, and date filters. Raw IP addresses are never stored;
+the request instrumentation persists only a salted hash. Exports are available at
+`GET /product-analytics/export/{format_name}` for `csv`, `json`, and `xlsx`.

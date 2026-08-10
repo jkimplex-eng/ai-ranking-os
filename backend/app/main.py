@@ -45,6 +45,10 @@ from model_evaluation.router import router as model_evaluation_router
 from notification_center.router import router as notification_center_router
 from observability.router import router as observability_router
 from product.router import router as product_router
+from product_analytics.instrumentation import request_event
+from product_analytics.repository import ProductAnalyticsRepository
+from product_analytics.router import router as product_analytics_router
+from product_analytics.service import ProductAnalyticsService
 from project_monitoring.router import router as project_monitoring_router
 from provider_discovery.router import router as provider_discovery_router
 from provider_recommendation.router import router as provider_recommendation_router
@@ -112,6 +116,7 @@ app.include_router(ai_visibility_router)
 app.include_router(entity_extraction_router)
 app.include_router(query_intent_router)
 app.include_router(product_router)
+app.include_router(product_analytics_router)
 app.include_router(project_monitoring_router)
 app.include_router(research_router)
 app.include_router(recommendation_router)
@@ -151,6 +156,23 @@ async def observe_http(request: Request, call_next):
     try:
         response = await call_next(request)
     except Exception:
+        try:
+            with SessionLocal() as analytics_db:
+                ProductAnalyticsService(ProductAnalyticsRepository(analytics_db)).record(
+                    request_event(
+                        method=request.method,
+                        route=request.url.path,
+                        status=500,
+                        latency_ms=(perf_counter() - started) * 1000,
+                        user_id=None,
+                        session_id=None,
+                        ip_address=request.client.host if request.client else None,
+                        ip_salt=settings.auth_jwt_secret,
+                        user_agent=request.headers.get("user-agent"),
+                    )
+                )
+        except Exception:
+            logger.exception("product_analytics_error_record_failed")
         logger.exception(
             "request_failed",
             extra={"latency_ms": round((perf_counter() - started) * 1000, 2)},
@@ -175,6 +197,27 @@ async def observe_http(request: Request, call_next):
         response.status_code,
         extra={"latency_ms": round((perf_counter() - started) * 1000, 2)},
     )
+    if not request.url.path.startswith("/product-analytics"):
+        try:
+            principal_user_id = getattr(
+                principal, "user_id", getattr(principal, "id", None)
+            )
+            with SessionLocal() as analytics_db:
+                ProductAnalyticsService(ProductAnalyticsRepository(analytics_db)).record(
+                    request_event(
+                        method=request.method,
+                        route=path,
+                        status=response.status_code,
+                        latency_ms=(perf_counter() - started) * 1000,
+                        user_id=int(principal_user_id) if principal_user_id else None,
+                        session_id=str(getattr(principal, "session_id", "")) or None,
+                        ip_address=request.client.host if request.client else None,
+                        ip_salt=settings.auth_jwt_secret,
+                        user_agent=request.headers.get("user-agent"),
+                    )
+                )
+        except Exception:
+            logger.exception("product_analytics_record_failed")
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
