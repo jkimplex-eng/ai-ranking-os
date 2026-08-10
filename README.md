@@ -26,6 +26,11 @@ For the reproducible Skinjestique demo, see [FIRST_RESEARCH.md](FIRST_RESEARCH.m
 python scripts/run_skinjestique_demo.py --output skinjestique-report.json
 ```
 
+Closed Beta onboarding and operating gates are documented in
+[BETA_GUIDE.md](docs/BETA_GUIDE.md),
+[BETA_PRODUCTION_CHECKLIST.md](docs/BETA_PRODUCTION_CHECKLIST.md), and
+[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+
 ## Stack
 
 - Python 3.13
