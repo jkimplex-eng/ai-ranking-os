@@ -300,3 +300,35 @@ def test_bulk_research_uses_common_queue_and_returns_summary(client: TestClient)
         },
     )
     assert duplicate.status_code == 422
+
+
+def test_report_center_search_tags_archive_and_json_export(client: TestClient) -> None:
+    project_id = client.post(
+        "/workspace/projects", json={"name": "Report portfolio"}
+    ).json()["id"]
+    research = client.post(
+        "/research",
+        json={"project_id": project_id, "title": "Skinjestique GEO Audit"},
+    ).json()
+    listing = client.get(
+        "/reports", params={"project_id": project_id, "search": "skinjestique"}
+    )
+    assert listing.status_code == 200
+    assert listing.json()["total"] == 1
+    tagged = client.patch(
+        f"/reports/{research['id']}", json={"tags": ["weekly", "client"]}
+    )
+    assert tagged.status_code == 200
+    assert tagged.json()["tags"] == ["weekly", "client"]
+    assert client.get("/reports", params={"tag": "weekly"}).json()["total"] == 1
+
+    exported = client.get(f"/reports/{research['id']}/export")
+    assert exported.status_code == 200
+    assert exported.json()["research"]["id"] == research["id"]
+    assert "attachment" in exported.headers["content-disposition"]
+
+    assert client.patch(
+        f"/reports/{research['id']}", json={"archived": True}
+    ).status_code == 200
+    assert client.get("/reports").json()["total"] == 0
+    assert client.get("/reports", params={"archived": True}).json()["total"] == 1
