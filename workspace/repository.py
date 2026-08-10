@@ -2,7 +2,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from research.models import Research, ResearchScore
-from workspace.models import Project, ProjectCompetitor, UserWorkspace
+from workspace.models import Project, ProjectCompetitor, ProjectDomain, UserWorkspace
 
 
 class WorkspaceRepository:
@@ -113,6 +113,41 @@ class CompetitorRepository:
         return item
 
     def save(self, item: ProjectCompetitor) -> ProjectCompetitor:
+        self.db.add(item)
+        self.db.commit()
+        self.db.refresh(item)
+        return item
+
+
+class DomainRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def list(self, project_id: int) -> list[ProjectDomain]:
+        return list(
+            self.db.scalars(
+                select(ProjectDomain)
+                .where(ProjectDomain.project_id == project_id)
+                .order_by(ProjectDomain.is_primary.desc(), ProjectDomain.hostname)
+            )
+        )
+
+    def get(self, project_id: int, domain_id: int) -> ProjectDomain:
+        item = self.db.scalar(
+            select(ProjectDomain).where(
+                ProjectDomain.id == domain_id,
+                ProjectDomain.project_id == project_id,
+            )
+        )
+        if item is None:
+            raise ProjectNotFoundError(f"Domain {domain_id} not found")
+        return item
+
+    def save(self, item: ProjectDomain) -> ProjectDomain:
+        if item.is_primary:
+            for current in self.list(item.project_id):
+                if current.id != item.id:
+                    current.is_primary = False
         self.db.add(item)
         self.db.commit()
         self.db.refresh(item)

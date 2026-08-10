@@ -88,3 +88,38 @@ class ProjectCompetitor(Base):
         onupdate=text("CURRENT_TIMESTAMP"),
         nullable=False,
     )
+
+
+class ProjectDomain(Base):
+    __tablename__ = "project_domains"
+    __table_args__ = (
+        UniqueConstraint("project_id", "hostname", name="uq_project_domains_hostname"),
+        Index("ix_project_domains_project", "project_id", "active"),
+        Index(
+            "uq_project_domains_primary",
+            "project_id",
+            unique=True,
+            postgresql_where=text("is_primary = true"),
+            sqlite_where=text("is_primary = 1"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("workspace_projects.id", ondelete="CASCADE"), nullable=False
+    )
+    hostname: Mapped[str] = mapped_column(String(253), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(253), nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    brands: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    settings: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("CURRENT_TIMESTAMP"),
+        onupdate=text("CURRENT_TIMESTAMP"),
+        nullable=False,
+    )

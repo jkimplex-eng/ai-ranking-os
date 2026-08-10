@@ -1,8 +1,11 @@
+from urllib.parse import urlsplit
+
 from sqlalchemy.orm import Session
 
-from workspace.models import Project, ProjectCompetitor
+from workspace.models import Project, ProjectCompetitor, ProjectDomain
 from workspace.repository import (
     CompetitorRepository,
+    DomainRepository,
     ProjectNotFoundError,
     ProjectRepository,
     WorkspaceRepository,
@@ -12,6 +15,10 @@ from workspace.schemas import (
     CompetitorImport,
     CompetitorRead,
     CompetitorUpdate,
+    DomainCreate,
+    DomainImport,
+    DomainRead,
+    DomainUpdate,
     ProjectCreate,
     ProjectRead,
     ProjectUpdate,
@@ -75,6 +82,7 @@ class ProjectService:
         self.workspaces = WorkspaceRepository(db)
         self.projects = ProjectRepository(db)
         self.competitors = CompetitorRepository(db)
+        self.domains = DomainRepository(db)
 
     def _workspace_id(self, user_id: int) -> int:
         return self.workspaces.get_or_create(user_id).id
@@ -159,6 +167,86 @@ class ProjectService:
             self.db.add(item)
         self.db.commit()
         return self.list_competitors(user_id, project_id)
+
+    @staticmethod
+    def _hostname(value: str) -> tuple[str, str]:
+        candidate = value.strip()
+        parsed = urlsplit(candidate if "://" in candidate else f"//{candidate}")
+        host = (parsed.hostname or "").rstrip(".").casefold()
+        if not host or len(host) > 253 or "." not in host:
+            raise ValueError("A valid domain hostname is required")
+        try:
+            ascii_host = host.encode("idna").decode("ascii")
+        except UnicodeError as error:
+            raise ValueError("A valid domain hostname is required") from error
+        return ascii_host, host
+
+    def list_domains(self, user_id: int, project_id: int) -> list[DomainRead]:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        return [DomainRead.model_validate(item) for item in self.domains.list(project_id)]
+
+    def create_domain(
+        self, user_id: int, project_id: int, payload: DomainCreate
+    ) -> DomainRead:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        hostname, display = self._hostname(payload.hostname)
+        values = payload.model_dump(exclude={"hostname", "display_name"})
+        item = ProjectDomain(
+            project_id=project_id,
+            hostname=hostname,
+            display_name=payload.display_name or display,
+            **values,
+        )
+        if not self.domains.list(project_id):
+            item.is_primary = True
+        return DomainRead.model_validate(self.domains.save(item))
+
+    def update_domain(
+        self,
+        user_id: int,
+        project_id: int,
+        domain_id: int,
+        payload: DomainUpdate,
+    ) -> DomainRead:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        item = self.domains.get(project_id, domain_id)
+        changes = payload.model_dump(exclude_unset=True)
+        if "hostname" in changes:
+            item.hostname, default_display = self._hostname(changes.pop("hostname"))
+            if "display_name" not in changes:
+                item.display_name = default_display
+        for field, value in changes.items():
+            setattr(item, field, value)
+        return DomainRead.model_validate(self.domains.save(item))
+
+    def delete_domain(self, user_id: int, project_id: int, domain_id: int) -> None:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        item = self.domains.get(project_id, domain_id)
+        self.db.delete(item)
+        self.db.commit()
+
+    def import_domains(
+        self, user_id: int, project_id: int, payload: DomainImport
+    ) -> list[DomainRead]:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        existing = {item.hostname: item for item in self.domains.list(project_id)}
+        for incoming in payload.domains:
+            hostname, display = self._hostname(incoming.hostname)
+            item = existing.get(hostname)
+            values = incoming.model_dump(exclude={"hostname", "display_name"})
+            if item is None:
+                item = ProjectDomain(
+                    project_id=project_id,
+                    hostname=hostname,
+                    display_name=incoming.display_name or display,
+                    **values,
+                )
+            else:
+                item.display_name = incoming.display_name or display
+                for field, value in values.items():
+                    setattr(item, field, value)
+            self.domains.save(item)
+        return self.list_domains(user_id, project_id)
 
 
 __all__ = ["ProjectNotFoundError", "ProjectService", "WorkspaceService"]

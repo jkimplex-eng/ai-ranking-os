@@ -101,3 +101,40 @@ class CompetitorRead(CompetitorCreate):
 
 class CompetitorImport(BaseModel):
     competitors: list[CompetitorCreate] = Field(min_length=1, max_length=500)
+
+
+class DomainCreate(BaseModel):
+    hostname: str = Field(min_length=1, max_length=500)
+    display_name: str | None = Field(default=None, max_length=253)
+    is_primary: bool = False
+    active: bool = True
+    brands: list[str] = Field(default_factory=list, max_length=100)
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+class DomainUpdate(BaseModel):
+    hostname: str | None = Field(default=None, min_length=1, max_length=500)
+    display_name: str | None = Field(default=None, min_length=1, max_length=253)
+    is_primary: bool | None = None
+    active: bool | None = None
+    brands: list[str] | None = Field(default=None, max_length=100)
+    settings: dict[str, Any] | None = None
+
+
+class DomainRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    project_id: int
+    hostname: str
+    display_name: str
+    is_primary: bool
+    active: bool
+    brands: list[str]
+    settings: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+
+class DomainImport(BaseModel):
+    domains: list[DomainCreate] = Field(min_length=1, max_length=500)

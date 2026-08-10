@@ -11,6 +11,10 @@ from workspace.schemas import (
     CompetitorImport,
     CompetitorRead,
     CompetitorUpdate,
+    DomainCreate,
+    DomainImport,
+    DomainRead,
+    DomainUpdate,
     ProjectCreate,
     ProjectRead,
     ProjectUpdate,
@@ -154,3 +158,79 @@ def import_competitors(
         return service.import_competitors(user_id, project_id, payload)
     except ProjectNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.get("/projects/{project_id}/domains", response_model=list[DomainRead])
+def list_domains(
+    project_id: int, user_id: CurrentUserId, service: ProjectServiceDependency
+) -> list[DomainRead]:
+    try:
+        return service.list_domains(user_id, project_id)
+    except ProjectNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post(
+    "/projects/{project_id}/domains",
+    response_model=DomainRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_domain(
+    project_id: int,
+    payload: DomainCreate,
+    user_id: CurrentUserId,
+    service: ProjectServiceDependency,
+) -> DomainRead:
+    try:
+        return service.create_domain(user_id, project_id, payload)
+    except ProjectNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.patch("/projects/{project_id}/domains/{domain_id}", response_model=DomainRead)
+def update_domain(
+    project_id: int,
+    domain_id: int,
+    payload: DomainUpdate,
+    user_id: CurrentUserId,
+    service: ProjectServiceDependency,
+) -> DomainRead:
+    try:
+        return service.update_domain(user_id, project_id, domain_id, payload)
+    except ProjectNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.delete(
+    "/projects/{project_id}/domains/{domain_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_domain(
+    project_id: int,
+    domain_id: int,
+    user_id: CurrentUserId,
+    service: ProjectServiceDependency,
+) -> Response:
+    try:
+        service.delete_domain(user_id, project_id, domain_id)
+    except ProjectNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/projects/{project_id}/domains/import", response_model=list[DomainRead])
+def import_domains(
+    project_id: int,
+    payload: DomainImport,
+    user_id: CurrentUserId,
+    service: ProjectServiceDependency,
+) -> list[DomainRead]:
+    try:
+        return service.import_domains(user_id, project_id, payload)
+    except ProjectNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error

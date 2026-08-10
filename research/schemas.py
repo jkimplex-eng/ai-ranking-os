@@ -19,6 +19,7 @@ class ApiModel(BaseModel):
 
 class ResearchCreate(BaseModel):
     project_id: int | None = Field(default=None, ge=1)
+    domain_id: int | None = Field(default=None, ge=1)
     entity_id: UUID | None = None
     title: str = Field(min_length=1, max_length=300)
     description: str | None = None
@@ -29,6 +30,7 @@ class ResearchCreate(BaseModel):
 
 class ResearchUpdate(BaseModel):
     project_id: int | None = Field(default=None, ge=1)
+    domain_id: int | None = Field(default=None, ge=1)
     entity_id: UUID | None = None
     title: str | None = Field(default=None, min_length=1, max_length=300)
     description: str | None = None
@@ -40,6 +42,7 @@ class ResearchUpdate(BaseModel):
 class ResearchRead(ApiModel):
     id: int
     project_id: int | None
+    domain_id: int | None
     entity_id: UUID | None
     title: str
     description: str | None

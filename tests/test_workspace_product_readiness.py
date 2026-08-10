@@ -131,3 +131,39 @@ def test_competitor_management_and_idempotent_import(client: TestClient) -> None
     assert client.delete(
         f"/workspace/projects/{project_id}/competitors/{competitor_id}"
     ).status_code == 204
+
+
+def test_multi_domain_management_and_research_binding(client: TestClient) -> None:
+    project_id = client.post("/workspace/projects", json={"name": "Portfolio"}).json()["id"]
+    primary = client.post(
+        f"/workspace/projects/{project_id}/domains",
+        json={"hostname": "https://разуммаркета.рф/path", "brands": ["Разум Маркета"]},
+    )
+    assert primary.status_code == 201
+    assert primary.json()["hostname"].startswith("xn--")
+    assert primary.json()["is_primary"] is True
+    secondary = client.post(
+        f"/workspace/projects/{project_id}/domains",
+        json={"hostname": "app.разуммаркета.рф", "is_primary": True},
+    )
+    assert secondary.status_code == 201
+    domains = client.get(f"/workspace/projects/{project_id}/domains").json()
+    assert len(domains) == 2
+    assert sum(item["is_primary"] for item in domains) == 1
+    assert next(item for item in domains if item["id"] == primary.json()["id"])[
+        "is_primary"
+    ] is False
+
+    research = client.post(
+        "/research",
+        json={
+            "project_id": project_id,
+            "domain_id": secondary.json()["id"],
+            "title": "Domain GEO audit",
+        },
+    )
+    assert research.status_code == 201
+    assert research.json()["domain_id"] == secondary.json()["id"]
+    assert client.post(
+        f"/workspace/projects/{project_id}/domains", json={"hostname": "not-a-domain"}
+    ).status_code == 422
