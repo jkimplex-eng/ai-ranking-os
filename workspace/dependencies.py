@@ -4,6 +4,7 @@ from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
+from research.workspace_adapter import SqlAlchemyResearchLauncher
 from workspace.service import ProjectService, WorkspaceService
 
 
@@ -21,7 +22,7 @@ WorkspaceServiceDependency = Annotated[WorkspaceService, Depends(workspace_servi
 
 
 def project_service(db: Annotated[Session, Depends(get_db)]) -> ProjectService:
-    return ProjectService(db)
+    return ProjectService(db, SqlAlchemyResearchLauncher(db))
 
 
 ProjectServiceDependency = Annotated[ProjectService, Depends(project_service)]

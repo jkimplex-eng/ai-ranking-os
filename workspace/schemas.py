@@ -3,6 +3,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.app.llm_router.schemas import RoutingProfile
+
 
 class WorkspaceUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
@@ -138,3 +140,46 @@ class DomainRead(BaseModel):
 
 class DomainImport(BaseModel):
     domains: list[DomainCreate] = Field(min_length=1, max_length=500)
+
+
+class SavedConfigurationCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    template_code: str = Field(default="ai-visibility", min_length=1, max_length=100)
+    routing_profile: RoutingProfile = RoutingProfile.BALANCED
+    languages: list[str] = Field(default_factory=lambda: ["ru"], min_length=1)
+    regions: list[str] = Field(default_factory=lambda: ["GLOBAL"], min_length=1)
+    prompt_count: int = Field(default=1, ge=1, le=100)
+    schedule_hint: str | None = Field(default=None, max_length=100)
+    configuration: dict[str, Any] = Field(default_factory=dict)
+
+
+class SavedConfigurationUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    template_code: str | None = Field(default=None, min_length=1, max_length=100)
+    routing_profile: RoutingProfile | None = None
+    languages: list[str] | None = Field(default=None, min_length=1)
+    regions: list[str] | None = Field(default=None, min_length=1)
+    prompt_count: int | None = Field(default=None, ge=1, le=100)
+    schedule_hint: str | None = Field(default=None, max_length=100)
+    configuration: dict[str, Any] | None = None
+
+
+class SavedConfigurationRead(SavedConfigurationCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    project_id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class SavedConfigurationRunRequest(BaseModel):
+    domain_id: int | None = Field(default=None, ge=1)
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    query: str | None = Field(default=None, min_length=1, max_length=100_000)
+
+
+class SavedConfigurationRunRead(BaseModel):
+    research_id: int
+    job_id: int
+    state: str

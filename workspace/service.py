@@ -2,12 +2,20 @@ from urllib.parse import urlsplit
 
 from sqlalchemy.orm import Session
 
-from workspace.models import Project, ProjectCompetitor, ProjectDomain
+from backend.app.llm_router.schemas import RoutingProfile
+from research.ports import ResearchLaunchPort, ResearchLaunchRequest
+from workspace.models import (
+    Project,
+    ProjectCompetitor,
+    ProjectDomain,
+    SavedResearchConfiguration,
+)
 from workspace.repository import (
     CompetitorRepository,
     DomainRepository,
     ProjectNotFoundError,
     ProjectRepository,
+    SavedConfigurationRepository,
     WorkspaceRepository,
 )
 from workspace.schemas import (
@@ -22,6 +30,11 @@ from workspace.schemas import (
     ProjectCreate,
     ProjectRead,
     ProjectUpdate,
+    SavedConfigurationCreate,
+    SavedConfigurationRead,
+    SavedConfigurationRunRead,
+    SavedConfigurationRunRequest,
+    SavedConfigurationUpdate,
     WorkspaceRead,
     WorkspaceReportItem,
     WorkspaceResearchItem,
@@ -77,12 +90,14 @@ class WorkspaceService:
 
 
 class ProjectService:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, launcher: ResearchLaunchPort | None = None) -> None:
         self.db = db
         self.workspaces = WorkspaceRepository(db)
         self.projects = ProjectRepository(db)
         self.competitors = CompetitorRepository(db)
         self.domains = DomainRepository(db)
+        self.configurations = SavedConfigurationRepository(db)
+        self.launcher = launcher
 
     def _workspace_id(self, user_id: int) -> int:
         return self.workspaces.get_or_create(user_id).id
@@ -247,6 +262,76 @@ class ProjectService:
                     setattr(item, field, value)
             self.domains.save(item)
         return self.list_domains(user_id, project_id)
+
+    def list_configurations(
+        self, user_id: int, project_id: int
+    ) -> list[SavedConfigurationRead]:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        return [
+            SavedConfigurationRead.model_validate(item)
+            for item in self.configurations.list(project_id)
+        ]
+
+    def create_configuration(
+        self, user_id: int, project_id: int, payload: SavedConfigurationCreate
+    ) -> SavedConfigurationRead:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        item = SavedResearchConfiguration(
+            project_id=project_id, **payload.model_dump(mode="json")
+        )
+        return SavedConfigurationRead.model_validate(self.configurations.save(item))
+
+    def update_configuration(
+        self,
+        user_id: int,
+        project_id: int,
+        configuration_id: int,
+        payload: SavedConfigurationUpdate,
+    ) -> SavedConfigurationRead:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        item = self.configurations.get(project_id, configuration_id)
+        for field, value in payload.model_dump(exclude_unset=True, mode="json").items():
+            setattr(item, field, value)
+        return SavedConfigurationRead.model_validate(self.configurations.save(item))
+
+    def delete_configuration(
+        self, user_id: int, project_id: int, configuration_id: int
+    ) -> None:
+        self.projects.get(self._workspace_id(user_id), project_id)
+        item = self.configurations.get(project_id, configuration_id)
+        self.db.delete(item)
+        self.db.commit()
+
+    def run_configuration(
+        self,
+        user_id: int,
+        project_id: int,
+        configuration_id: int,
+        payload: SavedConfigurationRunRequest,
+    ) -> SavedConfigurationRunRead:
+        project = self.projects.get(self._workspace_id(user_id), project_id)
+        configuration = self.configurations.get(project_id, configuration_id)
+        if payload.domain_id is not None:
+            self.domains.get(project_id, payload.domain_id)
+        if self.launcher is None:
+            raise RuntimeError("Research launcher is not configured")
+        receipt = self.launcher.launch(
+            ResearchLaunchRequest(
+                project_id=project_id,
+                domain_id=payload.domain_id,
+                title=payload.title or f"{project.name}: {configuration.name}",
+                query=payload.query or f"Run {configuration.template_code} for {project.name}",
+                routing_profile=RoutingProfile(configuration.routing_profile),
+                languages=configuration.languages,
+                regions=configuration.regions,
+                template_code=configuration.template_code,
+            )
+        )
+        return SavedConfigurationRunRead(
+            research_id=receipt.research_id,
+            job_id=receipt.job_id,
+            state=receipt.state,
+        )
 
 
 __all__ = ["ProjectNotFoundError", "ProjectService", "WorkspaceService"]

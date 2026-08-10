@@ -2,7 +2,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from research.models import Research, ResearchScore
-from workspace.models import Project, ProjectCompetitor, ProjectDomain, UserWorkspace
+from workspace.models import (
+    Project,
+    ProjectCompetitor,
+    ProjectDomain,
+    SavedResearchConfiguration,
+    UserWorkspace,
+)
 
 
 class WorkspaceRepository:
@@ -148,6 +154,37 @@ class DomainRepository:
             for current in self.list(item.project_id):
                 if current.id != item.id:
                     current.is_primary = False
+        self.db.add(item)
+        self.db.commit()
+        self.db.refresh(item)
+        return item
+
+
+class SavedConfigurationRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def list(self, project_id: int) -> list[SavedResearchConfiguration]:
+        return list(
+            self.db.scalars(
+                select(SavedResearchConfiguration)
+                .where(SavedResearchConfiguration.project_id == project_id)
+                .order_by(SavedResearchConfiguration.name)
+            )
+        )
+
+    def get(self, project_id: int, configuration_id: int) -> SavedResearchConfiguration:
+        item = self.db.scalar(
+            select(SavedResearchConfiguration).where(
+                SavedResearchConfiguration.id == configuration_id,
+                SavedResearchConfiguration.project_id == project_id,
+            )
+        )
+        if item is None:
+            raise ProjectNotFoundError(f"Saved configuration {configuration_id} not found")
+        return item
+
+    def save(self, item: SavedResearchConfiguration) -> SavedResearchConfiguration:
         self.db.add(item)
         self.db.commit()
         self.db.refresh(item)

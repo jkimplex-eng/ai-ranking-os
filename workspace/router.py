@@ -18,6 +18,11 @@ from workspace.schemas import (
     ProjectCreate,
     ProjectRead,
     ProjectUpdate,
+    SavedConfigurationCreate,
+    SavedConfigurationRead,
+    SavedConfigurationRunRead,
+    SavedConfigurationRunRequest,
+    SavedConfigurationUpdate,
     WorkspaceRead,
     WorkspaceUpdate,
 )
@@ -234,3 +239,89 @@ def import_domains(
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.get(
+    "/projects/{project_id}/configurations",
+    response_model=list[SavedConfigurationRead],
+)
+def list_configurations(
+    project_id: int, user_id: CurrentUserId, service: ProjectServiceDependency
+) -> list[SavedConfigurationRead]:
+    try:
+        return service.list_configurations(user_id, project_id)
+    except ProjectNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post(
+    "/projects/{project_id}/configurations",
+    response_model=SavedConfigurationRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_configuration(
+    project_id: int,
+    payload: SavedConfigurationCreate,
+    user_id: CurrentUserId,
+    service: ProjectServiceDependency,
+) -> SavedConfigurationRead:
+    try:
+        return service.create_configuration(user_id, project_id, payload)
+    except ProjectNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.patch(
+    "/projects/{project_id}/configurations/{configuration_id}",
+    response_model=SavedConfigurationRead,
+)
+def update_configuration(
+    project_id: int,
+    configuration_id: int,
+    payload: SavedConfigurationUpdate,
+    user_id: CurrentUserId,
+    service: ProjectServiceDependency,
+) -> SavedConfigurationRead:
+    try:
+        return service.update_configuration(
+            user_id, project_id, configuration_id, payload
+        )
+    except ProjectNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.delete(
+    "/projects/{project_id}/configurations/{configuration_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_configuration(
+    project_id: int,
+    configuration_id: int,
+    user_id: CurrentUserId,
+    service: ProjectServiceDependency,
+) -> Response:
+    try:
+        service.delete_configuration(user_id, project_id, configuration_id)
+    except ProjectNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/projects/{project_id}/configurations/{configuration_id}/run",
+    response_model=SavedConfigurationRunRead,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def run_configuration(
+    project_id: int,
+    configuration_id: int,
+    payload: SavedConfigurationRunRequest,
+    user_id: CurrentUserId,
+    service: ProjectServiceDependency,
+) -> SavedConfigurationRunRead:
+    try:
+        return service.run_configuration(
+            user_id, project_id, configuration_id, payload
+        )
+    except ProjectNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error

@@ -203,3 +203,55 @@ def test_research_templates_2_are_extensible(client: TestClient) -> None:
             "pipeline": ["report"],
         },
     ).status_code == 422
+
+
+def test_saved_configuration_crud_and_durable_launch(client: TestClient) -> None:
+    project_id = client.post(
+        "/workspace/projects", json={"name": "Skinjestique"}
+    ).json()["id"]
+    domain_id = client.post(
+        f"/workspace/projects/{project_id}/domains",
+        json={"hostname": "skinjestique.example"},
+    ).json()["id"]
+    base_url = f"/workspace/projects/{project_id}/configurations"
+
+    created = client.post(
+        base_url,
+        json={
+            "name": "Weekly visibility",
+            "template_code": "ai-visibility",
+            "routing_profile": "BALANCED",
+            "languages": ["ru", "en"],
+            "regions": ["RU"],
+            "prompt_count": 6,
+            "schedule_hint": "weekly",
+        },
+    )
+    assert created.status_code == 201
+    configuration_id = created.json()["id"]
+    assert client.get(base_url).json()[0]["prompt_count"] == 6
+
+    updated = client.patch(
+        f"{base_url}/{configuration_id}",
+        json={"routing_profile": "HIGH_QUALITY", "prompt_count": 8},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["routing_profile"] == "HIGH_QUALITY"
+
+    launched = client.post(
+        f"{base_url}/{configuration_id}/run",
+        json={
+            "domain_id": domain_id,
+            "title": "Skinjestique weekly visibility",
+            "query": "Where is Skinjestique visible in AI answers?",
+        },
+    )
+    assert launched.status_code == 202
+    assert launched.json()["state"] == "PENDING"
+    research = client.get(f"/research/{launched.json()['research_id']}")
+    assert research.status_code == 200
+    assert research.json()["project_id"] == project_id
+    assert research.json()["domain_id"] == domain_id
+
+    assert client.delete(f"{base_url}/{configuration_id}").status_code == 204
+    assert client.get(base_url).json() == []
