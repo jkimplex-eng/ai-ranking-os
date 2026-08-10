@@ -381,6 +381,8 @@ alembic -c backend/alembic.ini revision --autogenerate -m "describe change"
 - `insights/` — deterministic growth, decline, anomaly, leader, and recommendation detection
 - `product_analytics/` — privacy-aware product events, sessions, cached aggregates,
   dashboard metrics, filters, and CSV/JSON/XLSX exports
+- `notification_center/` — categorized in-app inbox plus email, Telegram, and
+  webhook delivery outbox with read state, archive, priorities, and pagination
 - `knowledge/` — retrieval assets and taxonomies
 - `infra/` — deployment and infrastructure definitions
 - `docs/` — architecture and operating documentation

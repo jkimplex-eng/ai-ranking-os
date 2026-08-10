@@ -544,19 +544,30 @@ def test_notification_center_ui_email_telegram_outbox(client: TestClient) -> Non
             "resource_type": "provider",
             "resource_id": "gemini",
             "channels": ["UI", "EMAIL", "TELEGRAM"],
+            "category": "SYSTEM",
+            "priority": "HIGH",
         },
     )
     assert created.status_code == 201
     item = created.json()
     states = {delivery["channel"]: delivery["status"] for delivery in item["deliveries"]}
     assert states == {"UI": "DELIVERED", "EMAIL": "PENDING", "TELEGRAM": "PENDING"}
+    assert item["priority"] == "HIGH"
     assert client.get("/notifications", params={"unread_only": True}).json()[0][
         "id"
     ] == item["id"]
     read = client.post(f"/notifications/{item['id']}/read")
     assert read.status_code == 200
     assert read.json()["is_read"] is True
+    assert read.json()["read_at"] is not None
     assert client.get("/notifications", params={"unread_only": True}).json() == []
+    summary = client.get("/notifications/summary").json()
+    assert summary == {"unread": 0, "total": 1, "archived": 0}
+    archived = client.post(f"/notifications/{item['id']}/archive")
+    assert archived.status_code == 200
+    assert archived.json()["archived_at"] is not None
+    assert client.get("/notifications").json() == []
+    assert client.get("/notifications", params={"archived": True}).json()[0]["id"] == item["id"]
     invalid = client.post(
         "/notifications/events",
         json={
@@ -567,6 +578,36 @@ def test_notification_center_ui_email_telegram_outbox(client: TestClient) -> Non
         },
     )
     assert invalid.status_code == 422
+
+
+def test_notification_center_standard_product_events_and_filters(client: TestClient) -> None:
+    for event_type, category, priority in (
+        ("RESEARCH_COMPLETED", "RESEARCH", "NORMAL"),
+        ("RESEARCH_FAILED", "RESEARCH", "CRITICAL"),
+        ("REPORT_READY", "REPORT", "NORMAL"),
+        ("ORGANIZATION_INVITATION", "ORGANIZATION", "HIGH"),
+        ("ROLE_CHANGED", "ORGANIZATION", "NORMAL"),
+        ("FEEDBACK_PROCESSED", "FEEDBACK", "LOW"),
+        ("SYSTEM", "SYSTEM", "NORMAL"),
+    ):
+        response = client.post(
+            "/notifications/events",
+            json={
+                "event_type": event_type,
+                "category": category,
+                "priority": priority,
+                "title": event_type,
+                "message": "Product event",
+                "channels": ["UI", "WEBHOOK"],
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["deliveries"][1]["status"] == "PENDING"
+    critical = client.get(
+        "/notifications", params={"category": "RESEARCH", "priority": "CRITICAL"}
+    )
+    assert [item["event_type"] for item in critical.json()] == ["RESEARCH_FAILED"]
+    assert len(client.get("/notifications", params={"offset": 0, "limit": 2}).json()) == 2
 
 
 def test_closed_beta_invitation_access_limits_search_and_audit(client: TestClient) -> None:

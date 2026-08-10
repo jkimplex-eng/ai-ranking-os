@@ -41,3 +41,13 @@
 .analytics-signal.danger { color: var(--danger); background: rgba(239,68,68,.1); }
 @media (max-width: 1000px) { .analytics-kpis, .analytics-three { grid-template-columns: repeat(2, minmax(0, 1fr)); } .analytics-grid { grid-template-columns: 1fr; } }
 @media (max-width: 680px) { .analytics-page { padding: 24px 18px 48px; } .analytics-hero, .analytics-filters { align-items: stretch; flex-direction: column; } .analytics-kpis, .analytics-three { grid-template-columns: 1fr; } }
+.notification-summary { display: grid; min-width: 140px; padding: 16px 20px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+.notification-summary b { font-size: 2rem; color: var(--accent); }.notification-summary span { color: var(--muted); font-size: .8rem; }
+.notification-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.notification-filters button, .notification-actions button { padding: 8px 12px; color: var(--muted); background: transparent; border: 1px solid var(--border); border-radius: 9px; cursor: pointer; }
+.notification-filters button.active { color: var(--text); background: var(--surface); border-color: var(--accent); }
+.notification-list { display: grid; gap: 10px; }.notification-item { display: grid; grid-template-columns: 5px 1fr auto; gap: 18px; padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; }
+.notification-item.unread { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }.notification-item small, .notification-item p { color: var(--muted); }.notification-item h3 { margin: 6px 0; }.notification-item p { margin: 0; }
+.notification-priority { border-radius: 99px; background: var(--muted); }.notification-priority.high { background: var(--warning); }.notification-priority.critical { background: var(--danger); }.notification-priority.normal { background: var(--accent); }
+.notification-actions { display: flex; align-items: center; gap: 8px; }
+@media (max-width: 680px) { .notification-item { grid-template-columns: 5px 1fr; }.notification-actions { grid-column: 2; flex-wrap: wrap; } }

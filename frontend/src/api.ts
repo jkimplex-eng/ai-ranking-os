@@ -44,6 +44,16 @@ export type ProductAnalyticsDashboard = {
   trends: Array<Record<string, number | string>>;
   cached: boolean;
 };
+export type NotificationItem = {
+  id: number;
+  event_type: string;
+  category: string;
+  priority: string;
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+};
 
 export class ApiClient {
   private token?: string;
@@ -96,6 +106,21 @@ export class ApiClient {
     return this.request<ProductAnalyticsDashboard>(
       `/product-analytics/dashboard?${query.toString()}`,
     );
+  }
+  notifications(category = "") {
+    const query = category ? `?category=${encodeURIComponent(category)}` : "";
+    return this.request<NotificationItem[]>(`/notifications${query}`);
+  }
+  notificationSummary() {
+    return this.request<{ unread: number; total: number; archived: number }>(
+      "/notifications/summary",
+    );
+  }
+  markNotificationRead(id: number) {
+    return this.request<NotificationItem>(`/notifications/${id}/read`, { method: "POST" });
+  }
+  archiveNotification(id: number) {
+    return this.request<NotificationItem>(`/notifications/${id}/archive`, { method: "POST" });
   }
   finalReport(id: number) {
     return this.request<Record<string, unknown>>(`/research/${id}/final-report`);

@@ -55,3 +55,12 @@ HTTP/domain producers -> ProductAnalyticsService -> AnalyticsEvent repository
 
 Authorization is applied at the API adapter through the platform administrator
 dependency. The core service and repository remain transport- and screen-neutral.
+
+## Notification Center
+
+Notification producers use the public `NotificationPort`; they do not know about
+delivery providers. `NotificationService` persists one canonical notification and
+an outbox row per requested channel. In-app delivery is immediate, while email,
+Telegram, and webhook rows remain pending for channel workers implementing
+`DeliveryPort`. The user-scoped inbox supports category and priority filters,
+read timestamps, archive, counters, and bounded pagination.

@@ -1,8 +1,9 @@
-import { StrictMode, useEffect, useMemo, useState } from "react";
+import { StrictMode, useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ApiClient,
   type ProductAnalyticsDashboard as AnalyticsDashboard,
+  type NotificationItem,
   type ProviderItem,
   type ReportResult,
   type WizardPayload,
@@ -43,7 +44,7 @@ const metricMeta = [
   ["Confidence", "confidence_score"],
 ] as const;
 
-type Screen = "home" | "wizard" | "report" | "providers" | "analytics";
+type Screen = "home" | "wizard" | "report" | "providers" | "analytics" | "notifications";
 type ReportShape = {
   executive_summary?: string;
   score?: Record<string, number | string>;
@@ -162,6 +163,7 @@ function Shell({
   onHome,
   onProviders,
   onAnalytics,
+  onNotifications,
   active,
   onLogout,
 }: {
@@ -170,6 +172,7 @@ function Shell({
   onHome: () => void;
   onProviders: () => void;
   onAnalytics: () => void;
+  onNotifications: () => void;
   active: Screen;
   onLogout: () => void;
 }) {
@@ -183,6 +186,7 @@ function Shell({
     ["↗", "History"],
     ["✦", "AI Providers"],
     ["◫", "Product Analytics"],
+    ["♢", "Notifications"],
     ["⚙", "Settings"],
   ];
   return (
@@ -200,6 +204,7 @@ function Shell({
                 (index === 0 && active === "home") ||
                 (label === "AI Providers" && active === "providers") ||
                 (label === "Product Analytics" && active === "analytics")
+                || (label === "Notifications" && active === "notifications")
                   ? "active"
                   : ""
               }
@@ -210,6 +215,8 @@ function Shell({
                     ? onProviders
                     : label === "Product Analytics"
                       ? onAnalytics
+                      : label === "Notifications"
+                        ? onNotifications
                       : undefined
               }
             >
@@ -252,6 +259,30 @@ function Shell({
       </div>
     </div>
   );
+}
+
+function NotificationsScreen() {
+  const [items, setItems] = useState<NotificationItem[]>([]);
+  const [category, setCategory] = useState("");
+  const [summary, setSummary] = useState({ unread: 0, total: 0, archived: 0 });
+  const load = useCallback(
+    () => Promise.all([api.notifications(category), api.notificationSummary()])
+      .then(([notifications, counts]) => { setItems(notifications); setSummary(counts); }),
+    [category],
+  );
+  useEffect(() => { load().catch(() => undefined); }, [load]);
+  return <main className="analytics-page notifications-page">
+    <header className="analytics-hero"><div><span className="eyebrow">INBOX</span><h1>Уведомления</h1><p>Важные изменения проектов, исследований и вашей организации.</p></div>
+      <div className="notification-summary"><b>{summary.unread}</b><span>непрочитанных</span></div></header>
+    <div className="notification-filters" role="group" aria-label="Категории уведомлений">
+      {["", "RESEARCH", "REPORT", "ORGANIZATION", "FEEDBACK", "SYSTEM"].map((value) => <button key={value || "ALL"} className={category === value ? "active" : ""} onClick={() => setCategory(value)}>{value || "Все"}</button>)}
+    </div>
+    <section className="notification-list">{items.length ? items.map((item) => <article className={`notification-item ${item.is_read ? "" : "unread"}`} key={item.id}>
+      <span className={`notification-priority ${item.priority.toLowerCase()}`} />
+      <div><small>{item.category} · {new Date(item.created_at).toLocaleString("ru-RU")}</small><h3>{item.title}</h3><p>{item.message}</p></div>
+      <div className="notification-actions">{!item.is_read && <button onClick={() => api.markNotificationRead(item.id).then(load)}>Прочитано</button>}<button onClick={() => api.archiveNotification(item.id).then(load)}>В архив</button></div>
+    </article>) : <div className="analytics-card empty-state">Здесь пока нет уведомлений.</div>}</section>
+  </main>;
 }
 
 function numeric(section: Record<string, unknown>, key: string) {
@@ -1321,6 +1352,8 @@ function App() {
         <ProvidersDashboard />
       ) : screen === "analytics" ? (
         <ProductAnalyticsScreen />
+      ) : screen === "notifications" ? (
+        <NotificationsScreen />
       ) : screen === "report" && report ? (
         <Report result={report} onHome={() => setScreen("home")} />
       ) : loading ? (
@@ -1350,6 +1383,7 @@ function App() {
       onHome={() => setScreen("home")}
       onProviders={() => setScreen("providers")}
       onAnalytics={() => setScreen("analytics")}
+      onNotifications={() => setScreen("notifications")}
       onLogout={() => {
         setUser("");
         setReport(undefined);
