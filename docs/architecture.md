@@ -64,3 +64,11 @@ an outbox row per requested channel. In-app delivery is immediate, while email,
 Telegram, and webhook rows remain pending for channel workers implementing
 `DeliveryPort`. The user-scoped inbox supports category and priority filters,
 read timestamps, archive, counters, and bounded pagination.
+
+## Organization Workspace
+
+`organization_workspace` owns collaboration state: organizations, memberships,
+invitations, limits, default-workspace selection, project links, and append-only
+activity. Existing personal Workspace APIs remain unchanged. Membership checks
+are centralized in the service layer; owner/admin mutations and user-scoped reads
+share one repository and DI boundary. Invitation tokens are stored only as hashes.

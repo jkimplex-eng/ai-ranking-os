@@ -4,6 +4,7 @@ import {
   ApiClient,
   type ProductAnalyticsDashboard as AnalyticsDashboard,
   type NotificationItem,
+  type OrganizationItem,
   type ProviderItem,
   type ReportResult,
   type WizardPayload,
@@ -44,7 +45,7 @@ const metricMeta = [
   ["Confidence", "confidence_score"],
 ] as const;
 
-type Screen = "home" | "wizard" | "report" | "providers" | "analytics" | "notifications";
+type Screen = "home" | "wizard" | "report" | "providers" | "analytics" | "notifications" | "organization";
 type ReportShape = {
   executive_summary?: string;
   score?: Record<string, number | string>;
@@ -164,6 +165,7 @@ function Shell({
   onProviders,
   onAnalytics,
   onNotifications,
+  onOrganization,
   active,
   onLogout,
 }: {
@@ -173,6 +175,7 @@ function Shell({
   onProviders: () => void;
   onAnalytics: () => void;
   onNotifications: () => void;
+  onOrganization: () => void;
   active: Screen;
   onLogout: () => void;
 }) {
@@ -187,6 +190,7 @@ function Shell({
     ["✦", "AI Providers"],
     ["◫", "Product Analytics"],
     ["♢", "Notifications"],
+    ["◎", "Organization"],
     ["⚙", "Settings"],
   ];
   return (
@@ -205,6 +209,7 @@ function Shell({
                 (label === "AI Providers" && active === "providers") ||
                 (label === "Product Analytics" && active === "analytics")
                 || (label === "Notifications" && active === "notifications")
+                || (label === "Organization" && active === "organization")
                   ? "active"
                   : ""
               }
@@ -217,6 +222,8 @@ function Shell({
                       ? onAnalytics
                       : label === "Notifications"
                         ? onNotifications
+                        : label === "Organization"
+                          ? onOrganization
                       : undefined
               }
             >
@@ -259,6 +266,22 @@ function Shell({
       </div>
     </div>
   );
+}
+
+function OrganizationScreen() {
+  const [organizations, setOrganizations] = useState<OrganizationItem[]>([]);
+  const [selected, setSelected] = useState<number>();
+  const [members, setMembers] = useState<Array<{ id: number; user_id: number; role: string }>>([]);
+  const [activity, setActivity] = useState<Array<{ id: number; action: string; actor_id: number; created_at: string }>>([]);
+  const [email, setEmail] = useState("");
+  const load = useCallback(() => api.organizations().then((items) => { setOrganizations(items); setSelected((current) => current ?? items.find((item) => item.is_default)?.id ?? items[0]?.id); }), []);
+  useEffect(() => { load().catch(() => undefined); }, [load]);
+  useEffect(() => { if (!selected) return; Promise.all([api.organizationMembers(selected), api.organizationActivity(selected)]).then(([memberItems, actions]) => { setMembers(memberItems); setActivity(actions); }).catch(() => undefined); }, [selected]);
+  const current = organizations.find((item) => item.id === selected);
+  return <main className="analytics-page organization-page"><header className="analytics-hero"><div><span className="eyebrow">TEAM WORKSPACE</span><h1>{current?.name ?? "Организация"}</h1><p>Участники, проекты, лимиты и журнал активности команды.</p></div><select value={selected ?? ""} onChange={(event) => { const id = Number(event.target.value); api.switchOrganization(id).then(() => { setSelected(id); load(); }); }}>{organizations.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.role}</option>)}</select></header>
+    <section className="analytics-kpis"><article className="analytics-card metric"><span>Участники</span><strong>{members.length}</strong><small>из {current?.limits.members ?? "—"}</small></article><article className="analytics-card metric"><span>Проекты</span><strong>{current?.limits.projects ?? "—"}</strong><small>доступный лимит</small></article><article className="analytics-card metric"><span>Часовой пояс</span><strong className="small-value">{current?.timezone ?? "UTC"}</strong><small>{current?.country ?? "GLOBAL"}</small></article></section>
+    <section className="analytics-grid"><article className="analytics-card"><h3>Команда</h3>{members.map((member) => <div className="rank-row" key={member.id}><span>User {member.user_id}</span><b>{member.role}</b></div>)}<form className="invite-form" onSubmit={(event) => { event.preventDefault(); if (selected) api.inviteOrganizationMember(selected, email).then(() => setEmail("")); }}><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="email нового участника" required/><button>Пригласить</button></form></article><article className="analytics-card"><h3>Журнал активности</h3>{activity.slice(0, 8).map((item) => <div className="activity-row" key={item.id}><span>{item.action.replaceAll("_", " ")}</span><small>{new Date(item.created_at).toLocaleString("ru-RU")}</small></div>)}</article></section>
+  </main>;
 }
 
 function NotificationsScreen() {
@@ -1354,6 +1377,8 @@ function App() {
         <ProductAnalyticsScreen />
       ) : screen === "notifications" ? (
         <NotificationsScreen />
+      ) : screen === "organization" ? (
+        <OrganizationScreen />
       ) : screen === "report" && report ? (
         <Report result={report} onHome={() => setScreen("home")} />
       ) : loading ? (
@@ -1384,6 +1409,7 @@ function App() {
       onProviders={() => setScreen("providers")}
       onAnalytics={() => setScreen("analytics")}
       onNotifications={() => setScreen("notifications")}
+      onOrganization={() => setScreen("organization")}
       onLogout={() => {
         setUser("");
         setReport(undefined);

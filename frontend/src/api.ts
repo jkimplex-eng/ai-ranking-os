@@ -54,6 +54,14 @@ export type NotificationItem = {
   is_read: boolean;
   created_at: string;
 };
+export type OrganizationItem = {
+  id: number; name: string; slug: string; description: string; role: string;
+  is_default: boolean; country?: string; timezone: string;
+  limits: Record<string, number>; settings: Record<string, unknown>;
+};
+export type OrganizationMember = {
+  id: number; user_id: number; role: string; is_default: boolean; joined_at: string;
+};
 
 export class ApiClient {
   private token?: string;
@@ -122,6 +130,14 @@ export class ApiClient {
   archiveNotification(id: number) {
     return this.request<NotificationItem>(`/notifications/${id}/archive`, { method: "POST" });
   }
+  organizations() { return this.request<OrganizationItem[]>("/organizations"); }
+  createOrganization(payload: { name: string; slug: string }) {
+    return this.request<OrganizationItem>("/organizations", { method: "POST", body: JSON.stringify(payload) });
+  }
+  switchOrganization(id: number) { return this.request<OrganizationItem>(`/organizations/${id}/switch`, { method: "POST" }); }
+  organizationMembers(id: number) { return this.request<OrganizationMember[]>(`/organizations/${id}/members`); }
+  organizationActivity(id: number) { return this.request<Array<{ id: number; action: string; actor_id: number; created_at: string }>>(`/organizations/${id}/activity`); }
+  inviteOrganizationMember(id: number, email: string) { return this.request(`/organizations/${id}/invitations`, { method: "POST", body: JSON.stringify({ email, role: "MEMBER" }) }); }
   finalReport(id: number) {
     return this.request<Record<string, unknown>>(`/research/${id}/final-report`);
   }

@@ -44,6 +44,7 @@ from model_benchmark.router import router as model_benchmark_router
 from model_evaluation.router import router as model_evaluation_router
 from notification_center.router import router as notification_center_router
 from observability.router import router as observability_router
+from organization_workspace.router import router as organization_workspace_router
 from product.router import router as product_router
 from product_analytics.instrumentation import request_event
 from product_analytics.repository import ProductAnalyticsRepository
@@ -105,6 +106,7 @@ app.include_router(rbac_router)
 app.include_router(api_keys_router)
 app.include_router(audit_router)
 app.include_router(observability_router)
+app.include_router(organization_workspace_router)
 app.include_router(cache_router)
 app.include_router(change_detection_router)
 app.include_router(closed_beta_router)

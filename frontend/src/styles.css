@@ -51,3 +51,6 @@
 .notification-priority { border-radius: 99px; background: var(--muted); }.notification-priority.high { background: var(--warning); }.notification-priority.critical { background: var(--danger); }.notification-priority.normal { background: var(--accent); }
 .notification-actions { display: flex; align-items: center; gap: 8px; }
 @media (max-width: 680px) { .notification-item { grid-template-columns: 5px 1fr; }.notification-actions { grid-column: 2; flex-wrap: wrap; } }
+.organization-page .analytics-hero > select { min-width: 230px; padding: 12px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }.small-value { font-size: 1.25rem !important; }
+.invite-form { display: flex; gap: 8px; margin-top: 20px; }.invite-form input { flex: 1; min-width: 0; padding: 10px; color: var(--text); background: var(--background); border: 1px solid var(--border); border-radius: 9px; }.invite-form button { padding: 10px 14px; color: #fff; background: var(--accent); border: 0; border-radius: 9px; }
+.activity-row { display: grid; gap: 4px; padding: 10px 0; border-bottom: 1px solid var(--border); }.activity-row small { color: var(--muted); }
