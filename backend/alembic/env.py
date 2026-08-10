@@ -27,6 +27,7 @@ from influence import models as influence_models  # noqa: F401
 from insights import models as insights_models  # noqa: F401
 from observability import models as observability_models  # noqa: F401
 from product import models as product_models  # noqa: F401
+from project_monitoring import models as project_monitoring_models  # noqa: F401
 from query_executor import models as query_executor_models  # noqa: F401
 from query_intent import models as query_intent_models  # noqa: F401
 from rate_limit import models as rate_limit_models  # noqa: F401

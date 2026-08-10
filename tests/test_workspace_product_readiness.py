@@ -415,3 +415,56 @@ def test_report_sharing_public_private_rotation_revocation_and_audit(
         "/audit/events", params={"action": "report.share.viewed"}
     ).json()
     assert audited["total"] == 3
+
+
+def test_project_monitoring_delegates_to_existing_scheduler(client: TestClient) -> None:
+    project_id = client.post(
+        "/workspace/projects", json={"name": "Monitored project"}
+    ).json()["id"]
+    template_id = client.post(
+        "/research",
+        json={"project_id": project_id, "title": "Weekly monitoring template"},
+    ).json()["id"]
+    url = f"/workspace/projects/{project_id}/monitoring"
+    configured = client.put(
+        url,
+        json={
+            "template_research_id": template_id,
+            "frequency": "WEEKLY",
+            "models": [{"provider": "openai", "model": "gpt-4o-mini"}],
+            "query": "Track weekly AI visibility",
+        },
+    )
+    assert configured.status_code == 200
+    schedule_id = configured.json()["schedule_id"]
+    schedules = client.get("/schedules").json()
+    assert any(item["id"] == schedule_id for item in schedules)
+    assert configured.json()["frequency"] == "WEEKLY"
+
+    updated = client.put(
+        url,
+        json={
+            "template_research_id": template_id,
+            "frequency": "DAILY",
+            "models": [{"provider": "gemini", "model": "gemini-2.5-flash"}],
+            "enabled": False,
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["frequency"] == "DAILY"
+    assert updated.json()["enabled"] is False
+    assert client.get(url).json()["schedule_id"] == schedule_id
+
+    other_project = client.post(
+        "/workspace/projects", json={"name": "Other project"}
+    ).json()["id"]
+    assert client.put(
+        f"/workspace/projects/{other_project}/monitoring",
+        json={
+            "template_research_id": template_id,
+            "frequency": "MONTHLY",
+            "models": [{"provider": "openai", "model": "gpt-4o-mini"}],
+        },
+    ).status_code == 422
+    assert client.delete(url).status_code == 204
+    assert not any(item["id"] == schedule_id for item in client.get("/schedules").json())

@@ -28,6 +28,8 @@ class SqlAlchemyResearchLauncher(ResearchLauncher):
         clone = ResearchRepository(self.db).create(
             ResearchCreate(
                 entity_id=template.entity_id,
+                project_id=template.project_id,
+                domain_id=template.domain_id,
                 title=template.title,
                 description=template.description,
                 objective=template.objective,

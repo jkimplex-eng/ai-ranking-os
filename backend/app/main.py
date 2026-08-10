@@ -41,6 +41,7 @@ from model_benchmark.router import router as model_benchmark_router
 from model_evaluation.router import router as model_evaluation_router
 from observability.router import router as observability_router
 from product.router import router as product_router
+from project_monitoring.router import router as project_monitoring_router
 from provider_discovery.router import router as provider_discovery_router
 from provider_recommendation.router import router as provider_recommendation_router
 from provider_registry.router import router as provider_registry_router
@@ -104,6 +105,7 @@ app.include_router(ai_visibility_router)
 app.include_router(entity_extraction_router)
 app.include_router(query_intent_router)
 app.include_router(product_router)
+app.include_router(project_monitoring_router)
 app.include_router(research_router)
 app.include_router(recommendation_router)
 app.include_router(recommendation_simulation_router)
