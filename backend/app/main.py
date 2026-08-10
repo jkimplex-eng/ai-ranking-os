@@ -40,6 +40,7 @@ from influence.router import router as influence_router
 from insights.router import router as insights_router
 from model_benchmark.router import router as model_benchmark_router
 from model_evaluation.router import router as model_evaluation_router
+from notification_center.router import router as notification_center_router
 from observability.router import router as observability_router
 from product.router import router as product_router
 from project_monitoring.router import router as project_monitoring_router
@@ -117,6 +118,7 @@ app.include_router(llm_router)
 app.include_router(providers_router)
 app.include_router(model_benchmark_router)
 app.include_router(model_evaluation_router)
+app.include_router(notification_center_router)
 app.include_router(cost_analytics_router)
 app.include_router(provider_discovery_router)
 app.include_router(provider_recommendation_router)

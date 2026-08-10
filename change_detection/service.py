@@ -2,6 +2,7 @@ from change_detection.models import ResearchChange
 from change_detection.ports import ChangeSnapshotSource
 from change_detection.repository import ChangeRepository
 from change_detection.schemas import ResearchChangeRead
+from notification_center.ports import NotificationPort
 
 
 class ChangeNotFoundError(LookupError):
@@ -16,9 +17,15 @@ class ChangeDetectionService:
         "coverage_score",
     )
 
-    def __init__(self, repository: ChangeRepository, source: ChangeSnapshotSource) -> None:
+    def __init__(
+        self,
+        repository: ChangeRepository,
+        source: ChangeSnapshotSource,
+        notifications: NotificationPort | None = None,
+    ) -> None:
         self.repository = repository
         self.source = source
+        self.notifications = notifications
 
     def detect(self, research_id: int) -> ResearchChangeRead:
         previous, current = self.source.pair(research_id)
@@ -45,9 +52,24 @@ class ChangeDetectionService:
             "added_edges": sorted(current.graph_edges - prior_edges),
             "removed_edges": sorted(prior_edges - current.graph_edges),
         }
-        return ResearchChangeRead.model_validate(
+        result = ResearchChangeRead.model_validate(
             self.repository.save(change), from_attributes=True
         )
+        significant = {
+            metric: delta
+            for metric, delta in deltas.items()
+            if delta is not None and abs(delta) >= 5
+        }
+        if significant and self.notifications is not None:
+            self.notifications.emit(
+                "SIGNIFICANT_CHANGE",
+                "Обнаружено значительное изменение",
+                f"Метрики исследования {research_id} существенно изменились",
+                resource_type="research",
+                resource_id=str(research_id),
+                metadata={"metric_deltas": significant},
+            )
+        return result
 
     def get(self, research_id: int) -> ResearchChangeRead:
         change = self.repository.get(research_id)

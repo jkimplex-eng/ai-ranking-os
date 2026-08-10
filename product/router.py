@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
 from change_detection.dependencies import build_change_detection
+from notification_center.dependencies import build_notification_service
 from product.repository import (
     ProductConflictError,
     ProductNotFoundError,
@@ -152,7 +153,12 @@ def review_wizard(payload: WizardRequest, db: DbSession) -> WizardReview:
 )
 def run_wizard(payload: WizardRequest, db: DbSession) -> WizardRunResult:
     try:
-        research = ProductPipeline(db, build_change_detection(db)).run(payload)
+        notifications = build_notification_service(db)
+        research = ProductPipeline(
+            db,
+            build_change_detection(db, notifications),
+            notifications,
+        ).run(payload)
         report = FinalReportService(db).get(research.id)
         return WizardRunResult(
             research=ResearchRead.model_validate(research),

@@ -532,3 +532,38 @@ def test_change_detection_persists_metric_and_graph_deltas(client: TestClient) -
         "removed_edges": [],
     }
     assert client.get(f"/research/{current_id}/changes").json()["id"] == result["id"]
+
+
+def test_notification_center_ui_email_telegram_outbox(client: TestClient) -> None:
+    created = client.post(
+        "/notifications/events",
+        json={
+            "event_type": "PROVIDER_UNAVAILABLE",
+            "title": "Gemini недоступен",
+            "message": "Router переключился на резервного провайдера",
+            "resource_type": "provider",
+            "resource_id": "gemini",
+            "channels": ["UI", "EMAIL", "TELEGRAM"],
+        },
+    )
+    assert created.status_code == 201
+    item = created.json()
+    states = {delivery["channel"]: delivery["status"] for delivery in item["deliveries"]}
+    assert states == {"UI": "DELIVERED", "EMAIL": "PENDING", "TELEGRAM": "PENDING"}
+    assert client.get("/notifications", params={"unread_only": True}).json()[0][
+        "id"
+    ] == item["id"]
+    read = client.post(f"/notifications/{item['id']}/read")
+    assert read.status_code == 200
+    assert read.json()["is_read"] is True
+    assert client.get("/notifications", params={"unread_only": True}).json() == []
+    invalid = client.post(
+        "/notifications/events",
+        json={
+            "event_type": "EXECUTION_FAILED",
+            "title": "Failure",
+            "message": "Execution failed",
+            "channels": ["SMS"],
+        },
+    )
+    assert invalid.status_code == 422

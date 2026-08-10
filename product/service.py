@@ -32,6 +32,7 @@ from graph.ports import (
 from insights.repository import SqlAlchemyInsightRepository
 from insights.schemas import InsightRequest
 from insights.service import InsightService
+from notification_center.ports import NotificationPort
 from product.repository import ProductNotFoundError, PromptRepository, ResearchTemplateRepository
 from product.schemas import WizardRequest, WizardReview
 from provider_recommendation.research_adapter import SqlAlchemyResearchUsageSource
@@ -111,11 +112,17 @@ class ResearchEntityProvider(EntityProvider, RelationshipProvider):
 
 
 class ProductPipeline:
-    def __init__(self, db: Session, change_detector: ChangeDetectorPort | None = None) -> None:
+    def __init__(
+        self,
+        db: Session,
+        change_detector: ChangeDetectorPort | None = None,
+        notifications: NotificationPort | None = None,
+    ) -> None:
         self.db = db
         self.prompts = PromptService(db)
         self.templates = ResearchTemplateRepository(db)
         self.change_detector = change_detector
+        self.notifications = notifications
 
     def review(self, payload: WizardRequest) -> WizardReview:
         template = self.templates.get(payload.research_template_code)
@@ -259,6 +266,14 @@ class ProductPipeline:
         self.db.commit()
         if self.change_detector is not None:
             self.change_detector.detect(research.id)
+        if self.notifications is not None:
+            self.notifications.emit(
+                "RESEARCH_COMPLETED",
+                "Исследование завершено",
+                f"Отчёт по исследованию {research.title} готов",
+                resource_type="research",
+                resource_id=str(research.id),
+            )
 
     @staticmethod
     def _values(payload: WizardRequest) -> dict[str, str]:
