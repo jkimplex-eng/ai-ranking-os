@@ -636,3 +636,72 @@ def test_closed_beta_invitation_access_limits_search_and_audit(client: TestClien
         f"/beta/invitations/{revoked['token']}/accept",
         json={"display_name": "Revoked", "password": "strong-password"},
     ).status_code == 404
+
+
+def test_feedback_center_triage_bulk_history_and_attachment_metadata(
+    client: TestClient,
+) -> None:
+    first = client.post(
+        "/feedback",
+        json={
+            "feedback_type": "GEO_RESULT",
+            "priority": "HIGH",
+            "title": "Citation score looks incorrect",
+            "description": "The cited source was not counted.",
+            "project_id": 10,
+            "research_id": 20,
+            "report_id": 30,
+            "organization_id": 40,
+            "attachments": [
+                {
+                    "filename": "report.png",
+                    "content_type": "image/png",
+                    "storage_key": "feedback/pending/report.png",
+                    "size_bytes": 1024,
+                    "metadata": {"kind": "screenshot"},
+                }
+            ],
+        },
+    )
+    second = client.post(
+        "/feedback",
+        json={
+            "feedback_type": "UX",
+            "priority": "LOW",
+            "title": "Wizard navigation",
+            "description": "Make the back action more visible.",
+        },
+    )
+    assert first.status_code == second.status_code == 201
+    assert first.json()["user_id"] == 1
+    assert first.json()["attachments"][0]["metadata"]["kind"] == "screenshot"
+    assert len(client.get("/feedback").json()) == 2
+
+    filtered = client.get(
+        "/admin/feedback",
+        params={"search": "Citation", "priority": "HIGH", "sort_by": "priority"},
+    )
+    assert filtered.status_code == 200
+    assert [item["id"] for item in filtered.json()] == [first.json()["id"]]
+    updated = client.patch(
+        f"/admin/feedback/{first.json()['id']}",
+        json={"status": "UNDER_REVIEW", "priority": "CRITICAL"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "UNDER_REVIEW"
+
+    bulk = client.post(
+        "/admin/feedback/bulk",
+        json={
+            "feedback_ids": [first.json()["id"], second.json()["id"]],
+            "status": "PLANNED",
+        },
+    )
+    assert bulk.status_code == 200
+    assert {item["status"] for item in bulk.json()} == {"PLANNED"}
+    history = client.get(
+        f"/admin/feedback/{first.json()['id']}/history"
+    ).json()
+    assert [item["action"] for item in history] == ["CREATED", "UPDATED", "UPDATED"]
+    audit = client.get("/audit/events", params={"category": "feedback"}).json()
+    assert audit["total"] == 5

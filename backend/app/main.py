@@ -33,6 +33,7 @@ from entity_extraction.router import router as entity_extraction_router
 from entity_linking.router import router as entity_linking_router
 from execution_engine.router import router as execution_engine_router
 from export_engine.router import router as export_router
+from feedback_center.router import router as feedback_center_router
 from graph.router import router as graph_router
 from graph_search.router import router as graph_search_router
 from hardening.router import router as hardening_router
@@ -106,6 +107,7 @@ app.include_router(closed_beta_router)
 app.include_router(rate_limit_router)
 app.include_router(hardening_router)
 app.include_router(execution_engine_router)
+app.include_router(feedback_center_router)
 app.include_router(ai_visibility_router)
 app.include_router(entity_extraction_router)
 app.include_router(query_intent_router)
