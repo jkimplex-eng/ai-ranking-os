@@ -167,3 +167,39 @@ def test_multi_domain_management_and_research_binding(client: TestClient) -> Non
     assert client.post(
         f"/workspace/projects/{project_id}/domains", json={"hostname": "not-a-domain"}
     ).status_code == 422
+
+
+def test_research_templates_2_are_extensible(client: TestClient) -> None:
+    created = client.post(
+        "/research/templates",
+        json={
+            "code": "daily-geo-client",
+            "title": "Daily GEO Client",
+            "research_type": "GEO_AUDIT",
+            "prompt_code": "ai-visibility",
+            "pipeline": ["provider", "scoring", "report"],
+            "default_languages": ["ru"],
+            "configuration": {"routing_profile": "BALANCED"},
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["research_type"] == "GEO_AUDIT"
+    cloned = client.post("/research/templates/daily-geo-client/clone")
+    assert cloned.status_code == 201
+    assert cloned.json()["version"] == 2
+    updated = client.patch(
+        "/research/templates/daily-geo-client",
+        json={"configuration": {"routing_profile": "PRIVATE"}},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["configuration"]["routing_profile"] == "PRIVATE"
+    assert client.post(
+        "/research/templates",
+        json={
+            "code": "invalid-type",
+            "title": "Invalid",
+            "research_type": "UNKNOWN",
+            "prompt_code": "ai-visibility",
+            "pipeline": ["report"],
+        },
+    ).status_code == 422

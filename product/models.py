@@ -50,10 +50,12 @@ class ResearchTemplateDefinition(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
+    research_type: Mapped[str] = mapped_column(String(60), default="BRAND_VISIBILITY")
     prompt_code: Mapped[str] = mapped_column(String(100))
     pipeline: Mapped[list[str]] = mapped_column(JSON, default=list)
     default_languages: Mapped[list[str]] = mapped_column(JSON, default=list)
     default_regions: Mapped[list[str]] = mapped_column(JSON, default=list)
+    configuration: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False

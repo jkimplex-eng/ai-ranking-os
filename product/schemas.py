@@ -8,6 +8,15 @@ from backend.app.llm_router.schemas import RoutingProfile
 from research.schemas import ResearchModelSelection, ResearchRead
 
 PROMPT_CATEGORIES = {"Visibility", "Brand", "Product", "Competitor", "Reputation", "GEO"}
+RESEARCH_TYPES = {
+    "BRAND_VISIBILITY",
+    "COMPETITOR_COMPARISON",
+    "GEO_AUDIT",
+    "AI_RECOMMENDATION_AUDIT",
+    "CONTENT_AUDIT",
+    "WEBSITE_AUDIT",
+    "PRODUCT_AUDIT",
+}
 
 
 class PromptCreate(BaseModel):
@@ -68,12 +77,46 @@ class ResearchTemplateRead(BaseModel):
     version: int
     title: str
     description: str
+    research_type: str
     prompt_code: str
     pipeline: list[str]
     default_languages: list[str]
     default_regions: list[str]
+    configuration: dict[str, Any]
     active: bool
     created_at: datetime
+
+
+class ResearchTemplateCreate(BaseModel):
+    code: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{1,99}$")
+    version: int = Field(default=1, ge=1)
+    title: str = Field(min_length=1, max_length=200)
+    description: str = ""
+    research_type: str
+    prompt_code: str = Field(min_length=1, max_length=100)
+    pipeline: list[str] = Field(min_length=1)
+    default_languages: list[str] = Field(default_factory=lambda: ["en"])
+    default_regions: list[str] = Field(default_factory=lambda: ["GLOBAL"])
+    configuration: dict[str, Any] = Field(default_factory=dict)
+    active: bool = True
+
+    @model_validator(mode="after")
+    def valid_type(self) -> "ResearchTemplateCreate":
+        if self.research_type not in RESEARCH_TYPES:
+            raise ValueError(f"Unsupported research type: {self.research_type}")
+        return self
+
+
+class ResearchTemplateUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    research_type: str | None = None
+    prompt_code: str | None = Field(default=None, min_length=1, max_length=100)
+    pipeline: list[str] | None = Field(default=None, min_length=1)
+    default_languages: list[str] | None = None
+    default_regions: list[str] | None = None
+    configuration: dict[str, Any] | None = None
+    active: bool | None = None
 
 
 class WizardRequest(BaseModel):

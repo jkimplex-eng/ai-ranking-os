@@ -14,7 +14,9 @@ from product.schemas import (
     PromptCreate,
     PromptRead,
     PromptUpdate,
+    ResearchTemplateCreate,
     ResearchTemplateRead,
+    ResearchTemplateUpdate,
     WizardRequest,
     WizardReview,
     WizardRunResult,
@@ -94,6 +96,42 @@ def list_research_templates(db: DbSession) -> list[ResearchTemplateRead]:
 def get_research_template(code: str, db: DbSession) -> ResearchTemplateRead:
     try:
         return ResearchTemplateRepository(db).get(code)
+    except ProductNotFoundError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
+
+@router.post(
+    "/research/templates",
+    response_model=ResearchTemplateRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_research_template(
+    payload: ResearchTemplateCreate, db: DbSession
+) -> ResearchTemplateRead:
+    try:
+        return ResearchTemplateRepository(db).create(payload)
+    except ProductConflictError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+
+
+@router.patch("/research/templates/{code}", response_model=ResearchTemplateRead)
+def update_research_template(
+    code: str, payload: ResearchTemplateUpdate, db: DbSession
+) -> ResearchTemplateRead:
+    try:
+        return ResearchTemplateRepository(db).update(code, payload)
+    except ProductNotFoundError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
+
+@router.post(
+    "/research/templates/{code}/clone",
+    response_model=ResearchTemplateRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def clone_research_template(code: str, db: DbSession) -> ResearchTemplateRead:
+    try:
+        return ResearchTemplateRepository(db).clone(code)
     except ProductNotFoundError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
 

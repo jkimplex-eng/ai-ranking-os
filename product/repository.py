@@ -3,7 +3,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from product.models import PromptDefinition, PromptStatus, ResearchTemplateDefinition
-from product.schemas import PromptCreate, PromptUpdate
+from product.schemas import (
+    PromptCreate,
+    PromptUpdate,
+    ResearchTemplateCreate,
+    ResearchTemplateUpdate,
+)
 
 
 class ProductNotFoundError(LookupError):
@@ -150,3 +155,48 @@ class ResearchTemplateRepository:
         if item is None:
             raise ProductNotFoundError(f"Research template {code} not found")
         return item
+
+    def create(self, payload: ResearchTemplateCreate) -> ResearchTemplateDefinition:
+        item = ResearchTemplateDefinition(**payload.model_dump())
+        self.db.add(item)
+        try:
+            self.db.commit()
+        except IntegrityError as error:
+            self.db.rollback()
+            raise ProductConflictError("Research template code/version already exists") from error
+        self.db.refresh(item)
+        return item
+
+    def update(self, code: str, payload: ResearchTemplateUpdate) -> ResearchTemplateDefinition:
+        item = self.get(code)
+        for field, value in payload.model_dump(exclude_unset=True).items():
+            setattr(item, field, value)
+        self.db.commit()
+        self.db.refresh(item)
+        return item
+
+    def clone(self, code: str) -> ResearchTemplateDefinition:
+        source = self.get(code)
+        version = (
+            self.db.scalar(
+                select(func.max(ResearchTemplateDefinition.version)).where(
+                    ResearchTemplateDefinition.code == source.code
+                )
+            )
+            or 0
+        ) + 1
+        return self.create(
+            ResearchTemplateCreate(
+                code=source.code,
+                version=version,
+                title=source.title,
+                description=source.description,
+                research_type=source.research_type,
+                prompt_code=source.prompt_code,
+                pipeline=source.pipeline,
+                default_languages=source.default_languages,
+                default_regions=source.default_regions,
+                configuration=source.configuration,
+                active=False,
+            )
+        )
