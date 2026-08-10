@@ -8,6 +8,9 @@ case "${1:-api}" in
     if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
       alembic -c backend/alembic.ini upgrade head
     fi
+    if [ "${BOOTSTRAP_ADMIN:-false}" = "true" ]; then
+      python -m scripts.create_admin
+    fi
     exec uvicorn backend.app.main:app \
       --host 0.0.0.0 \
       --port "${PORT:-8000}" \

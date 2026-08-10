@@ -4,7 +4,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from backend.app.llm_router.schemas import RoutingProfile
 from research.models import (
+    ResearchJobState,
     ResearchStatus,
     ResearchTaskStatus,
     ResponseProcessingStatus,
@@ -16,6 +18,8 @@ class ApiModel(BaseModel):
 
 
 class ResearchCreate(BaseModel):
+    project_id: int | None = Field(default=None, ge=1)
+    domain_id: int | None = Field(default=None, ge=1)
     entity_id: UUID | None = None
     title: str = Field(min_length=1, max_length=300)
     description: str | None = None
@@ -25,6 +29,8 @@ class ResearchCreate(BaseModel):
 
 
 class ResearchUpdate(BaseModel):
+    project_id: int | None = Field(default=None, ge=1)
+    domain_id: int | None = Field(default=None, ge=1)
     entity_id: UUID | None = None
     title: str | None = Field(default=None, min_length=1, max_length=300)
     description: str | None = None
@@ -35,6 +41,8 @@ class ResearchUpdate(BaseModel):
 
 class ResearchRead(ApiModel):
     id: int
+    project_id: int | None
+    domain_id: int | None
     entity_id: UUID | None
     title: str
     description: str | None
@@ -267,5 +275,33 @@ class ResearchModelSelection(BaseModel):
 
 
 class ResearchRunRequest(BaseModel):
-    models: list[ResearchModelSelection] = Field(min_length=1, max_length=20)
+    models: list[ResearchModelSelection] = Field(default_factory=list, max_length=20)
+    routing_profile: RoutingProfile = RoutingProfile.BALANCED
     query: str | None = Field(default=None, min_length=1, max_length=100_000)
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_legacy_empty_selection(cls, value: Any) -> Any:
+        if (
+            isinstance(value, dict)
+            and "models" in value
+            and not value.get("models")
+            and "routing_profile" not in value
+        ):
+            raise ValueError("models cannot be empty unless routing_profile is provided")
+        return value
+
+
+class ResearchEnqueueRequest(ResearchRunRequest):
+    research_id: int = Field(ge=1)
+
+
+class ResearchJobRead(ApiModel):
+    id: int
+    research_id: int
+    state: ResearchJobState
+    attempts: int
+    error: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None

@@ -1,7 +1,35 @@
 # AI Ranking OS
 
+> Intelligent Routing consolidation details and validation evidence are maintained in
+> [EPIC_10_1_INTELLIGENT_ROUTING_CONSOLIDATION.md](EPIC_10_1_INTELLIGENT_ROUTING_CONSOLIDATION.md).
+
+## Intelligent LLM Routing
+
+The platform supports provider-independent routing across local, free-tier and paid models.
+Configure `AI_ROUTING_MODE` (`LOCAL`, `HYBRID`, `CLOUD`) and `AI_HYBRID_ORDER` in the environment.
+See [EPIC_10_INTELLIGENT_LLM_ROUTING.md](EPIC_10_INTELLIGENT_LLM_ROUTING.md) and
+[Local AI Mode](docs/LOCAL_AI_MODE.md) for architecture and operations.
+
+Production deployment assets are in `deployment/production`. The first isolated installation runs
+on the audited VPS behind loopback port `8100`; see [First Deploy](docs/FIRST_DEPLOY.md),
+[Deployment](docs/Deployment.md), and [Operations](docs/Operations.md). The existing
+`разуммаркета.рф` landing and Ozon Agent are not part of this Compose project.
+
 AI Ranking OS RC2.1 is a provider-neutral intelligence platform for ranking
 research, decisioning, analytics, and knowledge workflows behind FastAPI.
+
+The first-product workflow now lets a user select a brand, models, language,
+region and versioned prompt, run the research, and receive a unified report.
+For the reproducible Skinjestique demo, see [FIRST_RESEARCH.md](FIRST_RESEARCH.md):
+
+```bash
+python scripts/run_skinjestique_demo.py --output skinjestique-report.json
+```
+
+Closed Beta onboarding and operating gates are documented in
+[BETA_GUIDE.md](docs/BETA_GUIDE.md),
+[BETA_PRODUCTION_CHECKLIST.md](docs/BETA_PRODUCTION_CHECKLIST.md), and
+[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 ## Stack
 
@@ -36,7 +64,7 @@ Expected responses:
 
 ```json
 {"status":"ok"}
-{"version":"1.0.0-rc1"}
+{"version":"1.0.0"}
 ```
 
 Stop the stack with `docker compose down`. To also remove local database and Redis
@@ -356,7 +384,22 @@ alembic -c backend/alembic.ini revision --autogenerate -m "describe change"
 - `benchmark/` — comparative rankings, percentiles, and metric deltas
 - `export_engine/` — streaming CSV, XLSX, JSON, and Parquet exports
 - `insights/` — deterministic growth, decline, anomaly, leader, and recommendation detection
+- `product_analytics/` — privacy-aware product events, sessions, cached aggregates,
+  dashboard metrics, filters, and CSV/JSON/XLSX exports
+- `notification_center/` — categorized in-app inbox plus email, Telegram, and
+  webhook delivery outbox with read state, archive, priorities, and pagination
+- `organization_workspace/` — organization profiles, membership, invitations,
+  roles, project links, limits, switching, and activity history
 - `knowledge/` — retrieval assets and taxonomies
 - `infra/` — deployment and infrastructure definitions
 - `docs/` — architecture and operating documentation
 - `tests/` — automated tests
+
+## Product Analytics
+
+System and organization administrators can open **Product Analytics** in the
+application or request `GET /product-analytics/dashboard`. The dashboard supports
+hourly, daily, weekly, and monthly periods plus organization, user, provider,
+template, region, language, and date filters. Raw IP addresses are never stored;
+the request instrumentation persists only a salted hash. Exports are available at
+`GET /product-analytics/export/{format_name}` for `csv`, `json`, and `xlsx`.

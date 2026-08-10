@@ -143,6 +143,8 @@ def run(
                 db.add(
                     ProviderUsageRecord(
                         execution_id=execution_id,
+                        research_id=plan.metadata.get("research_id"),
+                        user_id=plan.metadata.get("user_id"),
                         provider=str(usage["provider"]),
                         model=str(usage["model"]),
                         prompt_tokens=int(usage["prompt_tokens"]),

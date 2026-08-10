@@ -31,6 +31,13 @@ class ResponseProcessingStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class ResearchJobState(StrEnum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
 research_status_type = Enum(
     ResearchStatus,
     name="research_status",
@@ -61,6 +68,12 @@ class Research(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workspace_projects.id", ondelete="SET NULL"), index=True
+    )
+    domain_id: Mapped[int | None] = mapped_column(
+        ForeignKey("project_domains.id", ondelete="SET NULL"), index=True
+    )
     entity_id: Mapped[UUID | None] = mapped_column(Uuid, index=True)
     title: Mapped[str] = mapped_column(String(300))
     description: Mapped[str | None] = mapped_column(Text)
@@ -139,6 +152,25 @@ class ResearchTask(Base):
         back_populates="research_task",
         cascade="all, delete-orphan",
     )
+
+
+class ResearchJob(Base):
+    __tablename__ = "research_jobs"
+    __table_args__ = (Index("ix_research_jobs_state_created", "state", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    research_id: Mapped[int] = mapped_column(
+        ForeignKey("researches.id", ondelete="CASCADE"), index=True
+    )
+    state: Mapped[str] = mapped_column(String(30), default=ResearchJobState.PENDING, index=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Response(Base):

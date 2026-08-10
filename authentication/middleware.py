@@ -12,6 +12,8 @@ from backend.app.database import SessionLocal
 
 PUBLIC_PATHS = {
     "/health",
+    "/live",
+    "/ready",
     "/version",
     "/metrics",
     "/openapi.json",
@@ -34,7 +36,15 @@ class ProductionAuthenticationMiddleware(BaseHTTPMiddleware):
         self.settings = settings
 
     async def dispatch(self, request: Request, call_next):
-        if not self.settings.security_enforce_auth or request.url.path in PUBLIC_PATHS:
+        if (
+            not self.settings.security_enforce_auth
+            or request.url.path in PUBLIC_PATHS
+            or request.url.path.startswith("/shared/reports/")
+            or (
+                request.url.path.startswith("/beta/invitations/")
+                and request.url.path.endswith("/accept")
+            )
+        ):
             return await call_next(request)
         with SessionLocal() as db:
             api_key = request.headers.get("x-api-key")

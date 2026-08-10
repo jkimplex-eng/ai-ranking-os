@@ -4,8 +4,9 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from backend.app.config import get_settings
-from backend.app.providers.base import GenerateRequest
-from backend.app.providers.factory import ProviderFactory, factory
+from backend.app.llm_router.ports import LLMRouterPort
+from backend.app.llm_router.schemas import RouteRequest
+from backend.app.llm_router.service import router_service
 from decision_center import service as decision_service
 from decision_center.models import AgentType, Task, TaskPriority, TaskStatus
 from decision_center.schemas import TaskCreate, TaskUpdate
@@ -49,22 +50,27 @@ def _update_progress(
 
 def _provider_worker(
     tasks_by_decision_id: dict[int, ResearchTask],
-    provider_factory: ProviderFactory,
+    router_context: tuple[Session, LLMRouterPort],
 ) -> WorkerManager:
+    db, llm_router = router_context
     def execute(task: Task) -> dict:
         research_task = tasks_by_decision_id[task.id]
-        provider = provider_factory.create(str(research_task.provider))
-        response = provider.generate(
-            GenerateRequest(
-                model=str(research_task.model),
-                prompt=research_task.query,
+        return llm_router.generate(
+            db,
+            RouteRequest(
+                query=research_task.query,
+                profile=research_task.metadata_payload.get("routing_profile", "BALANCED"),
+                allowed_models=research_task.metadata_payload.get("allowed_models", []),
+                task_type="research",
                 metadata={
                     "research_id": research_task.research_id,
                     "research_task_id": research_task.id,
+                    "target_entity": research_task.research.metadata_payload.get(
+                        "target_entity", research_task.research.title
+                    ),
                 },
-            )
+            ),
         )
-        return response.model_dump(mode="json")
 
     return WorkerManager(
         {
@@ -144,11 +150,12 @@ def run_research(
     payload: ResearchRunRequest,
     *,
     manager: WorkerManager | None = None,
-    provider_factory: ProviderFactory = factory,
+    llm_router: LLMRouterPort = router_service,
+    allow_active: bool = False,
 ) -> Research:
     research = ResearchRepository(db).get(research_id)
     if research.status in {
-        ResearchStatus.ACTIVE,
+        *(() if allow_active else (ResearchStatus.ACTIVE,)),
         ResearchStatus.COMPLETED,
         ResearchStatus.ARCHIVED,
     }:
@@ -157,7 +164,8 @@ def run_research(
         )
 
     research.status = ResearchStatus.ACTIVE
-    research.total_tasks = len(payload.models)
+    selections = payload.models or [None]
+    research.total_tasks = len(selections)
     research.completed_tasks = 0
     research.failed_tasks = 0
     research.progress_percent = 0
@@ -166,20 +174,26 @@ def run_research(
     query = payload.query or research.objective or research.title
     research_tasks = []
     task_repository = ResearchTaskRepository(db)
-    for selection in payload.models:
+    for selection in selections:
+        selected_provider = selection.provider if selection else None
+        selected_model = selection.model if selection else None
         research_task = task_repository.create(
             ResearchTaskCreate(
                 research_id=research.id,
                 query=query,
-                provider=selection.provider,
-                model=selection.model,
-                metadata={"source": "research-run"},
+                provider=selected_provider,
+                model=selected_model,
+                metadata={
+                    "source": "research-run",
+                    "routing_profile": payload.routing_profile,
+                    "allowed_models": [selected_model] if selected_model else [],
+                },
             )
         )
         decision_task = decision_service.create_task(
             db,
             TaskCreate(
-                title=f"Research {research.id}: {selection.model}",
+                title=f"Research {research.id}: {selected_model or payload.routing_profile}",
                 description=query,
                 status=TaskStatus.READY,
                 priority=TaskPriority.MEDIUM,
@@ -196,7 +210,7 @@ def run_research(
     }
     worker_manager = manager or _provider_worker(
         tasks_by_decision_id,
-        provider_factory,
+        (db, llm_router),
     )
     completed = 0
     failed = 0
@@ -214,6 +228,12 @@ def run_research(
             if execution.state == ExecutionState.COMPLETED:
                 try:
                     raw_response = execution.result or {}
+                    research_task.provider = str(
+                        raw_response.get("provider", research_task.provider or "router")
+                    )
+                    research_task.model = str(
+                        raw_response.get("model", research_task.model or "router-selected")
+                    )
                     normalized = normalize(raw_response)
                     _save_response(
                         db,

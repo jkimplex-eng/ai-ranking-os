@@ -1,8 +1,8 @@
 {
   "status": "PASS",
-  "generated_at": "2026-08-02T11:05:44.589611+00:00",
-  "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
-  "query": "Compare OpenAI and Qwen with sources",
+  "generated_at": "2026-08-06T12:59:27.680868+00:00",
+  "correlation_id": "11725304-edcd-49dd-8fd8-1c181b92b0d9",
+  "query": "Compare Skinjestique visibility with sources",
   "checks": [
     {
       "name": "JSON Schema compatibility",
@@ -206,7 +206,7 @@
       "name": "Correlation ID propagation",
       "status": "PASS",
       "details": {
-        "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d"
+        "correlation_id": "11725304-edcd-49dd-8fd8-1c181b92b0d9"
       }
     },
     {
@@ -214,13 +214,13 @@
       "status": "PASS",
       "details": {
         "stage_timings_ms": {
-          "intent": 4.115,
-          "router": 31.709,
-          "executor": 1.619,
-          "entity_extraction": 0.085,
-          "reason": 0.005,
-          "visibility": 0.131,
-          "knowledge_graph": 0.017,
+          "intent": 10.317,
+          "router": 41.886,
+          "executor": 3.751,
+          "entity_extraction": 0.393,
+          "reason": 0.015,
+          "visibility": 0.312,
+          "knowledge_graph": 0.055,
           "response": 0.001
         }
       }
@@ -253,22 +253,22 @@
       "name": "Performance",
       "status": "PASS",
       "details": {
-        "total_pipeline_ms": 37.682,
+        "total_pipeline_ms": 56.73,
         "budget_ms": 500,
         "benchmark": {
           "iterations": 10,
-          "p50_ms": 3.195,
-          "p95_ms": 3.642,
-          "p99_ms": 3.642,
-          "throughput_per_second": 300.67
+          "p50_ms": 5.768,
+          "p95_ms": 6.076,
+          "p99_ms": 6.076,
+          "throughput_per_second": 171.43
         },
         "load": {
           "requests": 12,
           "concurrency": 4,
           "failures": 0,
           "success_rate": 1.0,
-          "duration_seconds": 0.047,
-          "throughput_per_second": 255.15
+          "duration_seconds": 0.0739,
+          "throughput_per_second": 162.42
         }
       }
     },
@@ -345,41 +345,41 @@
   ],
   "performance": {
     "stage_timings_ms": {
-      "intent": 4.115,
-      "router": 31.709,
-      "executor": 1.619,
-      "entity_extraction": 0.085,
-      "reason": 0.005,
-      "visibility": 0.131,
-      "knowledge_graph": 0.017,
+      "intent": 10.317,
+      "router": 41.886,
+      "executor": 3.751,
+      "entity_extraction": 0.393,
+      "reason": 0.015,
+      "visibility": 0.312,
+      "knowledge_graph": 0.055,
       "response": 0.001
     },
-    "total_pipeline_ms": 37.682,
+    "total_pipeline_ms": 56.73,
     "benchmark": {
       "iterations": 10,
-      "p50_ms": 3.195,
-      "p95_ms": 3.642,
-      "p99_ms": 3.642,
-      "throughput_per_second": 300.67
+      "p50_ms": 5.768,
+      "p95_ms": 6.076,
+      "p99_ms": 6.076,
+      "throughput_per_second": 171.43
     },
     "load": {
       "requests": 12,
       "concurrency": 4,
       "failures": 0,
       "success_rate": 1.0,
-      "duration_seconds": 0.047,
-      "throughput_per_second": 255.15
+      "duration_seconds": 0.0739,
+      "throughput_per_second": 162.42
     }
   },
   "stages": {
-    "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+    "correlation_id": "11725304-edcd-49dd-8fd8-1c181b92b0d9",
     "query": {
-      "query": "Compare OpenAI and Qwen with sources",
-      "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d"
+      "query": "Compare Skinjestique visibility with sources",
+      "correlation_id": "11725304-edcd-49dd-8fd8-1c181b92b0d9"
     },
     "intent": {
-      "request_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
-      "query": "Compare OpenAI and Qwen with sources",
+      "request_id": "11725304-edcd-49dd-8fd8-1c181b92b0d9",
+      "query": "Compare Skinjestique visibility with sources",
       "language": {
         "code": "en",
         "confidence": 0.9
@@ -389,7 +389,7 @@
         {
           "intent": "COMPARISON",
           "subtype": "VERSUS",
-          "confidence": 0.4539,
+          "confidence": 0.53,
           "signals": [
             "\\b(?:vs|versus|compare|сравни|сравнить|comparar|comparer)\\b",
             "leading_comparison_verb"
@@ -398,7 +398,7 @@
         {
           "intent": "RESEARCH",
           "subtype": "EVIDENCE",
-          "confidence": 0.314,
+          "confidence": 0.3191,
           "signals": [
             "\\b(?:evidence|sources|citations|источники|доказательства)\\b"
           ]
@@ -412,7 +412,14 @@
           "confidence": 1.0
         }
       ],
-      "entities": [],
+      "entities": [
+        {
+          "name": "Compare Skinjestique",
+          "entity_type": "PERSON",
+          "confidence": 0.72,
+          "knowledge_graph_id": "kg:28f59d85-2f0f-5091-86d8-7f0490412e53"
+        }
+      ],
       "expected_output": {
         "format": "COMPARISON_TABLE",
         "fields": [
@@ -423,7 +430,7 @@
         ],
         "cardinality": "MULTIPLE"
       },
-      "confidence": 0.3597,
+      "confidence": 0.4343,
       "routing": {
         "strategy": "RULE_EMBEDDING_ENSEMBLE",
         "llm_fallback_required": false,
@@ -440,36 +447,36 @@
           "RESEARCH": 0.4
         },
         "embedding_scores": {
-          "INFORMATIONAL": 0.1361,
+          "INFORMATIONAL": 0.1491,
           "NAVIGATIONAL": 0.0,
           "TRANSACTIONAL": 0.0,
           "COMMERCIAL_INVESTIGATION": 0.0,
-          "COMPARISON": 0.1826,
+          "COMPARISON": 0.4,
           "RECOMMENDATION": 0.0,
           "TROUBLESHOOTING": 0.0,
           "HOW_TO": 0.0,
-          "LOCAL": 0.1667,
-          "RESEARCH": 0.1543
+          "LOCAL": 0.0,
+          "RESEARCH": 0.169
         },
         "ensemble_scores": {
-          "INFORMATIONAL": 0.0476,
+          "INFORMATIONAL": 0.0522,
           "NAVIGATIONAL": 0.0,
           "TRANSACTIONAL": 0.0,
           "COMMERCIAL_INVESTIGATION": 0.0,
-          "COMPARISON": 0.4539,
+          "COMPARISON": 0.53,
           "RECOMMENDATION": 0.0,
           "TROUBLESHOOTING": 0.0,
           "HOW_TO": 0.0,
-          "LOCAL": 0.0583,
-          "RESEARCH": 0.314
+          "LOCAL": 0.0,
+          "RESEARCH": 0.3191
         }
       },
       "version": "1.0",
-      "classified_at": "2026-08-02T11:05:44.589677Z"
+      "classified_at": "2026-08-06T12:59:27.680956Z"
     },
     "router": {
-      "plan_id": "router-f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
-      "request_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+      "plan_id": "router-11725304-edcd-49dd-8fd8-1c181b92b0d9",
+      "request_id": "11725304-edcd-49dd-8fd8-1c181b92b0d9",
       "mode": "SINGLE",
       "steps": [
         {
@@ -477,10 +484,10 @@
           "provider": "anthropic",
           "payload": {
             "model": "claude-3-5-sonnet",
-            "query": "Compare OpenAI and Qwen with sources",
+            "query": "Compare Skinjestique visibility with sources",
             "max_tokens": 512,
             "metadata": {
-              "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d"
+              "correlation_id": "11725304-edcd-49dd-8fd8-1c181b92b0d9"
             }
           },
           "timeout_seconds": 30.0,
@@ -490,14 +497,14 @@
         }
       ],
       "metadata": {
-        "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+        "correlation_id": "11725304-edcd-49dd-8fd8-1c181b92b0d9",
         "source": "production_llm_router"
       }
     },
     "executor": {
-      "execution_id": "executor-f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
-      "plan_id": "router-f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
-      "request_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+      "execution_id": "executor-11725304-edcd-49dd-8fd8-1c181b92b0d9",
+      "plan_id": "router-11725304-edcd-49dd-8fd8-1c181b92b0d9",
+      "request_id": "11725304-edcd-49dd-8fd8-1c181b92b0d9",
       "mode": "SINGLE",
       "state": "COMPLETED",
       "results": [
@@ -506,31 +513,52 @@
           "provider": "anthropic",
           "state": "COMPLETED",
           "attempts": 1,
-          "latency_ms": 1,
+          "latency_ms": 3,
           "output": {
             "provider": "anthropic",
             "model": "claude-3-5-sonnet",
-            "content": "[anthropic:claude-3-5-sonnet] Compare OpenAI and Qwen with sources",
+            "content": "[anthropic:claude-3-5-sonnet] Compare Skinjestique visibility with sources\nWe recommend the selected brand based on its documented market presence.",
             "usage": {
-              "prompt_tokens": 9,
-              "completion_tokens": 17,
-              "total_tokens": 26,
-              "estimated_cost": 0.000282,
+              "prompt_tokens": 11,
+              "completion_tokens": 37,
+              "total_tokens": 48,
+              "estimated_cost": 0.000588,
               "currency": "USD",
               "provider": "anthropic",
               "model": "claude-3-5-sonnet",
-              "timestamp": "2026-08-02T11:05:44.626763Z"
+              "timestamp": "2026-08-06T12:59:27.736011Z"
             },
             "finish_reason": "stop",
-            "citations": [],
+            "citations": [
+              {
+                "url": "https://example.com/ai-visibility-source",
+                "title": "AI Visibility Source",
+                "source": "Demo Authority"
+              }
+            ],
             "metadata": {
               "region": "GLOBAL",
-              "mock": true
+              "mock": true,
+              "correlation_id": "11725304-edcd-49dd-8fd8-1c181b92b0d9",
+              "entities": [],
+              "recommendations": [
+                {
+                  "content": "Increase authoritative mentions for the selected brand",
+                  "confidence": 0.9
+                }
+              ]
             },
-            "created_at": "2026-08-02T11:05:44.626781Z",
+            "created_at": "2026-08-06T12:59:27.736053Z",
             "cached": false,
             "raw": {
-              "mock": true
+              "mock": true,
+              "citations": [
+                {
+                  "url": "https://example.com/ai-visibility-source",
+                  "title": "AI Visibility Source",
+                  "source": "Demo Authority"
+                }
+              ]
             }
           },
           "error": null
@@ -539,39 +567,60 @@
       "output": {
         "provider": "anthropic",
         "model": "claude-3-5-sonnet",
-        "content": "[anthropic:claude-3-5-sonnet] Compare OpenAI and Qwen with sources",
+        "content": "[anthropic:claude-3-5-sonnet] Compare Skinjestique visibility with sources\nWe recommend the selected brand based on its documented market presence.",
         "usage": {
-          "prompt_tokens": 9,
-          "completion_tokens": 17,
-          "total_tokens": 26,
-          "estimated_cost": 0.000282,
+          "prompt_tokens": 11,
+          "completion_tokens": 37,
+          "total_tokens": 48,
+          "estimated_cost": 0.000588,
           "currency": "USD",
           "provider": "anthropic",
           "model": "claude-3-5-sonnet",
-          "timestamp": "2026-08-02T11:05:44.626763Z"
+          "timestamp": "2026-08-06T12:59:27.736011Z"
         },
         "finish_reason": "stop",
-        "citations": [],
+        "citations": [
+          {
+            "url": "https://example.com/ai-visibility-source",
+            "title": "AI Visibility Source",
+            "source": "Demo Authority"
+          }
+        ],
         "metadata": {
           "region": "GLOBAL",
-          "mock": true
+          "mock": true,
+          "correlation_id": "11725304-edcd-49dd-8fd8-1c181b92b0d9",
+          "entities": [],
+          "recommendations": [
+            {
+              "content": "Increase authoritative mentions for the selected brand",
+              "confidence": 0.9
+            }
+          ]
         },
-        "created_at": "2026-08-02T11:05:44.626781Z",
+        "created_at": "2026-08-06T12:59:27.736053Z",
         "cached": false,
         "raw": {
-          "mock": true
+          "mock": true,
+          "citations": [
+            {
+              "url": "https://example.com/ai-visibility-source",
+              "title": "AI Visibility Source",
+              "source": "Demo Authority"
+            }
+          ]
         }
       },
       "error": null,
-      "started_at": "2026-08-02T11:05:44.625715Z",
-      "finished_at": "2026-08-02T11:05:44.627080Z",
-      "duration_ms": 1,
+      "started_at": "2026-08-06T12:59:27.733563Z",
+      "finished_at": "2026-08-06T12:59:27.736782Z",
+      "duration_ms": 3,
       "telemetry": {
         "event_count": 5,
         "events": [
           {
             "event": "execution_started",
-            "execution_id": "executor-f4a37ab0-fcd3-44e8-bbe5-a428af63d62d"
+            "execution_id": "executor-11725304-edcd-49dd-8fd8-1c181b92b0d9"
           },
           {
             "event": "step_started",
@@ -593,7 +642,7 @@
           },
           {
             "event": "execution_finished",
-            "execution_id": "executor-f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
+            "execution_id": "executor-11725304-edcd-49dd-8fd8-1c181b92b0d9",
             "state": "COMPLETED"
           }
         ]
@@ -601,35 +650,51 @@
       "version": "1.0"
     },
     "entity_extraction": {
-      "response_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
-      "entities": [],
+      "response_id": "11725304-edcd-49dd-8fd8-1c181b92b0d9",
+      "entities": [
+        {
+          "entity_id": "entity-1",
+          "name": "Compare Skinjestique",
+          "canonical_name": "Compare Skinjestique",
+          "entity_type": "PERSON",
+          "confidence": 0.72,
+          "aliases": [],
+          "knowledge_graph_id": "kg:28f59d85-2f0f-5091-86d8-7f0490412e53"
+        }
+      ],
       "relations": [],
       "resolution_logs": [],
       "version": "1.0",
-      "processed_at": "2026-08-02T11:05:44.627289Z"
+      "processed_at": "2026-08-06T12:59:27.737444Z"
     },
     "reason": {
-      "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
-      "subject": "Compare OpenAI and Qwen with sources",
-      "entity_count": 0,
+      "correlation_id": "11725304-edcd-49dd-8fd8-1c181b92b0d9",
+      "subject": "Compare Skinjestique",
+      "entity_count": 1,
       "relation_count": 0,
-      "evidence": [],
-      "conclusion": "Validated evidence for Compare OpenAI and Qwen with sources",
+      "evidence": [
+        {
+          "entity": "Compare Skinjestique",
+          "type": "PERSON",
+          "confidence": 0.72
+        }
+      ],
+      "conclusion": "Validated evidence for Compare Skinjestique",
       "version": "1.0"
     },
     "visibility": {
-      "entity_id": "compare-openai-and-qwen-with-sources",
-      "entity": "Compare OpenAI and Qwen with sources",
-      "visibility_score": 20.0,
-      "confidence": 0.3267,
+      "entity_id": "compare-skinjestique",
+      "entity": "Compare Skinjestique",
+      "visibility_score": 72.2,
+      "confidence": 0.3597,
       "metrics": {
-        "mention_frequency": 0.0,
-        "recommendation_position": 0.0,
+        "mention_frequency": 100.0,
+        "recommendation_position": 100.0,
         "citation_count": 0.0,
         "citation_authority": 0.0,
-        "cross_model_presence": 0.0,
+        "cross_model_presence": 100.0,
         "consistency": 100.0,
-        "entity_confidence": 50.0,
+        "entity_confidence": 72.0,
         "freshness": 100.0
       },
       "weights": {
@@ -643,34 +708,48 @@
         "freshness": 0.05
       },
       "version": "1.0",
-      "calculated_at": "2026-08-02T11:05:44.627349Z"
+      "calculated_at": "2026-08-06T12:59:27.737590Z"
     },
     "knowledge_graph": {
-      "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
-      "nodes": [],
+      "correlation_id": "11725304-edcd-49dd-8fd8-1c181b92b0d9",
+      "nodes": [
+        {
+          "id": "kg:28f59d85-2f0f-5091-86d8-7f0490412e53",
+          "label": "Compare Skinjestique",
+          "type": "PERSON",
+          "confidence": 0.72
+        }
+      ],
       "edges": [],
       "version": "1.0"
     },
     "response": {
-      "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
-      "answer": "Validated evidence for Compare OpenAI and Qwen with sources",
-      "visibility_score": 20.0,
+      "correlation_id": "11725304-edcd-49dd-8fd8-1c181b92b0d9",
+      "answer": "Validated evidence for Compare Skinjestique",
+      "visibility_score": 72.2,
       "knowledge_graph": {
-        "correlation_id": "f4a37ab0-fcd3-44e8-bbe5-a428af63d62d",
-        "nodes": [],
+        "correlation_id": "11725304-edcd-49dd-8fd8-1c181b92b0d9",
+        "nodes": [
+          {
+            "id": "kg:28f59d85-2f0f-5091-86d8-7f0490412e53",
+            "label": "Compare Skinjestique",
+            "type": "PERSON",
+            "confidence": 0.72
+          }
+        ],
         "edges": [],
         "version": "1.0"
       },
       "version": "1.0"
     },
     "timings_ms": {
-      "intent": 4.115,
-      "router": 31.709,
-      "executor": 1.619,
-      "entity_extraction": 0.085,
-      "reason": 0.005,
-      "visibility": 0.131,
-      "knowledge_graph": 0.017,
+      "intent": 10.317,
+      "router": 41.886,
+      "executor": 3.751,
+      "entity_extraction": 0.393,
+      "reason": 0.015,
+      "visibility": 0.312,
+      "knowledge_graph": 0.055,
       "response": 0.001
     }
   }

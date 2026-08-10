@@ -5,6 +5,20 @@ and Redis 8. The synchronous request path is Query Intent → LLM Router → Que
 Executor → Entity Extraction → Reason Engine → AI Visibility → Knowledge Graph.
 Correlation IDs and typed Pydantic v2 contracts cross every boundary.
 
+## Sprint 10 product orchestration
+
+The `product` module is the application layer for the first user journey. It
+depends on public service and port contracts and orchestrates existing domains;
+it does not reimplement their scoring or extraction logic. Its only owned
+persistence is the versioned Prompt Library and read-only Research Template
+catalog. Wizard state becomes an ordinary Research record, and downstream
+artifacts are recorded in Research metadata for backward-compatible reporting.
+
+Dependency direction remains `product -> public services/ports -> repositories
+-> SQLAlchemy`. The final report is read-only composition: score, trend,
+benchmark, insights, recommendations and graph values come from their owning
+engines. Provider-specific payloads are normalized before extraction/scoring.
+
 The production Router owns model selection. Its repository persists models,
 policies, routing history, cost entries, and circuit state through SQLAlchemy 2.
 YAML files provide bootstrapping and runtime defaults; database records are the
@@ -22,3 +36,39 @@ and Redis are independently deployable containers.
 RC1 targets 99.9% service availability. Router overhead objectives are p50 ≤50
 ms, p95 ≤150 ms, and p99 ≤500 ms excluding provider latency. Recovery objectives
 are RPO ≤5 minutes and RTO ≤30 minutes.
+## Product Analytics bounded context
+
+`product_analytics` is an independent telemetry bounded context. HTTP and domain
+producers submit normalized `AnalyticsEvent` records through one service; the
+module never imports Research models or UI components. Its repository owns the
+append-only event stream, sessions, and materialized `AnalyticsReport` aggregates.
+The engine computes usage, retention, operational research/report indicators,
+provider consumption, feedback, errors, and time buckets. Cached aggregates avoid
+replaying the complete event stream on every dashboard request.
+
+```text
+HTTP/domain producers -> ProductAnalyticsService -> AnalyticsEvent repository
+                                             |-> aggregation engine
+                                             |-> cached AnalyticsReport
+                                             `-> dashboard/export API -> Web UI
+```
+
+Authorization is applied at the API adapter through the platform administrator
+dependency. The core service and repository remain transport- and screen-neutral.
+
+## Notification Center
+
+Notification producers use the public `NotificationPort`; they do not know about
+delivery providers. `NotificationService` persists one canonical notification and
+an outbox row per requested channel. In-app delivery is immediate, while email,
+Telegram, and webhook rows remain pending for channel workers implementing
+`DeliveryPort`. The user-scoped inbox supports category and priority filters,
+read timestamps, archive, counters, and bounded pagination.
+
+## Organization Workspace
+
+`organization_workspace` owns collaboration state: organizations, memberships,
+invitations, limits, default-workspace selection, project links, and append-only
+activity. Existing personal Workspace APIs remain unchanged. Membership checks
+are centralized in the service layer; owner/admin mutations and user-scoped reads
+share one repository and DI boundary. Invitation tokens are stored only as hashes.

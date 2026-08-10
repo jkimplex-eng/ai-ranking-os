@@ -10,6 +10,7 @@ from research import service
 from research.comparison import ComparisonNotReadyError, ComparisonService
 from research.extraction import ExtractionProcessingError, ExtractionService
 from research.history import ResearchHistoryService
+from research.queue import ResearchAlreadyQueuedError, enqueue, get_job
 from research.reporting import ReportingService
 from research.repositories import (
     EntityNotFoundError,
@@ -21,7 +22,9 @@ from research.schemas import (
     ExtractionResultRead,
     ResearchComparisonRead,
     ResearchCreate,
+    ResearchEnqueueRequest,
     ResearchHistoryRead,
+    ResearchJobRead,
     ResearchRead,
     ResearchReportRead,
     ResearchRunRequest,
@@ -103,6 +106,24 @@ def compare_research(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(error),
         ) from error
+
+
+@router.post("/research/run", response_model=ResearchJobRead, status_code=status.HTTP_202_ACCEPTED)
+def enqueue_research(payload: ResearchEnqueueRequest, db: DbSession) -> ResearchJobRead:
+    try:
+        return enqueue(db, payload)
+    except EntityNotFoundError as error:
+        raise _not_found(error) from error
+    except ResearchAlreadyQueuedError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+
+
+@router.get("/research/jobs/{job_id}", response_model=ResearchJobRead)
+def get_research_job(job_id: int, db: DbSession) -> ResearchJobRead:
+    try:
+        return get_job(db, job_id)
+    except EntityNotFoundError as error:
+        raise _not_found(error) from error
 
 
 @router.get("/research/{research_id}", response_model=ResearchRead)

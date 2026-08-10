@@ -11,6 +11,8 @@ class ProviderUsageRecord(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     execution_id: Mapped[str] = mapped_column(String(200), index=True)
+    research_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    user_id: Mapped[str | None] = mapped_column(String(200), index=True)
     provider: Mapped[str] = mapped_column(String(100), index=True)
     model: Mapped[str] = mapped_column(String(200), index=True)
     prompt_tokens: Mapped[int] = mapped_column(Integer)

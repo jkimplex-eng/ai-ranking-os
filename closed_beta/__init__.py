@@ -1,0 +1,1 @@
+"""Closed Beta administration domain."""

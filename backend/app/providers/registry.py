@@ -19,6 +19,7 @@ class ProviderDefinition:
         self.base_url = raw["base_url"].rstrip("/")
         self.credential = raw.get("credential")
         self.project_credential = raw.get("project_credential")
+        self.enabled = bool(raw.get("enabled", True))
         self.mock = bool(raw.get("mock", False))
         self.timeout_seconds = float(raw.get("timeout_seconds", 30))
         self.rate_limits = raw.get("rate_limits", {})
@@ -79,6 +80,9 @@ class ProviderRegistry:
     def all(self) -> list[ProviderDefinition]:
         self.refresh()
         return list(self._definitions.values())
+
+    def enabled(self) -> list[ProviderDefinition]:
+        return [definition for definition in self.all() if definition.enabled]
 
     def prices(self) -> dict[tuple[str, str], ModelPrice]:
         self.refresh()
