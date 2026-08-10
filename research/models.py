@@ -68,6 +68,9 @@ class Research(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workspace_projects.id", ondelete="SET NULL"), index=True
+    )
     entity_id: Mapped[UUID | None] = mapped_column(Uuid, index=True)
     title: Mapped[str] = mapped_column(String(300))
     description: Mapped[str | None] = mapped_column(Text)

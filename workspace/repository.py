@@ -2,7 +2,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from research.models import Research, ResearchScore
-from workspace.models import UserWorkspace
+from workspace.models import Project, UserWorkspace
 
 
 class WorkspaceRepository:
@@ -40,3 +40,49 @@ class WorkspaceRepository:
         for row in rows:
             result.setdefault(row.research_id, row)
         return result
+
+
+class ProjectNotFoundError(LookupError):
+    pass
+
+
+class ProjectRepository:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def list(self, workspace_id: int, *, include_archived: bool = False) -> list[Project]:
+        statement = select(Project).where(Project.workspace_id == workspace_id)
+        if not include_archived:
+            statement = statement.where(Project.archived.is_(False))
+        return list(
+            self.db.scalars(
+                statement.order_by(Project.favorite.desc(), Project.updated_at.desc())
+            )
+        )
+
+    def get(self, workspace_id: int, project_id: int) -> Project:
+        project = self.db.scalar(
+            select(Project).where(
+                Project.id == project_id,
+                Project.workspace_id == workspace_id,
+            )
+        )
+        if project is None:
+            raise ProjectNotFoundError(f"Project {project_id} not found")
+        return project
+
+    def save(self, project: Project) -> Project:
+        self.db.add(project)
+        self.db.commit()
+        self.db.refresh(project)
+        return project
+
+    def research_counts(self, project_ids: list[int]) -> dict[int, int]:
+        if not project_ids:
+            return {}
+        rows = self.db.execute(
+            select(Research.project_id, func.count(Research.id))
+            .where(Research.project_id.in_(project_ids))
+            .group_by(Research.project_id)
+        )
+        return {int(project_id): int(count) for project_id, count in rows}

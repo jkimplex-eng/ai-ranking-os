@@ -39,3 +39,36 @@ class WorkspaceRead(BaseModel):
     total_research: int
     created_at: datetime
     updated_at: datetime
+
+
+class ProjectCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=10_000)
+    settings: dict[str, Any] = Field(default_factory=dict)
+    tags: list[str] = Field(default_factory=list, max_length=50)
+    favorite: bool = False
+
+
+class ProjectUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=10_000)
+    settings: dict[str, Any] | None = None
+    tags: list[str] | None = Field(default=None, max_length=50)
+    favorite: bool | None = None
+    archived: bool | None = None
+
+
+class ProjectRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    workspace_id: int
+    name: str
+    description: str
+    settings: dict[str, Any]
+    tags: list[str]
+    favorite: bool
+    archived: bool
+    research_count: int = 0
+    created_at: datetime
+    updated_at: datetime

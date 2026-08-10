@@ -4,7 +4,7 @@ from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
-from workspace.service import WorkspaceService
+from workspace.service import ProjectService, WorkspaceService
 
 
 def current_user_id(request: Request) -> int:
@@ -18,3 +18,10 @@ def workspace_service(db: Annotated[Session, Depends(get_db)]) -> WorkspaceServi
 
 CurrentUserId = Annotated[int, Depends(current_user_id)]
 WorkspaceServiceDependency = Annotated[WorkspaceService, Depends(workspace_service)]
+
+
+def project_service(db: Annotated[Session, Depends(get_db)]) -> ProjectService:
+    return ProjectService(db)
+
+
+ProjectServiceDependency = Annotated[ProjectService, Depends(project_service)]

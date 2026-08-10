@@ -62,3 +62,32 @@ def test_workspace_is_provisioned_and_aggregates_recent_work(client: TestClient)
     assert updated.status_code == 200
     assert updated.json()["name"] == "AI Ranking Team"
     assert "/workspace" in client.get("/openapi.json").json()["paths"]
+
+
+def test_project_crud_and_research_ownership(client: TestClient) -> None:
+    created = client.post(
+        "/workspace/projects",
+        json={"name": "Разум Маркета", "favorite": True, "tags": ["own-brand"]},
+    )
+    assert created.status_code == 201
+    project_id = created.json()["id"]
+
+    research = client.post(
+        "/research",
+        json={"project_id": project_id, "title": "GEO audit"},
+    )
+    assert research.status_code == 201
+    assert research.json()["project_id"] == project_id
+
+    detail = client.get(f"/workspace/projects/{project_id}")
+    assert detail.status_code == 200
+    assert detail.json()["research_count"] == 1
+    assert client.get("/workspace").json()["favorite_projects"][0]["id"] == project_id
+
+    updated = client.patch(
+        f"/workspace/projects/{project_id}", json={"description": "Daily internal analysis"}
+    )
+    assert updated.status_code == 200
+    assert updated.json()["description"] == "Daily internal analysis"
+    assert client.delete(f"/workspace/projects/{project_id}").status_code == 204
+    assert client.get(f"/workspace/projects/{project_id}").status_code == 404
