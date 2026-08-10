@@ -36,7 +36,11 @@ class ProductionAuthenticationMiddleware(BaseHTTPMiddleware):
         self.settings = settings
 
     async def dispatch(self, request: Request, call_next):
-        if not self.settings.security_enforce_auth or request.url.path in PUBLIC_PATHS:
+        if (
+            not self.settings.security_enforce_auth
+            or request.url.path in PUBLIC_PATHS
+            or request.url.path.startswith("/shared/reports/")
+        ):
             return await call_next(request)
         with SessionLocal() as db:
             api_key = request.headers.get("x-api-key")

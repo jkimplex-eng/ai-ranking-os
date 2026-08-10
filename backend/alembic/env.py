@@ -36,6 +36,7 @@ from recommendation.simulation import models as recommendation_simulation_models
 from recommendation.templates import models as recommendation_template_models  # noqa: F401
 from relationship_discovery import models as relationship_discovery_models  # noqa: F401
 from report_center import models as report_center_models  # noqa: F401
+from report_sharing import models as report_sharing_models  # noqa: F401
 from research import models as research_models  # noqa: F401
 from scheduler import models as scheduler_models  # noqa: F401
 from segmentation import models as segmentation_models  # noqa: F401

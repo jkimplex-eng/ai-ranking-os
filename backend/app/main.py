@@ -53,6 +53,7 @@ from recommendation.simulation.router import router as recommendation_simulation
 from recommendation.templates.router import router as recommendation_templates_router
 from relationship_discovery.router import router as relationship_discovery_router
 from report_center.router import router as report_center_router
+from report_sharing.router import router as report_sharing_router
 from research.router import router as research_router
 from scheduler.router import router as scheduler_router
 from segmentation.router import router as segmentation_router
@@ -90,6 +91,7 @@ app.include_router(decision_center_router)
 app.include_router(authentication_router)
 app.include_router(workspace_router)
 app.include_router(report_center_router)
+app.include_router(report_sharing_router)
 app.include_router(rbac_router)
 app.include_router(api_keys_router)
 app.include_router(audit_router)

@@ -360,3 +360,58 @@ def test_report_versioning_is_immutable_deduplicated_and_comparable(
     )
     assert comparison.status_code == 200
     assert comparison.json()["score_deltas"]["visibility_score"] is None
+
+
+def test_report_sharing_public_private_rotation_revocation_and_audit(
+    client: TestClient,
+) -> None:
+    project_id = client.post(
+        "/workspace/projects", json={"name": "Shared reports"}
+    ).json()["id"]
+    research_id = client.post(
+        "/research", json={"project_id": project_id, "title": "Client report"}
+    ).json()["id"]
+    shares_url = f"/reports/{research_id}/shares"
+
+    public = client.post(shares_url, json={"access_mode": "PUBLIC"})
+    assert public.status_code == 201
+    public_token = public.json()["token"]
+    opened = client.get(f"/shared/reports/{public_token}")
+    assert opened.status_code == 200
+    assert opened.json()["read_only"] is True
+    assert opened.json()["report"]["research"]["id"] == research_id
+
+    private = client.post(
+        shares_url,
+        json={"access_mode": "PRIVATE", "password": "client-secret-123"},
+    )
+    assert private.status_code == 201
+    private_token = private.json()["token"]
+    assert client.get(f"/shared/reports/{private_token}").status_code == 404
+    assert client.get(
+        f"/shared/reports/{private_token}",
+        headers={"X-Share-Password": "client-secret-123"},
+    ).status_code == 200
+
+    rotated = client.post(f"/reports/shares/{private.json()['id']}/rotate")
+    assert rotated.status_code == 200
+    assert rotated.json()["token"] != private_token
+    assert client.get(
+        f"/shared/reports/{private_token}",
+        headers={"X-Share-Password": "client-secret-123"},
+    ).status_code == 404
+    assert client.get(
+        f"/shared/reports/{rotated.json()['token']}",
+        headers={"X-Share-Password": "client-secret-123"},
+    ).status_code == 200
+
+    assert client.post(
+        f"/reports/shares/{public.json()['id']}/revoke"
+    ).status_code == 200
+    assert client.get(f"/shared/reports/{public_token}").status_code == 404
+    links = client.get(shares_url).json()
+    assert sum(link["view_count"] for link in links) == 3
+    audited = client.get(
+        "/audit/events", params={"action": "report.share.viewed"}
+    ).json()
+    assert audited["total"] == 3
