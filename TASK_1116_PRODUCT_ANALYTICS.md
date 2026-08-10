@@ -52,7 +52,9 @@ indexes and a fully reversible downgrade.
 - Playwright: PASS (1 local test; production-only E2E correctly skipped without URL).
 - OpenAPI: PASS, 216 paths including Product Analytics.
 - Alembic 0069 PostgreSQL upgrade/downgrade SQL: PASS. The live PostgreSQL cycle
-  and Docker runtime are executed by GitHub Actions.
+  also passed in GitHub Actions.
+- GitHub Actions: PASS — Ruff/Pytest/Compileall, frontend/Playwright, PostgreSQL
+  upgrade/downgrade, Docker runtime smoke, and production Compose smoke.
 
 ## Known limitations
 
