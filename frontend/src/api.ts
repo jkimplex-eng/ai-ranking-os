@@ -36,6 +36,8 @@ export type ProviderItem = {
   availability: string; free_tier: boolean; priority: number;
   streaming: boolean; reasoning: boolean; vision: boolean;
 };
+export type SystemProviderItem = { model_id: string; provider: string; latency_ms: number; circuit_state: string; interface: { available?: boolean; mock?: boolean; checked_at?: string; models?: number | string[] } };
+export type RouterHistoryItem = { id: number; selected_models: string[]; latency_ms: number; estimated_cost_usd: number; error?: string | null; created_at: string };
 export type ProductAnalyticsDashboard = {
   period: "HOURLY" | "DAILY" | "WEEKLY" | "MONTHLY";
   overview: Record<string, number>;
@@ -128,6 +130,9 @@ export class ApiClient {
   adminReports() { return this.request<{ items: Array<{ research_id: number; title: string; status: string; visibility_score?: number }>; total: number }>("/reports?limit=20"); }
   adminJobs() { return this.request<Array<{ id: number; state: string; agent_id?: number; attempts: number }>>("/execution/history"); }
   systemHealth() { return this.request<Record<string, unknown>>("/system/health"); }
+  systemProviders() { return this.request<{ providers: SystemProviderItem[] }>("/system/providers"); }
+  systemCosts() { return this.request<Record<string, number>>("/system/costs"); }
+  routerHistory(limit = 100) { return this.request<{ items: RouterHistoryItem[] }>(`/router/history?limit=${limit}`); }
   review(payload: WizardPayload) {
     return this.request<WizardReview>("/research/wizard/review", {
       method: "POST",

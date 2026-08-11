@@ -16,6 +16,8 @@ import {
   type ReportCatalogItem,
   type ReportResult,
   type ResearchItem,
+  type RouterHistoryItem,
+  type SystemProviderItem,
   type WorkspaceProjectItem,
   type WizardPayload,
   type WizardReview,
@@ -90,6 +92,7 @@ type ReportShape = {
     priority?: string;
     metric?: string;
   }>;
+  provider_statistics?: Record<string, unknown>;
   detected_entities?: unknown[];
   sources?: unknown[];
   latency_ms?: number;
@@ -494,14 +497,24 @@ function ProductAnalyticsScreen() {
 
 function ProvidersDashboard() {
   const [providers, setProviders] = useState<ProviderItem[]>([]);
+  const [runtime, setRuntime] = useState<SystemProviderItem[]>([]);
+  const [history, setHistory] = useState<RouterHistoryItem[]>([]);
+  const [providerStats, setProviderStats] = useState<Record<string, Record<string, number>>>({});
   const [costs, setCosts] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
   useEffect(() => {
-    Promise.all([api.listProviders(), api.routerStatus()])
-      .then(([items, status]) => { setProviders(items); setCosts(status.costs); })
+    Promise.all([api.listProviders(), api.routerStatus(), api.systemProviders(), api.routerHistory(), api.listResearch()])
+      .then(async ([items, status, system, routerHistory, research]) => {
+        setProviders(items); setCosts(status.costs); setRuntime(system.providers); setHistory(routerHistory.items);
+        const latest = [...research].sort((a, b) => b.id - a.id)[0];
+        if (latest) {
+          const report = await api.finalReport(latest.id) as ReportShape;
+          setProviderStats((report.provider_statistics ?? {}) as Record<string, Record<string, number>>);
+        }
+      })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки"));
   }, []);
-  const available = providers.filter((item) => item.availability === "AVAILABLE").length;
+  const available = providers.filter((item) => item.availability === "READY").length;
   return (
     <main className="page providers-page">
       <div className="page-heading">
@@ -522,13 +535,13 @@ function ProvidersDashboard() {
             {['Models','Policies','Router','Benchmarks','Costs','Failover','Health'].map((tab, i) => <button className={i===0?'active':''} key={tab}>{tab}</button>)}
           </div>
           <section className="provider-cards">
-            {providers.map((provider) => <article className="panel provider-card" key={provider.id}>
+            {providers.map((provider) => { const health = runtime.find((item) => item.provider === provider.id); const last = history.find((item) => item.selected_models.some((model) => health?.model_id === model)); const stats = providerStats[provider.id] ?? {}; return <article className="panel provider-card" key={provider.id}>
               <header><span className="provider-logo">{provider.display_name.slice(0,2).toUpperCase()}</span>
                 <div><h2>{provider.display_name}</h2><small>{provider.id}</small></div>
-                <Badge tone={provider.availability === 'AVAILABLE' ? 'success' : 'warning'}>{provider.availability}</Badge></header>
-              <div className="provider-stats"><div><span>Context</span><b>{Math.round(provider.context_window/1000)}K</b></div><div><span>Priority</span><b>#{provider.priority}</b></div><div><span>Tier</span><b>{provider.free_tier?'FREE':'PAID'}</b></div></div>
+                <Badge tone={provider.availability === 'READY' ? 'success' : 'warning'}>{provider.availability}</Badge></header>
+              <div className="provider-stats"><div><span>Configured</span><b>{provider.availability === "NOT_CONFIGURED" ? "NO" : "YES"}</b></div><div><span>Connected</span><b>{health?.interface.available ? "YES" : "NO"}</b></div><div><span>Mock</span><b>{health?.interface.mock ? "YES" : "NO"}</b></div><div><span>Last Request</span><b>{last ? new Date(last.created_at).toLocaleString("ru-RU") : "—"}</b></div><div><span>Last Success</span><b>{last && !last.error ? new Date(last.created_at).toLocaleString("ru-RU") : "—"}</b></div><div><span>Last Error</span><b>{last?.error || "—"}</b></div><div><span>Tokens</span><b>{Number(stats.total_tokens ?? stats.tokens ?? 0) || "—"}</b></div><div><span>Cost</span><b>{last ? `$${last.estimated_cost_usd.toFixed(4)}` : "—"}</b></div><div><span>Latency</span><b>{Number(stats.latency_ms ?? last?.latency_ms ?? 0) ? `${Number(stats.latency_ms ?? last?.latency_ms).toFixed(0)} ms` : "—"}</b></div></div>
               <div className="capability-tags">{provider.capabilities.slice(0,6).map(cap => <span key={cap}>{cap}</span>)}</div>
-            </article>)}
+            </article>})}
           </section>
         </>
       )}
