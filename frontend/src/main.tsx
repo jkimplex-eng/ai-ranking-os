@@ -5,11 +5,18 @@ import {
   type AdminAudit,
   type AdminFeedback,
   type AdminUser,
+  type CompetitorItem,
+  type FeedbackItem,
+  type GraphSnapshot,
   type ProductAnalyticsDashboard as AnalyticsDashboard,
   type NotificationItem,
   type OrganizationItem,
   type ProviderItem,
+  type RecommendationItem,
+  type ReportCatalogItem,
   type ReportResult,
+  type ResearchItem,
+  type WorkspaceProjectItem,
   type WizardPayload,
   type WizardReview,
 } from "./api";
@@ -35,13 +42,21 @@ const api = new ApiClient();
 const screenPaths: Record<Screen, string> = {
   home: "/",
   onboarding: "/getting-started",
-  wizard: "/research",
+  research: "/research",
+  wizard: "/research/new",
+  reports: "/reports",
   report: "/reports/latest",
+  recommendations: "/recommendations",
+  graph: "/knowledge-graph",
+  competitors: "/competitors",
+  history: "/history",
   providers: "/providers",
   analytics: "/product-analytics",
   notifications: "/notifications",
   organization: "/organizations",
   settings: "/settings",
+  feedback: "/feedback",
+  profile: "/profile",
   admin: "/admin",
 };
 const pathScreens = Object.fromEntries(
@@ -63,7 +78,7 @@ const metricMeta = [
   ["Confidence", "confidence_score"],
 ] as const;
 
-type Screen = "home" | "wizard" | "report" | "providers" | "analytics" | "notifications" | "organization" | "settings" | "admin" | "onboarding";
+type Screen = "home" | "research" | "wizard" | "reports" | "report" | "recommendations" | "graph" | "competitors" | "history" | "providers" | "analytics" | "notifications" | "organization" | "settings" | "feedback" | "profile" | "admin" | "onboarding";
 type ReportShape = {
   executive_summary?: string;
   score?: Record<string, number | string>;
@@ -177,88 +192,39 @@ function Login({ onReady }: { onReady: (name: string) => void }) {
 function Shell({
   user,
   children,
-  onHome,
-  onProviders,
-  onAnalytics,
-  onNotifications,
-  onOrganization,
-  onSettings,
-  onAdmin,
-  onOnboarding,
+  onNavigate,
   active,
   onLogout,
 }: {
   user: string;
   children: React.ReactNode;
-  onHome: () => void;
-  onProviders: () => void;
-  onAnalytics: () => void;
-  onNotifications: () => void;
-  onOrganization: () => void;
-  onSettings: () => void;
-  onAdmin: () => void;
-  onOnboarding: () => void;
+  onNavigate: (screen: Screen) => void;
   active: Screen;
   onLogout: () => void;
 }) {
   const nav = [
-    ["⌂", "Dashboard"],
-    ["→", "Getting Started"],
-    ["◉", "Research"],
-    ["▤", "Reports"],
-    ["✓", "Recommendations"],
-    ["⌘", "Knowledge Graph"],
-    ["◇", "Competitors"],
-    ["↗", "History"],
-    ["✦", "AI Providers"],
-    ["◫", "Product Analytics"],
-    ["♢", "Notifications"],
-    ["◎", "Organization"],
-    ["⚙", "Settings"],
-    ["▦", "Admin Console"],
-  ];
+    ["⌂", "Dashboard", "home"], ["→", "Getting Started", "onboarding"],
+    ["◉", "Research", "research"], ["▤", "Reports", "reports"],
+    ["✓", "Recommendations", "recommendations"], ["⌘", "Knowledge Graph", "graph"],
+    ["◇", "Competitors", "competitors"], ["↗", "History", "history"],
+    ["✦", "AI Providers", "providers"], ["◫", "Product Analytics", "analytics"],
+    ["♢", "Notifications", "notifications"], ["◎", "Organizations", "organization"],
+    ["◌", "Feedback", "feedback"], ["♙", "User Profile", "profile"],
+    ["⚙", "Settings", "settings"], ["▦", "Admin Console", "admin"],
+  ] as const;
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <button className="wordmark" onClick={onHome}>
+        <button className="wordmark" onClick={() => onNavigate("home")}>
           <span className="logo-mark small">AR</span>
           <span>AI Ranking OS</span>
         </button>
         <nav>
-          {nav.map(([icon, label], index) => (
+          {nav.map(([icon, label, target]) => (
             <button
               key={label}
-              className={
-                (index === 0 && active === "home") ||
-                (label === "Getting Started" && active === "onboarding") ||
-                (label === "AI Providers" && active === "providers") ||
-                (label === "Product Analytics" && active === "analytics")
-                || (label === "Notifications" && active === "notifications")
-                || (label === "Organization" && active === "organization")
-                || (label === "Settings" && active === "settings")
-                || (label === "Admin Console" && active === "admin")
-                  ? "active"
-                  : ""
-              }
-              onClick={
-                index === 0
-                  ? onHome
-                  : label === "Getting Started"
-                    ? onOnboarding
-                  : label === "AI Providers"
-                    ? onProviders
-                    : label === "Product Analytics"
-                      ? onAnalytics
-                      : label === "Notifications"
-                        ? onNotifications
-                        : label === "Organization"
-                          ? onOrganization
-                          : label === "Settings"
-                            ? onSettings
-                            : label === "Admin Console"
-                              ? onAdmin
-                      : undefined
-              }
+              className={active === target ? "active" : ""}
+              onClick={() => onNavigate(target)}
             >
               <span>{icon}</span>
               {label}
@@ -321,6 +287,55 @@ function SettingsScreen({ user }: { user: string }) {
       {tab === "theme" && <><h2>Тема</h2><div className="theme-options">{["dark", "light", "system"].map((theme) => <button className={settings.theme === theme ? "active" : ""} onClick={() => set("theme", theme)} key={theme}>{theme}</button>)}</div></>}
       {tab === "organization" && <><h2>Организация</h2><p>Профиль, участники, роли и лимиты доступны в Organization Workspace.</p></>}
     </section></div></main>;
+}
+
+type RecordsKind = "research" | "reports" | "recommendations" | "graph" | "competitors" | "history" | "feedback" | "profile";
+type DisplayRecord = { id: string; title: string; status: string; detail: string; meta?: string };
+
+function RecordsScreen({ kind, onNewResearch }: { kind: RecordsKind; onNewResearch: () => void }) {
+  const [records, setRecords] = useState<DisplayRecord[]>([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const titles: Record<RecordsKind, [string, string]> = {
+    research: ["Исследования", "Запуски, прогресс и состояние выполнения"],
+    reports: ["Отчёты", "Сформированные результаты исследований"],
+    recommendations: ["Рекомендации", "Приоритетные действия из последнего исследования"],
+    graph: ["Knowledge Graph", "Реальные сущности и связи последнего snapshot"],
+    competitors: ["Конкуренты", "Конкуренты из проектов рабочего пространства"],
+    history: ["История", "Хронология исследований от новых к старым"],
+    feedback: ["Feedback", "Ваши обращения и их текущий статус"],
+    profile: ["Профиль", "Данные текущей авторизованной учётной записи"],
+  };
+  useEffect(() => {
+    const load = async () => {
+      if (kind === "research" || kind === "history") {
+        const items: ResearchItem[] = await api.listResearch();
+        return [...items].sort((a, b) => b.id - a.id).map((item) => ({ id: String(item.id), title: item.title, status: item.status, detail: `${item.progress_percent ?? 0}% · ${item.completed_tasks ?? 0}/${item.total_tasks ?? 0} задач`, meta: item.created_at ? new Date(item.created_at).toLocaleString("ru-RU") : undefined }));
+      }
+      if (kind === "reports") return (await api.reports()).items.map((item: ReportCatalogItem) => ({ id: String(item.research_id), title: item.title, status: item.status, detail: `AI Visibility: ${item.visibility_score?.toFixed(1) ?? "—"}`, meta: new Date(item.created_at).toLocaleString("ru-RU") }));
+      if (kind === "recommendations") {
+        const latest = [...await api.listResearch()].sort((a, b) => b.id - a.id)[0];
+        if (!latest) return [];
+        return (await api.recommendations(latest.id)).recommendations.map((item: RecommendationItem) => ({ id: String(item.id), title: item.explanation, status: item.priority, detail: `${item.metric}: ${item.metric_value.toFixed(1)}`, meta: item.expected_effect }));
+      }
+      if (kind === "graph") {
+        const graph: GraphSnapshot = await api.graph();
+        return graph.nodes.map((node) => ({ id: String(node.id), title: node.name, status: node.node_type, detail: `Confidence ${(node.confidence * 100).toFixed(0)}%`, meta: `Snapshot #${graph.id} · ${graph.node_count} узлов · ${graph.edge_count} связей` }));
+      }
+      if (kind === "competitors") {
+        const projects: WorkspaceProjectItem[] = await api.workspaceProjects();
+        const groups = await Promise.all(projects.map(async (project) => ({ project, items: await api.projectCompetitors(project.id) })));
+        return groups.flatMap(({ project, items }) => items.map((item: CompetitorItem) => ({ id: `${project.id}-${item.id}`, title: item.name, status: item.active ? "ACTIVE" : "INACTIVE", detail: item.domains.join(", ") || "Домен не указан", meta: project.name })));
+      }
+      if (kind === "feedback") return (await api.feedback()).map((item: FeedbackItem) => ({ id: String(item.id), title: item.title, status: item.status, detail: `${item.feedback_type} · ${item.priority}`, meta: new Date(item.created_at).toLocaleString("ru-RU") }));
+      const profile = await api.me();
+      return [{ id: profile.email, title: profile.display_name, status: "ACTIVE", detail: profile.email }];
+    };
+    load().then(setRecords).catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки")).finally(() => setLoading(false));
+  }, [kind]);
+  return <main className="analytics-page records-page"><header className="analytics-hero"><div><span className="eyebrow">REAL DATA</span><h1>{titles[kind][0]}</h1><p>{titles[kind][1]}</p></div>{kind === "research" && <button className="primary-action" onClick={onNewResearch}>Новое исследование</button>}</header>
+    {error ? <div className="error" role="alert">{error}</div> : loading ? <DashboardSkeleton /> : <section className="records-list">{records.length ? records.map((item) => <article className="analytics-card record-card" key={item.id}><div><small>{item.meta}</small><h2>{item.title}</h2><p>{item.detail}</p></div><Badge tone={item.status === "COMPLETED" || item.status === "ACTIVE" ? "success" : item.status === "FAILED" || item.status === "CRITICAL" ? "danger" : "warning"}>{item.status}</Badge></article>) : <div className="analytics-card empty-state">Данных пока нет. Они появятся после первого действия в этом разделе.</div>}</section>}
+  </main>;
 }
 
 function OnboardingScreen({ onResearch }: { onResearch: () => void }) {
@@ -1508,6 +1523,22 @@ function App() {
             navigate("report");
           }}
         />
+      ) : screen === "research" ? (
+        <RecordsScreen key="research" kind="research" onNewResearch={() => navigate("wizard")} />
+      ) : screen === "reports" ? (
+        <RecordsScreen key="reports" kind="reports" onNewResearch={() => navigate("wizard")} />
+      ) : screen === "recommendations" ? (
+        <RecordsScreen key="recommendations" kind="recommendations" onNewResearch={() => navigate("wizard")} />
+      ) : screen === "graph" ? (
+        <RecordsScreen key="graph" kind="graph" onNewResearch={() => navigate("wizard")} />
+      ) : screen === "competitors" ? (
+        <RecordsScreen key="competitors" kind="competitors" onNewResearch={() => navigate("wizard")} />
+      ) : screen === "history" ? (
+        <RecordsScreen key="history" kind="history" onNewResearch={() => navigate("wizard")} />
+      ) : screen === "feedback" ? (
+        <RecordsScreen key="feedback" kind="feedback" onNewResearch={() => navigate("wizard")} />
+      ) : screen === "profile" ? (
+        <RecordsScreen key="profile" kind="profile" onNewResearch={() => navigate("wizard")} />
       ) : screen === "providers" ? (
         <ProvidersDashboard />
       ) : screen === "analytics" ? (
@@ -1550,14 +1581,7 @@ function App() {
     <Shell
       user={user}
       active={screen}
-      onHome={() => navigate("home")}
-      onProviders={() => navigate("providers")}
-      onAnalytics={() => navigate("analytics")}
-      onNotifications={() => navigate("notifications")}
-      onOrganization={() => navigate("organization")}
-      onSettings={() => navigate("settings")}
-      onAdmin={() => navigate("admin")}
-      onOnboarding={() => navigate("onboarding")}
+      onNavigate={navigate}
       onLogout={() => {
         setUser("");
         setReport(undefined);

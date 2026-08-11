@@ -23,7 +23,13 @@ export type ReportResult = {
   report_url: string;
   report: Record<string, unknown>;
 };
-export type ResearchItem = { id: number; title: string; status: string };
+export type ResearchItem = { id: number; title: string; status: string; progress_percent?: number; total_tasks?: number; completed_tasks?: number; failed_tasks?: number; created_at?: string };
+export type WorkspaceProjectItem = { id: number; name: string; description: string; research_count: number };
+export type CompetitorItem = { id: number; project_id: number; name: string; domains: string[]; active: boolean };
+export type ReportCatalogItem = { research_id: number; title: string; status: string; visibility_score?: number; created_at: string };
+export type RecommendationItem = { id: number; recommendation_type: string; priority: string; explanation: string; metric: string; metric_value: number; expected_effect: string };
+export type GraphSnapshot = { id: number; structure_version: string; node_count: number; edge_count: number; created_at: string; nodes: Array<{ id: number; name: string; node_type: string; confidence: number }>; edges: unknown[] };
+export type FeedbackItem = { id: number; title: string; feedback_type: string; priority: string; status: string; created_at: string };
 export type ProviderItem = {
   id: string; display_name: string; capabilities: string[];
   pricing: Record<string, unknown>; context_window: number;
@@ -135,6 +141,12 @@ export class ApiClient {
     });
   }
   listResearch() { return this.request<ResearchItem[]>("/research"); }
+  reports() { return this.request<{ items: ReportCatalogItem[]; total: number }>("/reports?limit=100"); }
+  recommendations(researchId: number) { return this.request<{ recommendations: RecommendationItem[] }>(`/research/${researchId}/recommendations`); }
+  graph() { return this.request<GraphSnapshot>("/graph"); }
+  workspaceProjects() { return this.request<WorkspaceProjectItem[]>("/workspace/projects"); }
+  projectCompetitors(projectId: number) { return this.request<CompetitorItem[]>(`/workspace/projects/${projectId}/competitors`); }
+  feedback() { return this.request<FeedbackItem[]>("/feedback"); }
   listProviders() { return this.request<ProviderItem[]>("/providers"); }
   routerStatus() {
     return this.request<{status: string; costs: Record<string, number>}>('/router/status');
