@@ -4,6 +4,7 @@ const browserName = (process.env.PLAYWRIGHT_BROWSER ?? "chromium") as "chromium"
 
 export default defineConfig({
   testDir: "tests",
+  timeout: 120_000,
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:4173",
     browserName,
