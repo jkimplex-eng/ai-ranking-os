@@ -24,6 +24,7 @@ from product.schemas import (
     WizardRunResult,
 )
 from product.service import FinalReportService, ProductPipeline, WizardValidationError
+from research.models import ResearchStatus
 from research.schemas import ResearchRead
 
 router = APIRouter(tags=["product"])
@@ -159,6 +160,11 @@ def run_wizard(payload: WizardRequest, db: DbSession) -> WizardRunResult:
             build_change_detection(db, notifications),
             notifications,
         ).run(payload)
+        if research.status != ResearchStatus.COMPLETED:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Research {research.id} failed; no report was generated",
+            )
         report = FinalReportService(db).get(research.id)
         return WizardRunResult(
             research=ResearchRead.model_validate(research),

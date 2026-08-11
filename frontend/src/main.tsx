@@ -997,7 +997,9 @@ function Wizard({
     setBusy(true);
     setError("");
     try {
-      onComplete(await api.run(payload()));
+      const result = await api.run(payload());
+      if (result.research.status !== "COMPLETED") throw new Error("Исследование завершилось с ошибкой. Подробности доступны в разделе Research.");
+      onComplete(result);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Не удалось запустить исследование",
