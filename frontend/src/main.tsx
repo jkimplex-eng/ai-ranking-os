@@ -111,6 +111,14 @@ type ReportShape = {
   token_usage?: number;
   cost?: number;
   execution_time_ms?: number;
+  explainability?: {
+    methodology_version: string;
+    metrics: Record<string, { formula?: string; inputs: Record<string, unknown>; normalization?: string; weight?: number; version: string; status?: string }>;
+    prompts: Array<{ uuid: string; response_id: number; text: string; language?: string | string[]; country?: string | string[]; provider: string; model: string; created_at: string }>;
+    responses: Array<{ response_id: number; provider: string; model: string; prompt: string; raw_response: Record<string, unknown>; normalized_response: Record<string, unknown>; tokens: number; cost: number; latency_ms?: number; finished_at: string; error_type?: string; error_message?: string; entity_ids: number[]; citation_ids: number[]; recommendation_ids: number[] }>;
+    citations: Array<{ citation_id: number; response_id: number; url?: string; domain?: string; source?: string; title?: string; position: number }>;
+    unsupported_metrics: string[];
+  };
 };
 type TrendPoint = { research_id: number; observed_at: string; value: number; moving_average: number; percentage_change?: number | null; direction: string };
 type TrendMetric = { metric: string; direction: string; points: TrendPoint[] };
@@ -725,7 +733,7 @@ function Dashboard({
             {visibilityDelta >= 0 ? "↑" : "↓"} {Math.abs(visibilityDelta).toFixed(1)}% <span>к предыдущему исследованию</span>
           </div>}
           <button className="text-action" onClick={() => onOpen(research.id)}>
-            Открыть полный отчёт →
+            Почему мой рейтинг такой? →
           </button>
         </article>
         <article className="health panel">
@@ -1197,7 +1205,7 @@ function RecommendationCard({ recommendation, plan, simulation }: { recommendati
       <div className="action-meta">
         <div>
           <span>Ожидаемый эффект</span>
-          <b className="good">{simulation ? `+${simulation.expected_metric_change.toFixed(1)} к «${metric}»` : plan?.expected_effect ?? recommendation.expected_effect ?? "Не рассчитан"}</b>
+          <b className="good">{simulation ? `ПРОГНОЗ: +${simulation.expected_metric_change.toFixed(1)} к «${metric}»` : plan?.expected_effect ?? recommendation.expected_effect ?? "Не рассчитан"}</b>
         </div>
         <div><span>Вероятность</span><b>{simulation ? `${simulation.confidence_min.toFixed(0)}–${simulation.confidence_max.toFixed(0)}%` : "Не рассчитана"}</b></div>
         <div><span>Срок</span><b>{plan?.estimated_time ?? (simulation ? `${simulation.estimated_duration_days} дней` : "Не рассчитан")}</b></div>
@@ -1253,6 +1261,12 @@ function Report({
       </section>
       <nav className="report-nav" aria-label="Разделы отчёта"><a href="#summary">Сводка</a><a href="#findings">Выводы</a><a href="#evidence">Доказательства</a><a href="#sources">Источники</a><a href="#graph">Граф</a><a href="#actions">План действий</a></nav>
       <section id="summary" className="panel report-proof"><div><span>Как сформирована оценка</span><strong>{visibility.toFixed(1)}</strong></div><dl><div><dt>Моделей</dt><dd>{models.length}</dd></div><div><dt>Ответов</dt><dd>{responses.length}</dd></div><div><dt>Сущностей</dt><dd>{report.detected_entities?.length ?? 0}</dd></div><div><dt>Рекомендаций</dt><dd>{report.recommendations?.length ?? 0}</dd></div><div><dt>Исследование</dt><dd>#{result.research.id}</dd></div><div><dt>Алгоритм</dt><dd>{String(score.version ?? "не указан")}</dd></div></dl><details><summary>Показать расчёт</summary>{visibilityEvidence.lines.map((line) => <p key={line}>{line}</p>)}<code>{visibilityEvidence.formula}</code></details></section>
+      <section className="explainability-stack" aria-label="Первичные доказательства">
+        <article className="panel"><span className="section-label">МЕТОДОЛОГИЯ · v{report.explainability?.methodology_version ?? score.version ?? "—"}</span><h2>Расчёт каждой метрики</h2>{report.explainability ? Object.entries(report.explainability.metrics).map(([key, metric]) => <details className="evidence-details" key={key}><summary>{metricNames[key] ?? key} · {metric.status ? "не рассчитывается" : valueOf(score, key).toFixed(1)}</summary>{metric.status ? <p>Эта метрика не входит в production Scoring v1.0 и не влияет на AI-видимость.</p> : <><p><b>Формула:</b> {metric.formula}</p><p><b>Нормализация:</b> {metric.normalization}</p><p><b>Вес:</b> {metric.weight == null ? "не применяется" : `${metric.weight * 100}%`}</p><pre>{JSON.stringify(metric.inputs, null, 2)}</pre></>}</details>) : <p className="empty-state">Для старого исследования методология не сохранена в report payload.</p>}</article>
+        <article className="panel"><span className="section-label">КАТАЛОГ ЗАПРОСОВ</span><h2>На основании каких запросов рассчитан рейтинг</h2>{report.explainability?.prompts.length ? report.explainability.prompts.map((prompt) => <details className="evidence-details" key={prompt.uuid}><summary>{prompt.provider}/{prompt.model} · ответ #{prompt.response_id}</summary><p><b>UUID:</b> {prompt.uuid}</p><p><b>Язык:</b> {String(prompt.language ?? "не записан")} · <b>Страна:</b> {String(prompt.country ?? "не записана")}</p><pre className="raw-evidence">{prompt.text || "Текст запроса не был записан"}</pre></details>) : <p className="empty-state">Запросы не были записаны для этого исследования.</p>}</article>
+        <article className="panel"><span className="section-label">ИСХОДНЫЕ ОТВЕТЫ МОДЕЛЕЙ</span><h2>Ответы без сокращений</h2>{report.explainability?.responses.length ? report.explainability.responses.map((response) => <details className="evidence-details" key={response.response_id}><summary>{response.provider}/{response.model} · {response.tokens} токенов · {response.latency_ms ?? "—"} ms</summary><p>Стоимость ${Number(response.cost).toFixed(6)} · завершён {new Date(response.finished_at).toLocaleString("ru-RU")}</p>{response.error_type ? <div className="error">{response.error_type}: {response.error_message}</div> : null}<p>Сущности: {response.entity_ids.length} · источники: {response.citation_ids.length} · рекомендации: {response.recommendation_ids.length}</p><h3>Исходный ответ</h3><pre className="raw-evidence">{JSON.stringify(response.raw_response, null, 2)}</pre><h3>Нормализованный ответ</h3><pre className="raw-evidence">{JSON.stringify(response.normalized_response, null, 2)}</pre></details>) : <p className="empty-state">Ответы моделей отсутствуют.</p>}</article>
+        <article className="panel"><span className="section-label">АНАЛИЗ ЦИТИРОВАНИЯ</span><h2>Источники по моделям и доменам</h2>{responses.map((response) => { const citations = report.explainability?.citations.filter((item) => item.response_id === response.id) ?? []; return <div className="citation-model-row" key={response.id}><b>{response.provider}/{response.model}</b><span>{citations.length ? `${citations.length} источников: ${[...new Set(citations.map((item) => item.domain ?? item.source ?? "без домена"))].join(", ")}` : "внешние источники не обнаружены"}</span></div>; })}</article>
+      </section>
       <section className="score-strip">
         {[["Visibility", "visibility_score"], ...metricMeta].map(
           ([label, key]) => (

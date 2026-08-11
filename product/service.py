@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from typing import Any
+from urllib.parse import urlparse
 from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import select
@@ -43,6 +44,7 @@ from research.models import ExtractedEntity, Research, ResearchStatus, ResearchT
 from research.reporting import ReportingService
 from research.repositories import ResearchRepository
 from research.schemas import ResearchCreate, ResearchRunRequest
+from research.scoring import SCORING_VERSION, SCORING_WEIGHTS
 from research.service import run_research
 from trend.research_adapter import build_trend_engine
 
@@ -317,6 +319,7 @@ class FinalReportService:
             stats["tokens"] += response.total_tokens
             stats["cost"] = round(float(stats["cost"]) + response.cost, 8)
         score = base.score.model_dump(mode="json") if base.score else None
+        explainability = self._explainability(research, base, score)
         return {
             "executive_summary": self._summary(research, score),
             "research": base.research.model_dump(mode="json"),
@@ -335,6 +338,208 @@ class FinalReportService:
             "token_usage": sum(item.total_tokens for item in responses),
             "cost": round(sum(item.cost for item in responses), 8),
             "execution_time_ms": sum(item.latency_ms or 0 for item in responses),
+            "explainability": explainability,
+        }
+
+    @staticmethod
+    def _explainability(
+        research: Research, base: Any, score: dict[str, Any] | None
+    ) -> dict[str, Any]:
+        responses = base.responses
+        target = next(
+            (
+                str(research.metadata_payload[key]).strip().casefold()
+                for key in ("target_entity", "entity", "brand")
+                if isinstance(research.metadata_payload.get(key), str)
+                and str(research.metadata_payload[key]).strip()
+            ),
+            research.title.strip().casefold(),
+        )
+        entities_by_response: dict[int, list[Any]] = defaultdict(list)
+        citations_by_response: dict[int, list[Any]] = defaultdict(list)
+        recommendations_by_response: dict[int, list[Any]] = defaultdict(list)
+        for entity in base.entities:
+            entities_by_response[entity.response_id].append(entity)
+        for citation in base.citations:
+            citations_by_response[citation.response_id].append(citation)
+        for recommendation in base.recommendations:
+            recommendations_by_response[recommendation.response_id].append(recommendation)
+        mentioned = sum(
+            target in response.content.casefold()
+            or any(
+                target
+                in {
+                    entity.name.casefold(),
+                    entity.canonical_name.casefold(),
+                    *(alias.casefold() for alias in entity.aliases),
+                }
+                for entity in entities_by_response[response.id]
+            )
+            for response in responses
+        )
+        recommended = sum(bool(recommendations_by_response[response.id]) for response in responses)
+        citation_count = len(base.citations)
+        processed = sum(response.processing_status.value == "PROCESSED" for response in responses)
+        unique_models = len(
+            {
+                (response.provider.casefold(), response.model.casefold())
+                for response in responses
+                if response.processing_status.value == "PROCESSED"
+            }
+        )
+        expected = max(research.total_tasks, len(research.tasks), 1)
+        metrics: dict[str, Any] = {
+            "mention_score": {
+                "formula": "mentioned_responses / total_responses * 100",
+                "inputs": {"mentioned_responses": mentioned, "total_responses": len(responses)},
+                "normalization": "bounded 0..100",
+                "weight": SCORING_WEIGHTS["mention"],
+            },
+            "recommendation_score": {
+                "formula": "responses_with_recommendations / total_responses * 100",
+                "inputs": {
+                    "responses_with_recommendations": recommended,
+                    "total_responses": len(responses),
+                },
+                "normalization": "bounded 0..100",
+                "weight": SCORING_WEIGHTS["recommendation"],
+            },
+            "citation_score": {
+                "formula": "extracted_citations / (total_responses * 3) * 100",
+                "inputs": {
+                    "extracted_citations": citation_count,
+                    "maximum_v1_citations": len(responses) * 3,
+                },
+                "normalization": "bounded 0..100",
+                "weight": SCORING_WEIGHTS["citation"],
+            },
+            "coverage_score": {
+                "formula": "unique_processed_provider_models / expected_tasks * 100",
+                "inputs": {
+                    "unique_processed_provider_models": unique_models,
+                    "expected_tasks": expected,
+                },
+                "normalization": "bounded 0..100",
+                "weight": SCORING_WEIGHTS["coverage"],
+            },
+            "confidence_score": {
+                "formula": "processing_success * 70% + mean_entity_confidence * 30%",
+                "inputs": {
+                    "processed_responses": processed,
+                    "total_responses": len(responses),
+                    "entity_confidences": [entity.confidence for entity in base.entities],
+                },
+                "normalization": "bounded 0..100",
+                "weight": SCORING_WEIGHTS["confidence"],
+            },
+            "visibility_score": {
+                "formula": (
+                    "mention*0.35 + recommendation*0.20 + citation*0.15 + "
+                    "coverage*0.20 + confidence*0.10"
+                ),
+                "inputs": {
+                    "research_id": research.id,
+                    **(
+                        {
+                            key: score[key]
+                            for key in (
+                                "mention_score",
+                                "recommendation_score",
+                                "citation_score",
+                                "coverage_score",
+                                "confidence_score",
+                            )
+                        }
+                        if score
+                        else {}
+                    ),
+                },
+                "normalization": "weighted sum bounded 0..100",
+                "weight": 1.0,
+            },
+            "benchmark": {
+                "formula": "population comparison; unavailable for fewer than two entities",
+                "inputs": {},
+                "normalization": "rank and percentile",
+                "weight": None,
+            },
+            "authority": {
+                "formula": None,
+                "inputs": {},
+                "normalization": None,
+                "weight": None,
+                "status": "NOT_CALCULATED_IN_SCORING_V1",
+            },
+            "knowledge_graph_score": {
+                "formula": None,
+                "inputs": {},
+                "normalization": None,
+                "weight": None,
+                "status": "NOT_CALCULATED_IN_SCORING_V1",
+            },
+        }
+        for payload in metrics.values():
+            payload["version"] = score.get("version", SCORING_VERSION) if score else SCORING_VERSION
+        prompts = [
+            {
+                "uuid": str(
+                    uuid5(NAMESPACE_URL, f"research:{research.id}:response:{response.id}:prompt")
+                ),
+                "response_id": response.id,
+                "text": response.prompt,
+                "language": research.metadata_payload.get(
+                    "languages", research.metadata_payload.get("language")
+                ),
+                "country": research.metadata_payload.get(
+                    "regions", research.metadata_payload.get("region")
+                ),
+                "provider": response.provider,
+                "model": response.model,
+                "created_at": response.created_at,
+            }
+            for response in responses
+        ]
+        response_evidence = [
+            {
+                "response_id": response.id,
+                "provider": response.provider,
+                "model": response.model,
+                "prompt": response.prompt,
+                "raw_response": response.raw_response,
+                "normalized_response": response.normalized_response,
+                "tokens": response.total_tokens,
+                "cost": response.cost,
+                "latency_ms": response.latency_ms,
+                "finished_at": response.finished_at,
+                "error_type": response.error_type,
+                "error_message": response.error_message,
+                "entity_ids": [item.id for item in entities_by_response[response.id]],
+                "citation_ids": [item.id for item in citations_by_response[response.id]],
+                "recommendation_ids": [
+                    item.id for item in recommendations_by_response[response.id]
+                ],
+            }
+            for response in responses
+        ]
+        citation_evidence = [
+            {
+                "citation_id": citation.id,
+                "response_id": citation.response_id,
+                "url": citation.url,
+                "domain": urlparse(citation.url).netloc.casefold() if citation.url else None,
+                "source": citation.source,
+                "title": citation.title,
+                "position": citation.position,
+            }
+            for citation in base.citations
+        ]
+        return {
+            "methodology_version": SCORING_VERSION,
+            "metrics": metrics,
+            "prompts": prompts,
+            "responses": response_evidence,
+            "citations": citation_evidence,
+            "unsupported_metrics": ["authority", "knowledge_graph_score"],
         }
 
     @staticmethod

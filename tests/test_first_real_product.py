@@ -113,6 +113,17 @@ def test_skinjestique_end_to_end_wizard(client: TestClient) -> None:
     assert report["knowledge_graph_summary"]["node_count"] >= 1
     assert report["provider_statistics"]["openai"]["responses"] == 1
     assert report["token_usage"] > 0
+    explanation = report["explainability"]
+    assert explanation["methodology_version"] == "1.0"
+    assert explanation["metrics"]["visibility_score"]["formula"]
+    assert (
+        explanation["metrics"]["visibility_score"]["inputs"]["research_id"]
+        == body["research"]["id"]
+    )
+    assert explanation["prompts"][0]["text"] == report["responses"][0]["prompt"]
+    assert explanation["responses"][0]["raw_response"] == report["responses"][0]["raw_response"]
+    assert explanation["unsupported_metrics"] == ["authority", "knowledge_graph_score"]
+    assert explanation["citations"][0]["response_id"] == report["responses"][0]["id"]
 
     persisted = client.get(body["report_url"])
     assert persisted.status_code == 200
