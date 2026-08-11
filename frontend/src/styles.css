@@ -68,3 +68,4 @@
 @media (max-width: 800px) { .onboarding-steps { grid-template-columns: 1fr; } }
 .records-list { display: grid; gap: 12px; }.record-card { display: flex; align-items: start; justify-content: space-between; gap: 24px; }.record-card h2 { margin: 7px 0; font-size: 1.15rem; }.record-card p, .record-card small { color: var(--muted); }.record-card p { margin: 0; }
 @media (min-width: 901px) { .sidebar nav { align-content: start; min-height: 0; overflow-y: auto; } .sidebar-foot { flex-shrink: 0; } }
+.graph-toolbar { display: flex; gap: 12px; margin-bottom: 18px; }.graph-toolbar input { flex: 1; }.graph-real-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 18px; }.graph-real-layout .network { width: 100%; min-height: 460px; }.graph-detail { min-width: 0; }.chart-point-link, .graph-node { cursor: pointer; } @media (max-width: 900px) { .graph-real-layout { grid-template-columns: 1fr; } }

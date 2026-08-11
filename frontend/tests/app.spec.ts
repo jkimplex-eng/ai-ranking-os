@@ -6,6 +6,59 @@ test("login page exposes product entry point", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Войти" })).toBeVisible();
 });
 
+test("wizard transparently refreshes an expired access token", async ({ page }) => {
+  let reviewAttempts = 0;
+  let refreshed = false;
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    let status = 200;
+    let json: unknown = {};
+    if (path.endsWith("/auth/login")) {
+      json = { access_token: "expired-access", refresh_token: "valid-refresh-token" };
+    } else if (path.endsWith("/auth/refresh")) {
+      refreshed = true;
+      json = { access_token: "renewed-access", refresh_token: "rotated-refresh-token" };
+    } else if (path.endsWith("/auth/me")) {
+      json = { id: 1, display_name: "Analyst", email: "analyst@example.com", roles: ["analyst"] };
+    } else if (path.endsWith("/research/wizard/review")) {
+      reviewAttempts += 1;
+      if (reviewAttempts === 1) {
+        status = 401;
+        json = { detail: "Authentication required" };
+      } else {
+        expect(request.headers()["authorization"]).toBe("Bearer renewed-access");
+        json = {
+          valid: true, title: "AI Visibility", prompt: "Analyze Acme",
+          provider_models: ["ollama/qwen2.5:3b"], selected_models: ["ollama/qwen2.5:3b"],
+          languages: ["ru"], regions: ["GLOBAL"], pipeline: [],
+          estimated_cost_usd: 0, estimated_time_ms: 20000,
+        };
+      }
+    } else if (path.endsWith("/research") || path.endsWith("/providers")) {
+      json = [];
+    } else if (path.endsWith("/system/health")) {
+      json = { status: "healthy" };
+    }
+    await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(json) });
+  });
+
+  await page.goto("/");
+  await page.getByLabel("Email").fill("analyst@example.com");
+  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByRole("button", { name: "Войти" }).click();
+  await page.getByRole("button", { name: "Проверить бренд" }).click();
+  await page.getByLabel("Название бренда").fill("Acme");
+  await page.getByRole("button", { name: /Продолжить/ }).click();
+  await page.getByRole("button", { name: /Продолжить/ }).click();
+  await page.getByRole("button", { name: /Продолжить/ }).click();
+  await page.getByRole("button", { name: "Проверить" }).click();
+
+  await expect(page.getByText("Analyze Acme")).toBeVisible();
+  expect(refreshed).toBe(true);
+  expect(reviewAttempts).toBe(2);
+});
+
 test("authenticated routes survive refresh and browser history", async ({ page }) => {
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;

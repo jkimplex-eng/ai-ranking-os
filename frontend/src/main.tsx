@@ -81,27 +81,36 @@ const metricMeta = [
 type Screen = "home" | "research" | "wizard" | "reports" | "report" | "recommendations" | "graph" | "competitors" | "history" | "providers" | "analytics" | "notifications" | "organization" | "settings" | "feedback" | "profile" | "admin" | "onboarding";
 type ReportShape = {
   executive_summary?: string;
-  score?: Record<string, number | string>;
+  research?: ResearchItem;
+  score?: Record<string, number | string> & { id?: number; research_id?: number; calculated_at?: string; version?: string };
   trend?: { metrics?: TrendMetric[] };
-  benchmark?: { entries?: BenchmarkEntry[] };
+  benchmark?: { entity_count?: number; calculated_at?: string; entries?: BenchmarkEntry[] };
   insights?: Array<{ title?: string; explanation?: string }>;
   recommendations?: Array<{
     explanation?: string;
     priority?: string;
     metric?: string;
     expected_effect?: string;
+    metric_value?: number;
+    created_at?: string;
   }>;
   provider_statistics?: Record<string, unknown>;
-  detected_entities?: unknown[];
-  sources?: unknown[];
+  detected_entities?: Array<{ id?: number; response_id?: number; name?: string; entity_type?: string; confidence?: number }>;
+  sources?: Array<{ id?: number; response_id?: number; url?: string; title?: string; source?: string }>;
+  responses?: Array<{
+    id: number; provider: string; model: string; content: string;
+    processing_status: string; created_at: string; finished_at: string;
+    latency_ms?: number; total_tokens: number; cost: number; error_type?: string;
+  }>;
+  knowledge_graph_summary?: GraphSnapshot;
   latency_ms?: number;
   token_usage?: number;
   cost?: number;
 };
-type TrendPoint = { observed_at: string; value: number; percentage_change?: number | null; direction: string };
+type TrendPoint = { research_id: number; observed_at: string; value: number; moving_average: number; percentage_change?: number | null; direction: string };
 type TrendMetric = { metric: string; direction: string; points: TrendPoint[] };
 type BenchmarkMetric = { value: number; population_average: number; leader_value: number };
-type BenchmarkEntry = { metrics: Record<string, BenchmarkMetric> };
+type BenchmarkEntry = { observation_count: number; metrics: Record<string, BenchmarkMetric> };
 
 function valueOf(score: Record<string, number | string>, key: string) {
   const value = Number(score[key] ?? 0);
@@ -303,6 +312,52 @@ function SettingsScreen({ user }: { user: string }) {
     </section></div></main>;
 }
 
+function metricEvidence(key: string, data: ReportShape, research: ResearchItem) {
+  const responses = data.responses ?? [];
+  const score = data.score ?? {};
+  const processed = responses.filter((item) => item.processing_status === "PROCESSED").length;
+  const total = responses.length;
+  const value = valueOf(score, key);
+  const target = String(research.metadata?.brand ?? research.title.replace(/^AI Visibility:\s*/, ""));
+  const mentions = responses.filter((item) => item.content.toLocaleLowerCase().includes(target.toLocaleLowerCase())).length;
+  const recommended = Math.round(valueOf(score, "recommendation_score") / 100 * total);
+  const citations = data.sources?.length ?? 0;
+  const uniqueModels = new Set(responses.map((item) => `${item.provider}/${item.model}`)).size;
+  const entities = data.detected_entities ?? [];
+  const averageConfidence = entities.length ? entities.reduce((sum, item) => sum + Number(item.confidence ?? 0), 0) / entities.length * 100 : 50;
+  const details: Record<string, { lines: string[]; formula: string }> = {
+    mention_score: { lines: [`${total} ответов моделей`, `${mentions} ответов содержат бренд`], formula: `${mentions} / ${Math.max(total, 1)} × 100 = ${value.toFixed(1)}` },
+    recommendation_score: { lines: [`${total} ответов моделей`, `${recommended} ответов содержат извлечённую рекомендацию`], formula: `${recommended} / ${Math.max(total, 1)} × 100 = ${value.toFixed(1)}` },
+    citation_score: { lines: [`${total} ответов моделей`, `${citations} независимых источников`, `Максимум v1: ${total * 3} источников`], formula: `${citations} / ${Math.max(total * 3, 1)} × 100 = ${value.toFixed(1)}` },
+    coverage_score: { lines: [`${uniqueModels} уникальных provider/model`, `${research.total_tasks ?? total} запланированных задач`], formula: `${uniqueModels} / ${Math.max(research.total_tasks ?? total, 1)} × 100 = ${value.toFixed(1)}` },
+    confidence_score: { lines: [`${processed} из ${total} ответов обработано`, `${entities.length} извлечённых сущностей`, `Средняя entity confidence: ${averageConfidence.toFixed(1)}`], formula: `70% processing success + 30% entity confidence = ${value.toFixed(1)}` },
+    visibility_score: { lines: ["Mention × 35%", "Recommendation × 20%", "Citation × 15%", "Coverage × 20%", "Confidence × 10%"], formula: `Взвешенная сумма Scoring ${String(score.version ?? "1.0")} = ${value.toFixed(1)}` },
+  };
+  return details[key] ?? { lines: [`Research #${research.id}`], formula: value.toFixed(1) };
+}
+
+function GraphScreen() {
+  const [graph, setGraph] = useState<GraphSnapshot>();
+  const [query, setQuery] = useState("");
+  const [nodeType, setNodeType] = useState("ALL");
+  const [selected, setSelected] = useState<number>();
+  const [error, setError] = useState("");
+  useEffect(() => { api.graph().then(setGraph).catch((reason) => setError(reason instanceof Error ? reason.message : "Граф недоступен")); }, []);
+  if (error) return <main className="analytics-page"><div className="error" role="alert">{error}</div></main>;
+  if (!graph) return <DashboardSkeleton />;
+  const types = [...new Set(graph.nodes.map((node) => node.node_type))];
+  const visible = graph.nodes.filter((node) => (nodeType === "ALL" || node.node_type === nodeType) && (!query || `${node.name} ${node.aliases.join(" ")}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())));
+  const visibleIds = new Set(visible.map((node) => node.id));
+  const edges = graph.edges.filter((edge) => visibleIds.has(edge.source_node_id) && visibleIds.has(edge.target_node_id));
+  const positions = new Map(visible.map((node, index) => { const angle = index * Math.PI * 2 / Math.max(visible.length, 1) - Math.PI / 2; return [node.id, { x: 310 + Math.cos(angle) * 215, y: 230 + Math.sin(angle) * 165 }]; }));
+  const selectedNode = graph.nodes.find((node) => node.id === selected);
+  const connected = selected == null ? [] : graph.edges.filter((edge) => edge.source_node_id === selected || edge.target_node_id === selected);
+  return <main className="analytics-page graph-page"><header className="analytics-hero"><div><span className="eyebrow">SNAPSHOT #{graph.id} · v{graph.structure_version}</span><h1>Knowledge Graph</h1><p>{graph.node_count} сущностей · {graph.edge_count} связей · {new Date(graph.created_at).toLocaleString("ru-RU")}</p></div></header>
+    <section className="analytics-card graph-toolbar"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по имени или алиасу"/><select value={nodeType} onChange={(event) => setNodeType(event.target.value)}><option value="ALL">Все типы</option>{types.map((type) => <option key={type}>{type}</option>)}</select></section>
+    {!visible.length ? <div className="analytics-card empty-state">Сущности по выбранным условиям не найдены.</div> : <section className="graph-real-layout"><article className="analytics-card"><svg viewBox="0 0 620 460" className="network" aria-label="Реальный граф знаний"><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#607899"/></marker></defs>{edges.map((edge) => { const source = positions.get(edge.source_node_id); const target = positions.get(edge.target_node_id); if (!source || !target) return null; return <g key={edge.id}><line x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke="#607899" markerEnd="url(#arrow)"/><title>{edge.edge_type} · confidence {(edge.confidence * 100).toFixed(0)}%</title></g>; })}{visible.map((node) => { const point = positions.get(node.id)!; return <g key={node.id} className="graph-node" onClick={() => setSelected(node.id)}><circle cx={point.x} cy={point.y} r={selected === node.id ? 25 : 19} fill={selected === node.id ? "#3b82f6" : "#263d62"}/><text x={point.x} y={point.y + 34} textAnchor="middle" fill="#c8d4e6" fontSize="11">{node.name}</text><title>{node.node_type} · confidence {(node.confidence * 100).toFixed(0)}%</title></g>; })}</svg>{!edges.length && <p className="empty-state">Связи пока не обнаружены. Показаны только реальные узлы snapshot.</p>}</article><aside className="analytics-card graph-detail">{selectedNode ? <><span className="eyebrow">{selectedNode.node_type}</span><h2>{selectedNode.name}</h2><p>Confidence {(selectedNode.confidence * 100).toFixed(1)}%</p><p>Aliases: {selectedNode.aliases.join(", ") || "нет"}</p><h3>Связи ({connected.length})</h3>{connected.map((edge) => <div className="setting-row" key={edge.id}><span>{edge.edge_type}</span><b>{(edge.confidence * 100).toFixed(0)}%</b></div>)}</> : <p className="empty-state">Выберите узел, чтобы увидеть confidence, алиасы и связи.</p>}</aside></section>}
+  </main>;
+}
+
 type RecordsKind = "research" | "reports" | "recommendations" | "graph" | "competitors" | "history" | "feedback" | "profile";
 type DisplayRecord = { id: string; title: string; status: string; detail: string; meta?: string };
 
@@ -493,7 +548,7 @@ function ProductAnalyticsScreen() {
       </section>
       <section className="analytics-grid">
         <ChartContainer title="Динамика использования" caption="Все события продукта">
-          {trendPoints.length ? <AreaLineChart values={trendPoints.map((point) => point.value)} /> : <p className="empty-state">События появятся после первого действия.</p>}
+          {trendPoints.length ? <AreaLineChart points={trendPoints.map((point) => ({ value: point.value, label: point.label }))} /> : <p className="empty-state">События появятся после первого действия.</p>}
         </ChartContainer>
         <article className="analytics-card"><span className="eyebrow">RESEARCH HEALTH</span><h2>{numeric(data.research, "success_rate")}%</h2>
           <p>успешных исследований</p><div className="success-track"><span style={{ width: `${numeric(data.research, "success_rate")}%` }} /></div>
@@ -562,23 +617,6 @@ function ProvidersDashboard() {
   );
 }
 
-function MetricBar({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="metric-row">
-      <div>
-        <span>{label}</span>
-        <strong>{value.toFixed(value % 1 ? 1 : 0)}</strong>
-      </div>
-      <div className="track" aria-label={`${label}: ${value}`}>
-        <span
-          className={tone(value)}
-          style={{ width: `${Math.min(value, 100)}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 function Dashboard({
   report,
   onStart,
@@ -587,7 +625,7 @@ function Dashboard({
 }: {
   report?: ReportResult;
   onStart: () => void;
-  onOpen: () => void;
+  onOpen: (researchId?: number) => void;
   onNavigate: (screen: Screen) => void;
 }) {
   const [detail, setDetail] = useState<string>();
@@ -631,6 +669,7 @@ function Dashboard({
       </main>
     );
   const data = report.report as ReportShape;
+  const research = (data.research ?? report.research) as ResearchItem;
   const score = data.score ?? {};
   const visibility = valueOf(score, "visibility_score");
   const trends = data.trend?.metrics ?? [];
@@ -643,11 +682,15 @@ function Dashboard({
     .sort((a, b) => a.value - b.value)[0];
   const kpis = [
     ["✦", "Recommendation", "recommendation_score", "recommendation"],
+    ["◉", "Mention", "mention_score", "mention"],
     ["◎", "Coverage", "coverage_score", "coverage"],
     ["↗", "Citation", "citation_score", "citation"],
     ["◆", "Confidence", "confidence_score", "confidence"],
-    ["⌁", "Visibility", "visibility_score", "visibility"],
   ] as const;
+  const selectedKey = kpis.find(([, label]) => label === detail)?.[2] ?? "visibility_score";
+  const evidence = metricEvidence(selectedKey, data, research);
+  const latestResponse = [...(data.responses ?? [])].sort((a, b) => String(b.finished_at).localeCompare(String(a.finished_at)))[0];
+  const calculatedAt = typeof score.calculated_at === "string" ? score.calculated_at : undefined;
   const activeValue = detail
     ? valueOf(
         score,
@@ -659,8 +702,8 @@ function Dashboard({
       <div className="page-heading">
         <div>
           <span className="eyebrow">СОСТОЯНИЕ БРЕНДА</span>
-          <h1>{report.research.title.replace(/^AI Visibility:\s*/, "")}</h1>
-          <p>Последнее исследование · данные обновлены недавно</p>
+          <h1>{research.title.replace(/^AI Visibility:\s*/, "")}</h1>
+          <p>Исследование #{research.id} · {research.created_at ? new Date(research.created_at).toLocaleString("ru-RU") : "дата не записана"}</p>
         </div>
         <Button onClick={onStart}>Новое исследование</Button>
       </div>
@@ -676,7 +719,7 @@ function Dashboard({
           {visibilityDelta == null ? <div className="delta"><span>Недостаточно данных для сравнения</span></div> : <div className={`delta ${visibilityDelta >= 0 ? "good" : "critical"}`}>
             {visibilityDelta >= 0 ? "↑" : "↓"} {Math.abs(visibilityDelta).toFixed(1)}% <span>к предыдущему исследованию</span>
           </div>}
-          <button className="text-action" onClick={onOpen}>
+          <button className="text-action" onClick={() => onOpen(research.id)}>
             Открыть полный отчёт →
           </button>
         </article>
@@ -692,10 +735,7 @@ function Dashboard({
           </div>
           <div>
             <h2>{healthLabel(visibility)}</h2>
-            <p>
-              Сильное присутствие в AI-ответах. Основной резерв роста — качество
-              подтверждающих источников.
-            </p>
+            <p>Состояние рассчитано из фактических ответов моделей. Минимальная базовая метрика — {weakest.label}.</p>
             <div className="problem">
               <span>Главная проблема</span>
               <b>{weakest.label}</b>
@@ -714,7 +754,7 @@ function Dashboard({
             icon={icon}
             title={title}
             value={valueOf(score, key)}
-            delta={metricPoints.at(-1)?.percentage_change ?? 0}
+            delta={metricPoints.at(-1)?.percentage_change}
             points={metricPoints.length ? metricPoints.map((point) => point.value) : [valueOf(score, key)]}
             onClick={() => setDetail(title)}
           />
@@ -726,55 +766,30 @@ function Dashboard({
           caption="TREND"
           action={visibilityDelta == null ? <Badge tone="neutral">Нет сравнения</Badge> : <Badge tone={visibilityDelta >= 0 ? "success" : "danger"}>{visibilityDelta >= 0 ? "↑" : "↓"} {Math.abs(visibilityDelta).toFixed(1)}%</Badge>}
         >
-          {visibilityPoints.length > 1 ? <AreaLineChart values={visibilityPoints.map((point) => point.value)} /> : <p className="empty-state">Тренд появится после повторного исследования.</p>}
+          {visibilityPoints.length > 1 ? <AreaLineChart points={visibilityPoints.map((point) => ({ value: point.value, label: new Date(point.observed_at).toLocaleDateString("ru-RU"), researchId: point.research_id }))} onSelect={(id) => onOpen(id)} /> : <p className="empty-state">Недостаточно данных: для тренда нужны минимум два исследования.</p>}
         </ChartContainer>
         <ChartContainer title="Баланс AI-сигналов" caption="RADAR">
           <RadarChart
             labels={[
-              "Visibility",
+              "Mention",
               "Citation",
               "Coverage",
-              "Authority",
               "Recommend",
               "Confidence",
             ]}
             values={[
-              visibility,
+              valueOf(score, "mention_score"),
               valueOf(score, "citation_score"),
               valueOf(score, "coverage_score"),
-              valueOf(score, "confidence_score"),
               valueOf(score, "recommendation_score"),
               valueOf(score, "confidence_score"),
             ]}
           />
         </ChartContainer>
         <ChartContainer title="Pipeline исследования" caption="TIMELINE">
-          <Timeline
-            items={[
-              {
-                title: "Исследование завершено",
-                detail: "Ответы всех моделей получены",
-                done: true,
-              },
-              {
-                title: "Граф построен",
-                detail: "Сущности и связи обработаны",
-                done: true,
-              },
-              {
-                title: "Отчёт сформирован",
-                detail: "Метрики рассчитаны",
-                done: true,
-              },
-              {
-                title: "Рекомендации готовы",
-                detail: "План доступен в Action Center",
-                done: true,
-              },
-            ]}
-          />
+          <PipelineStatus result={report} data={data} />
         </ChartContainer>
-        <Benchmark brand={report.research.title.replace(/^AI Visibility:\s*/, "")} entry={data.benchmark?.entries?.[0]} />
+        <Benchmark brand={research.title.replace(/^AI Visibility:\s*/, "")} entry={data.benchmark?.entries?.[0]} entityCount={data.benchmark?.entity_count} />
         <Trend metric={visibilityTrend} />
       </section>
       <ActionCenter recommendations={data.recommendations ?? []} />
@@ -798,22 +813,12 @@ function Dashboard({
           </Badge>
         </div>
         <h3>Почему такая оценка</h3>
-        <p>
-          Показатель рассчитан по упоминаниям бренда, позиции рекомендации,
-          качеству источников и согласованности ответов выбранных моделей.
-        </p>
+        {evidence.lines.map((line) => <p key={line}>{line}</p>)}
         <h3>Что влияет</h3>
-        <MetricBar label="Качество источников" value={activeValue} />
-        <MetricBar
-          label="Покрытие моделей"
-          value={Math.min(100, activeValue + 12)}
-        />
-        <div className="drawer-callout">
-          <span>Ожидаемый рост</span>
-          <strong>+{Math.max(6, Math.round((85 - activeValue) * 0.35))}</strong>
-          <p>После выполнения приоритетного действия</p>
-        </div>
-        <Button onClick={onOpen}>Показать план действий</Button>
+        <div className="drawer-callout"><span>Расчёт</span><strong>{evidence.formula}</strong></div>
+        {latestResponse && <p>Последний ответ: {latestResponse.provider}/{latestResponse.model} · {latestResponse.total_tokens} токенов · {latestResponse.latency_ms ?? "—"} ms.</p>}
+        {calculatedAt && <p>Оценка рассчитана {new Date(calculatedAt).toLocaleString("ru-RU")} · алгоритм {String(score.version ?? "—")}.</p>}
+        <Button onClick={() => onOpen(research.id)}>Открыть полный отчёт</Button>
       </Drawer>
     </main>
   );
@@ -839,7 +844,7 @@ function DashboardSkeleton() {
   );
 }
 
-function Benchmark({ brand, entry }: { brand: string; entry?: BenchmarkEntry }) {
+function Benchmark({ brand, entry, entityCount = 0 }: { brand: string; entry?: BenchmarkEntry; entityCount?: number }) {
   const metric = entry?.metrics.visibility;
   return (
     <article className="benchmark panel">
@@ -848,9 +853,9 @@ function Benchmark({ brand, entry }: { brand: string; entry?: BenchmarkEntry }) 
           <span className="section-label">Benchmark</span>
           <h2>Позиция относительно рынка</h2>
         </div>
-        <span className="badge neutral">{metric ? "По данным платформы" : "Нет данных"}</span>
+        <span className="badge neutral">{metric && entityCount >= 2 ? `${entityCount} объектов` : "Нет данных"}</span>
       </div>
-      {metric ? [
+      {metric && entityCount >= 2 ? [
         [brand, metric.value],
         ["Среднее выборки", metric.population_average],
         ["Лидер выборки", metric.leader_value],
@@ -955,6 +960,16 @@ function ActionCenter({ recommendations }: { recommendations: NonNullable<Report
   );
 }
 
+function PipelineStatus({ result, data }: { result: ReportResult; data: ReportShape }) {
+  const rows = [
+    ...(result.tasks ?? []).map((task) => ({ title: `${task.provider ?? "Provider"}/${task.model ?? "model"}`, detail: `${task.status} · ${new Date(task.created_at).toLocaleString("ru-RU")}${task.error ? ` · ${task.error}` : ""}`, done: task.status === "COMPLETED" })),
+    ...(data.responses ?? []).map((response) => ({ title: `Response #${response.id}: ${response.processing_status}`, detail: `${response.provider}/${response.model} · ${response.total_tokens} токенов · ${response.latency_ms ?? "—"} ms · $${Number(response.cost).toFixed(6)}`, done: response.processing_status === "PROCESSED" })),
+    ...(data.knowledge_graph_summary?.created_at ? [{ title: "Knowledge Graph", detail: new Date(data.knowledge_graph_summary.created_at).toLocaleString("ru-RU"), done: true }] : []),
+    ...(typeof data.score?.calculated_at === "string" ? [{ title: "Scoring", detail: `${new Date(data.score.calculated_at).toLocaleString("ru-RU")} · v${String(data.score.version ?? "—")}`, done: true }] : []),
+  ];
+  return rows.length ? <Timeline items={rows} /> : <p className="empty-state">Pipeline stages не записаны для этого исследования.</p>;
+}
+
 function Wizard({
   onComplete,
   onCancel,
@@ -962,14 +977,16 @@ function Wizard({
   onComplete: (result: ReportResult) => void;
   onCancel: () => void;
 }) {
-  const [step, setStep] = useState(1);
-  const [brand, setBrand] = useState("");
-  const [region, setRegion] = useState("GLOBAL");
-  const [language, setLanguage] = useState("ru");
-  const [profile, setProfile] = useState<WizardPayload["routing_profile"]>("BALANCED");
+  const saved = useMemo(() => { try { return JSON.parse(sessionStorage.getItem("research-wizard") ?? "{}") as Partial<{ step: number; brand: string; region: string; language: string; profile: WizardPayload["routing_profile"] }>; } catch { return {}; } }, []);
+  const [step, setStep] = useState(saved.step && saved.step >= 1 && saved.step <= 5 ? saved.step : 1);
+  const [brand, setBrand] = useState(saved.brand ?? "");
+  const [region, setRegion] = useState(saved.region ?? "GLOBAL");
+  const [language, setLanguage] = useState(saved.language ?? "ru");
+  const [profile, setProfile] = useState<WizardPayload["routing_profile"]>(saved.profile ?? "BALANCED");
   const [review, setReview] = useState<WizardReview>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  useEffect(() => { sessionStorage.setItem("research-wizard", JSON.stringify({ step, brand, region, language, profile })); }, [step, brand, region, language, profile]);
   const payload = (): WizardPayload => ({
     brand,
     routing_profile: profile,
@@ -999,6 +1016,7 @@ function Wizard({
     try {
       const result = await api.run(payload());
       if (result.research.status !== "COMPLETED") throw new Error("Исследование завершилось с ошибкой. Подробности доступны в разделе Research.");
+      sessionStorage.removeItem("research-wizard");
       onComplete(result);
     } catch (e) {
       setError(
@@ -1019,7 +1037,7 @@ function Wizard({
     <main className="wizard-page">
       <button
         className="back-link"
-        onClick={step === 1 ? onCancel : () => setStep(step - 1)}
+        onClick={step === 1 ? () => { sessionStorage.removeItem("research-wizard"); onCancel(); } : () => setStep(step - 1)}
       >
         ← {step === 1 ? "На главную" : "Назад"}
       </button>
@@ -1125,6 +1143,9 @@ function Wizard({
               <b>{routingProfiles.find(([value]) => value === profile)?.[1]}</b>
             </div>
             <p>{review?.prompt}</p>
+            <div><span>Выбранные модели</span><b>{review?.selected_models?.join(", ") || review?.provider_models?.join(", ") || "Router не вернул план"}</b></div>
+            <div><span>Оценка времени</span><b>{review?.estimated_time_ms ? `${review.estimated_time_ms} ms` : "Не рассчитана"}</b></div>
+            <div><span>Оценка стоимости</span><b>{review?.estimated_cost_usd != null ? `$${review.estimated_cost_usd.toFixed(6)}` : "Не рассчитана"}</b></div>
           </div>
         )}
         {error && (
@@ -1292,6 +1313,10 @@ function App() {
   const [report, setReport] = useState<ReportResult>();
   const [loading, setLoading] = useState(false);
   const [authReady, setAuthReady] = useState(false);
+  const loadReport = useCallback(async (research: ResearchItem) => {
+    const [data, tasks] = await Promise.all([api.finalReport(research.id), api.researchTasks(research.id).catch(() => [])]);
+    setReport({ research, report_url: `/research/${research.id}/final-report`, report: data, tasks });
+  }, []);
   const navigate = useCallback((next: Screen, replace = false) => {
     const path = screenPaths[next];
     window.history[replace ? "replaceState" : "pushState"]({ screen: next }, "", path);
@@ -1316,16 +1341,11 @@ function App() {
       .then(async (items) => {
         const latest = [...items].sort((a, b) => b.id - a.id)[0];
         if (!latest) return;
-        const data = await api.finalReport(latest.id);
-        setReport({
-          research: latest,
-          report_url: `/research/${latest.id}/final-report`,
-          report: data,
-        });
+        await loadReport(latest);
       })
       .catch(() => undefined)
       .finally(() => setLoading(false));
-  }, [user, report]);
+  }, [user, report, loadReport]);
   const isAdmin = roles.some((role) => ["superadmin", "admin", "organization_admin", "SUPERADMIN", "ADMIN", "ORGANIZATION_ADMIN"].includes(role));
   const content = useMemo(
     () =>
@@ -1344,7 +1364,7 @@ function App() {
       ) : screen === "recommendations" ? (
         <RecordsScreen key="recommendations" kind="recommendations" onNewResearch={() => navigate("wizard")} />
       ) : screen === "graph" ? (
-        <RecordsScreen key="graph" kind="graph" onNewResearch={() => navigate("wizard")} />
+        <GraphScreen />
       ) : screen === "competitors" ? (
         <RecordsScreen key="competitors" kind="competitors" onNewResearch={() => navigate("wizard")} />
       ) : screen === "history" ? (
@@ -1377,11 +1397,15 @@ function App() {
         <Dashboard
           report={report}
           onStart={() => navigate("wizard")}
-          onOpen={() => navigate("report")}
+          onOpen={(researchId) => {
+            if (researchId && researchId !== report?.research.id) {
+              api.listResearch().then((items) => { const target = items.find((item) => item.id === researchId); return target ? loadReport(target) : undefined; }).then(() => navigate("report")).catch(() => undefined);
+            } else navigate("report");
+          }}
           onNavigate={navigate}
         />
       ),
-    [screen, report, loading, user, isAdmin, navigate],
+    [screen, report, loading, user, isAdmin, navigate, loadReport],
   );
   if (!authReady) return <DashboardSkeleton />;
   if (!user)

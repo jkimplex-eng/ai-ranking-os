@@ -18,18 +18,27 @@ export type WizardReview = {
   languages: string[];
   regions: string[];
   pipeline: string[];
+  estimated_cost_usd: number;
+  estimated_time_ms: number;
+  selected_models: string[];
 };
 export type ReportResult = {
   research: { id: number; title: string; status: string };
   report_url: string;
   report: Record<string, unknown>;
+  tasks?: ResearchTaskItem[];
+  executions?: ExecutionItem[];
 };
-export type ResearchItem = { id: number; title: string; status: string; progress_percent?: number; total_tasks?: number; completed_tasks?: number; failed_tasks?: number; created_at?: string };
+export type ResearchItem = { id: number; title: string; status: string; progress_percent?: number; total_tasks?: number; completed_tasks?: number; failed_tasks?: number; created_at?: string; updated_at?: string; metadata?: Record<string, unknown> };
+export type ResearchTaskItem = { id: number; research_id: number; status: string; provider?: string; model?: string; execution_id?: number; created_at: string; updated_at: string; error?: string };
+export type ExecutionItem = { id: number; state: string; started_at?: string; finished_at?: string; duration_ms?: number; attempt_count: number; error?: string };
 export type WorkspaceProjectItem = { id: number; name: string; description: string; research_count: number };
 export type CompetitorItem = { id: number; project_id: number; name: string; domains: string[]; active: boolean };
 export type ReportCatalogItem = { research_id: number; title: string; status: string; visibility_score?: number; created_at: string };
 export type RecommendationItem = { id: number; recommendation_type: string; priority: string; explanation: string; metric: string; metric_value: number; expected_effect: string };
-export type GraphSnapshot = { id: number; structure_version: string; node_count: number; edge_count: number; created_at: string; nodes: Array<{ id: number; name: string; node_type: string; confidence: number }>; edges: unknown[] };
+export type GraphNode = { id: number; external_id: string; name: string; canonical_name: string; node_type: string; confidence: number; aliases: string[]; properties: Record<string, unknown> };
+export type GraphEdge = { id: number; source_node_id: number; target_node_id: number; edge_type: string; confidence: number; properties: Record<string, unknown> };
+export type GraphSnapshot = { id: number; structure_version: string; node_count: number; edge_count: number; build_metadata: Record<string, unknown>; created_at: string; nodes: GraphNode[]; edges: GraphEdge[] };
 export type FeedbackItem = { id: number; title: string; feedback_type: string; priority: string; status: string; created_at: string };
 export type ProviderItem = {
   id: string; display_name: string; capabilities: string[];
@@ -79,6 +88,7 @@ export type AdminAudit = { id: number; actor_id: string; action: string; categor
 
 export class ApiClient {
   private token = sessionStorage.getItem("access_token") ?? undefined;
+  private refreshPromise?: Promise<TokenPair>;
 
   setToken(token: string) {
     this.token = token;
@@ -91,8 +101,33 @@ export class ApiClient {
     return tokens;
   }
 
-  private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const response = await fetch(`/api${path}`, {
+  private clearTokens() {
+    this.token = undefined;
+    sessionStorage.removeItem("access_token");
+    sessionStorage.removeItem("refresh_token");
+  }
+
+  private async refreshAccessToken() {
+    const refreshToken = sessionStorage.getItem("refresh_token");
+    if (!refreshToken) throw new Error("Сессия истекла. Войдите снова.");
+    if (!this.refreshPromise) {
+      this.refreshPromise = fetch("/api/auth/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      }).then(async (response) => {
+        if (!response.ok) {
+          this.clearTokens();
+          throw new Error("Сессия истекла. Войдите снова.");
+        }
+        return this.saveTokens(await response.json() as TokenPair);
+      }).finally(() => { this.refreshPromise = undefined; });
+    }
+    return this.refreshPromise;
+  }
+
+  private async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+    let response = await fetch(`/api${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
@@ -100,6 +135,17 @@ export class ApiClient {
         ...init.headers,
       },
     });
+    if (response.status === 401 && retry && !path.startsWith("/auth/")) {
+      await this.refreshAccessToken();
+      response = await fetch(`/api${path}`, {
+        ...init,
+        headers: {
+          "Content-Type": "application/json",
+          ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+          ...init.headers,
+        },
+      });
+    }
     if (!response.ok) {
       const body = await response.json().catch(() => ({ detail: response.statusText }));
       throw new Error(typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail));
@@ -147,6 +193,8 @@ export class ApiClient {
     });
   }
   listResearch() { return this.request<ResearchItem[]>("/research"); }
+  researchTasks(researchId: number) { return this.request<ResearchTaskItem[]>(`/research-tasks?research_id=${researchId}`); }
+  execution(id: number) { return this.request<ExecutionItem>(`/execution/${id}`); }
   reports() { return this.request<{ items: ReportCatalogItem[]; total: number }>("/reports?limit=100"); }
   recommendations(researchId: number) { return this.request<{ recommendations: RecommendationItem[] }>(`/research/${researchId}/recommendations`); }
   graph() { return this.request<GraphSnapshot>("/graph"); }
@@ -196,8 +244,6 @@ export class ApiClient {
       method: "POST",
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
-    this.token = undefined;
-    sessionStorage.removeItem("access_token");
-    sessionStorage.removeItem("refresh_token");
+    this.clearTokens();
   }
 }
