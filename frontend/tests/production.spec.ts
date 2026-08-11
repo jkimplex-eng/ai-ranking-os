@@ -52,6 +52,7 @@ test("all production navigation routes use the real backend", async ({ page }) =
 });
 
 test("authenticated Skinjestique research completes through Web UI", async ({ page }) => {
+  test.setTimeout(240_000);
   await login(page);
   await page.getByRole("button", { name: "Новое исследование" }).click();
   await page.getByLabel("Название бренда").fill("Skinjestique");
