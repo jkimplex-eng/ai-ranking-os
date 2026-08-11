@@ -127,3 +127,29 @@ test("authenticated routes survive refresh and browser history", async ({ page }
     await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
   }
 });
+
+test("executive report explains metrics, zero citations and graph evidence", async ({ page }) => {
+  const now = "2026-08-11T12:00:00Z";
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const json: unknown = path.endsWith("/auth/login") ? { access_token: "access", refresh_token: "refresh-token-with-valid-length" }
+      : path.endsWith("/auth/me") ? { id: 1, display_name: "Analyst", email: "analyst@example.com", roles: ["analyst"] }
+      : path.endsWith("/research") ? [{ id: 31, title: "AI Visibility: skinjestique", status: "COMPLETED", total_tasks: 2, completed_tasks: 2, created_at: now, metadata: { brand: "Skinjestique" } }]
+      : path.endsWith("/research/31/final-report") ? { research: { id: 31, title: "AI Visibility: skinjestique", status: "COMPLETED", total_tasks: 2, created_at: now, metadata: { brand: "Skinjestique" } }, score: { visibility_score: 84.7, mention_score: 100, recommendation_score: 90, citation_score: 0, coverage_score: 100, confidence_score: 92, version: "1.0", calculated_at: now }, responses: [{ id: 1, provider: "ollama", model: "qwen2.5:3b", content: "Skinjestique recommended", processing_status: "PROCESSED", created_at: now, finished_at: now, latency_ms: 15000, total_tokens: 315, cost: 0 }], detected_entities: [{ id: 1, name: "Skinjestique", entity_type: "BRAND", confidence: .99 }], sources: [], recommendations: [{ id: 4, recommendation_type: "CITATION_AUTHORITY", priority: "HIGH", metric: "citation_score", metric_value: 0, explanation: "Citation Score below 50", expected_effect: "Improve citation" }], trend: { metrics: [{ metric: "visibility", direction: "UP", points: [{ research_id: 30, observed_at: "2026-08-01T12:00:00Z", value: 80, moving_average: 80, percentage_change: null, direction: "STABLE" }, { research_id: 31, observed_at: now, value: 84.7, moving_average: 82.35, percentage_change: 5.9, direction: "UP" }] }] }, knowledge_graph_summary: { id: 3, structure_version: "1.0", node_count: 2, edge_count: 0, created_at: now, nodes: [], edges: [] }, execution_time_ms: 15000, token_usage: 315, cost: 0 }
+      : path.endsWith("/research/31/action-plan") ? { research_id: 31, engine_version: "1.0", generated_at: now, items: [{ recommendation: { id: 4, recommendation_type: "CITATION_AUTHORITY", priority: "HIGH", metric: "citation_score", metric_value: 0, explanation: "Citation Score below 50", expected_effect: "Improve citation" }, template: { title: "Усилить независимые источники", description: "Подготовить публикации в авторитетных отраслевых изданиях", steps: ["Выбрать отраслевые СМИ", "Подготовить подтверждённые материалы"], expected_result: "+18 к цитированию", estimated_time: "2 недели", version: "1.0" }, steps: ["Выбрать отраслевые СМИ", "Подготовить подтверждённые материалы"], expected_effect: "+18 к цитированию", estimated_time: "2 недели" }] }
+      : path.endsWith("/research/31/simulation") ? { research_id: 31, model_version: "1.0", simulated_at: now, simulations: [{ recommendation_id: 4, metric: "citation_score", current_metric: 0, expected_metric_change: 18, predicted_visibility: 87.4, predicted_delta: 2.7, confidence_min: 70, confidence_expected: 82, confidence_max: 90, estimated_duration_days: 14, model_version: "1.0" }] }
+      : path.endsWith("/research-tasks") ? [] : path.endsWith("/system/health") ? { status: "healthy" } : {};
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(json) });
+  });
+  await page.goto("/reports/latest");
+  await page.getByLabel("Email").fill("analyst@example.com");
+  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByRole("button", { name: "Войти" }).click();
+  await expect(page.getByRole("heading", { name: "Skinjestique" })).toBeVisible();
+  await expect(page.getByText("Как сформирована оценка")).toBeVisible();
+  await expect(page.getByText(/Источники отсутствуют/)).toBeVisible();
+  await expect(page.getByText(/Связи не найдены/)).toBeVisible();
+  await expect(page.getByText("Усилить независимые источники")).toBeVisible();
+  await expect(page.getByText("+18.0 к «Цитирование»")).toBeVisible();
+  await page.screenshot({ path: "../docs/screenshots/BUG-003-after.png", fullPage: true });
+});

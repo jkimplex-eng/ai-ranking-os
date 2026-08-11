@@ -28,7 +28,13 @@ export type ReportResult = {
   report: Record<string, unknown>;
   tasks?: ResearchTaskItem[];
   executions?: ExecutionItem[];
+  actionPlan?: ActionPlan;
+  simulation?: SimulationResult;
 };
+export type ActionPlanItem = { recommendation: RecommendationItem; template?: { title: string; description: string; steps: string[]; expected_result: string; estimated_time: string; version: string }; steps: string[]; expected_effect: string; estimated_time?: string };
+export type ActionPlan = { research_id: number; engine_version: string; generated_at: string; items: ActionPlanItem[] };
+export type SimulationItem = { recommendation_id: number; metric: string; current_metric: number; expected_metric_change: number; predicted_visibility: number; predicted_delta: number; confidence_min: number; confidence_expected: number; confidence_max: number; estimated_duration_days: number; model_version: string };
+export type SimulationResult = { research_id: number; model_version: string; simulated_at: string; simulations: SimulationItem[] };
 export type ResearchItem = { id: number; title: string; status: string; progress_percent?: number; total_tasks?: number; completed_tasks?: number; failed_tasks?: number; created_at?: string; updated_at?: string; metadata?: Record<string, unknown> };
 export type ResearchTaskItem = { id: number; research_id: number; status: string; provider?: string; model?: string; execution_id?: number; created_at: string; updated_at: string; error?: string };
 export type ExecutionItem = { id: number; state: string; started_at?: string; finished_at?: string; duration_ms?: number; attempt_count: number; error?: string };
@@ -197,6 +203,8 @@ export class ApiClient {
   execution(id: number) { return this.request<ExecutionItem>(`/execution/${id}`); }
   reports() { return this.request<{ items: ReportCatalogItem[]; total: number }>("/reports?limit=100"); }
   recommendations(researchId: number) { return this.request<{ recommendations: RecommendationItem[] }>(`/research/${researchId}/recommendations`); }
+  actionPlan(researchId: number) { return this.request<ActionPlan>(`/research/${researchId}/action-plan`); }
+  simulation(researchId: number) { return this.request<SimulationResult>(`/research/${researchId}/simulation`); }
   graph() { return this.request<GraphSnapshot>("/graph"); }
   workspaceProjects() { return this.request<WorkspaceProjectItem[]>("/workspace/projects"); }
   projectCompetitors(projectId: number) { return this.request<CompetitorItem[]>(`/workspace/projects/${projectId}/competitors`); }
