@@ -32,3 +32,4 @@ class AuthUserRead(BaseModel):
     display_name: str
     is_active: bool
     token_version: int
+    roles: list[str] = Field(default_factory=list)

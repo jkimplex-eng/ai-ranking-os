@@ -1,6 +1,8 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from authentication.dependencies import AuthServiceDependency, require_token
 from authentication.schemas import (
@@ -11,7 +13,9 @@ from authentication.schemas import (
     TokenPair,
 )
 from authentication.service import AuthenticationError
+from backend.app.database import get_db
 from rate_limit.backend import MemoryRateLimitBackend
+from rbac.models import Role, UserRole
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 AccessToken = Annotated[str, Depends(require_token)]
@@ -62,8 +66,20 @@ def logout(
 
 
 @router.get("/me", response_model=AuthUserRead)
-def me(service: AuthServiceDependency, access_token: AccessToken) -> AuthUserRead:
+def me(
+    service: AuthServiceDependency,
+    access_token: AccessToken,
+    db: Annotated[Session, Depends(get_db)],
+) -> AuthUserRead:
     try:
-        return service.me(access_token)
+        user = service.me(access_token)
+        roles = list(
+            db.scalars(
+                select(Role.code)
+                .join(UserRole, UserRole.role_id == Role.id)
+                .where(UserRole.user_id == user.id)
+            )
+        )
+        return AuthUserRead.model_validate(user).model_copy(update={"roles": roles})
     except AuthenticationError as error:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(error)) from error

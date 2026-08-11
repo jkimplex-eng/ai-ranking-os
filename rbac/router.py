@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
+from closed_beta.dependencies import require_beta_admin
 from rbac.repository import SqlAlchemyRbacRepository
 from rbac.schemas import (
     AccessCheck,
@@ -18,7 +19,7 @@ from rbac.schemas import (
 )
 from rbac.service import RbacError, RbacNotFoundError, RbacService
 
-router = APIRouter(prefix="/rbac", tags=["rbac"])
+router = APIRouter(prefix="/rbac", tags=["rbac"], dependencies=[Depends(require_beta_admin)])
 
 
 def get_rbac_service(db: Annotated[Session, Depends(get_db)]) -> RbacService:

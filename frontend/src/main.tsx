@@ -2,6 +2,7 @@ import { StrictMode, useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ApiClient,
+  type AuthProfile,
   type AdminAudit,
   type AdminFeedback,
   type AdminUser,
@@ -119,7 +120,7 @@ function healthLabel(value: number) {
         : "Критично";
 }
 
-function Login({ onReady }: { onReady: (name: string) => void }) {
+function Login({ onReady }: { onReady: (profile: AuthProfile) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -130,7 +131,7 @@ function Login({ onReady }: { onReady: (name: string) => void }) {
     setBusy(true);
     try {
       await api.login(email, password);
-      onReady((await api.me()).display_name);
+      onReady(await api.me());
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Ошибка входа");
     } finally {
@@ -200,16 +201,19 @@ function Shell({
   onNavigate,
   active,
   onLogout,
+  roles,
 }: {
   user: string;
   children: React.ReactNode;
   onNavigate: (screen: Screen) => void;
   active: Screen;
   onLogout: () => void;
+  roles: string[];
 }) {
   const [systemReady, setSystemReady] = useState<boolean>();
   useEffect(() => { api.systemHealth().then((health) => setSystemReady(health.status === "healthy" || health.status === "ready")).catch(() => setSystemReady(false)); }, []);
-  const nav = [
+  const isAdmin = roles.some((role) => ["superadmin", "admin", "organization_admin", "SUPERADMIN", "ADMIN", "ORGANIZATION_ADMIN"].includes(role));
+  const navSource = [
     ["⌂", "Dashboard", "home"], ["→", "Getting Started", "onboarding"],
     ["◉", "Research", "research"], ["▤", "Reports", "reports"],
     ["✓", "Recommendations", "recommendations"], ["⌘", "Knowledge Graph", "graph"],
@@ -219,6 +223,7 @@ function Shell({
     ["◌", "Feedback", "feedback"], ["♙", "User Profile", "profile"],
     ["⚙", "Settings", "settings"], ["▦", "Admin Console", "admin"],
   ] as const;
+  const nav = navSource.filter(([, , target]) => isAdmin || (target !== "admin" && target !== "analytics"));
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -1268,6 +1273,7 @@ function Report({
 
 function App() {
   const [user, setUser] = useState("");
+  const [roles, setRoles] = useState<string[]>([]);
   const [screen, setScreen] = useState<Screen>(
     () => pathScreens[window.location.pathname] ?? "home",
   );
@@ -1287,7 +1293,7 @@ function App() {
   useEffect(() => {
     api.restoreSession()
       .then(() => api.me())
-      .then((profile) => { setUser(profile.display_name); setLoading(true); })
+      .then((profile) => { setUser(profile.display_name); setRoles(profile.roles); setLoading(true); })
       .catch(() => undefined)
       .finally(() => setAuthReady(true));
   }, []);
@@ -1308,6 +1314,7 @@ function App() {
       .catch(() => undefined)
       .finally(() => setLoading(false));
   }, [user, report]);
+  const isAdmin = roles.some((role) => ["superadmin", "admin", "organization_admin", "SUPERADMIN", "ADMIN", "ORGANIZATION_ADMIN"].includes(role));
   const content = useMemo(
     () =>
       screen === "wizard" ? (
@@ -1336,7 +1343,7 @@ function App() {
         <RecordsScreen key="profile" kind="profile" onNewResearch={() => navigate("wizard")} />
       ) : screen === "providers" ? (
         <ProvidersDashboard />
-      ) : screen === "analytics" ? (
+      ) : screen === "analytics" && isAdmin ? (
         <ProductAnalyticsScreen />
       ) : screen === "notifications" ? (
         <NotificationsScreen />
@@ -1344,8 +1351,10 @@ function App() {
         <OrganizationScreen />
       ) : screen === "settings" ? (
         <SettingsScreen user={user} />
-      ) : screen === "admin" ? (
+      ) : screen === "admin" && isAdmin ? (
         <AdminConsoleScreen />
+      ) : screen === "admin" || screen === "analytics" ? (
+        <main className="analytics-page"><div className="error" role="alert">Недостаточно прав для просмотра этого раздела.</div></main>
       ) : screen === "onboarding" ? (
         <OnboardingScreen onResearch={() => navigate("wizard")} onOrganization={() => navigate("organization")} />
       ) : screen === "report" && report ? (
@@ -1360,15 +1369,16 @@ function App() {
           onNavigate={navigate}
         />
       ),
-    [screen, report, loading, user, navigate],
+    [screen, report, loading, user, isAdmin, navigate],
   );
   if (!authReady) return <DashboardSkeleton />;
   if (!user)
     return (
       <Login
-        onReady={(name) => {
+        onReady={(profile) => {
           setLoading(true);
-          setUser(name);
+          setUser(profile.display_name);
+          setRoles(profile.roles);
           navigate(pathScreens[window.location.pathname] ?? "home", true);
         }}
       />
@@ -1376,10 +1386,12 @@ function App() {
   return (
     <Shell
       user={user}
+      roles={roles}
       active={screen}
       onNavigate={navigate}
       onLogout={() => {
         setUser("");
+        setRoles([]);
         setReport(undefined);
         navigate("home", true);
       }}

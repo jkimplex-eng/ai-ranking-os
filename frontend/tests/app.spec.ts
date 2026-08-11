@@ -12,7 +12,7 @@ test("authenticated routes survive refresh and browser history", async ({ page }
     const json = path.endsWith("/auth/login") || path.endsWith("/auth/refresh")
       ? { access_token: "access", refresh_token: "refresh-token-with-valid-length" }
       : path.endsWith("/auth/me")
-        ? { display_name: "Admin", email: "admin@example.com" }
+        ? { id: 1, display_name: "Admin", email: "admin@example.com", roles: ["superadmin"] }
         : path.endsWith("/product-analytics/dashboard")
           ? { period: "DAILY", overview: {}, users: {}, organizations: {}, sessions: {}, research: {}, reports: {}, providers: {}, feedback: {}, errors: {}, trends: [], cached: false }
         : path.endsWith("/notifications/summary")

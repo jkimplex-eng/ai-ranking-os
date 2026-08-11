@@ -1,4 +1,5 @@
 export type TokenPair = { access_token: string; refresh_token: string };
+export type AuthProfile = { id: number; display_name: string; email: string; roles: string[] };
 export type ModelSelection = { provider: string; model: string };
 export type WizardPayload = {
   brand: string;
@@ -120,7 +121,7 @@ export class ApiClient {
       body: JSON.stringify({ refresh_token: refreshToken }),
     }).then((tokens) => this.saveTokens(tokens));
   }
-  me() { return this.request<{ display_name: string; email: string }>("/auth/me"); }
+  me() { return this.request<AuthProfile>("/auth/me"); }
   workspace() { return this.request<WorkspaceSettings>("/workspace"); }
   updateWorkspace(settings: Record<string, unknown>) { return this.request<WorkspaceSettings>("/workspace", { method: "PATCH", body: JSON.stringify({ settings }) }); }
   apiKeys() { return this.request<ApiKeyItem[]>("/api-keys"); }
