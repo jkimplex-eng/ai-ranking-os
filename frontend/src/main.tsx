@@ -2,6 +2,7 @@ import { StrictMode, useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ApiClient,
+  type ActionPlanItem,
   type AuthProfile,
   type AdminAudit,
   type AdminFeedback,
@@ -18,6 +19,7 @@ import {
   type ReportResult,
   type ResearchItem,
   type RouterHistoryItem,
+  type SimulationItem,
   type SystemProviderItem,
   type WorkspaceProjectItem,
   type WizardPayload,
@@ -71,11 +73,11 @@ const routingProfiles = [
   ["ENTERPRISE", "Enterprise", "Несколько моделей, failover и строгие политики", "▣"],
 ] as const;
 const metricMeta = [
-  ["Mention", "mention_score"],
-  ["Recommendation", "recommendation_score"],
-  ["Citation", "citation_score"],
-  ["Coverage", "coverage_score"],
-  ["Confidence", "confidence_score"],
+  ["Упоминания", "mention_score"],
+  ["Рекомендации", "recommendation_score"],
+  ["Цитирование", "citation_score"],
+  ["Покрытие", "coverage_score"],
+  ["Достоверность", "confidence_score"],
 ] as const;
 
 type Screen = "home" | "research" | "wizard" | "reports" | "report" | "recommendations" | "graph" | "competitors" | "history" | "providers" | "analytics" | "notifications" | "organization" | "settings" | "feedback" | "profile" | "admin" | "onboarding";
@@ -87,6 +89,8 @@ type ReportShape = {
   benchmark?: { entity_count?: number; calculated_at?: string; entries?: BenchmarkEntry[] };
   insights?: Array<{ title?: string; explanation?: string }>;
   recommendations?: Array<{
+    id?: number;
+    recommendation_type?: string;
     explanation?: string;
     priority?: string;
     metric?: string;
@@ -106,6 +110,7 @@ type ReportShape = {
   latency_ms?: number;
   token_usage?: number;
   cost?: number;
+  execution_time_ms?: number;
 };
 type TrendPoint = { research_id: number; observed_at: string; value: number; moving_average: number; percentage_change?: number | null; direction: string };
 type TrendMetric = { metric: string; direction: string; points: TrendPoint[] };
@@ -329,8 +334,8 @@ function metricEvidence(key: string, data: ReportShape, research: ResearchItem) 
     mention_score: { lines: [`${total} ответов моделей`, `${mentions} ответов содержат бренд`], formula: `${mentions} / ${Math.max(total, 1)} × 100 = ${value.toFixed(1)}` },
     recommendation_score: { lines: [`${total} ответов моделей`, `${recommended} ответов содержат извлечённую рекомендацию`], formula: `${recommended} / ${Math.max(total, 1)} × 100 = ${value.toFixed(1)}` },
     citation_score: { lines: [`${total} ответов моделей`, `${citations} независимых источников`, `Максимум v1: ${total * 3} источников`], formula: `${citations} / ${Math.max(total * 3, 1)} × 100 = ${value.toFixed(1)}` },
-    coverage_score: { lines: [`${uniqueModels} уникальных provider/model`, `${research.total_tasks ?? total} запланированных задач`], formula: `${uniqueModels} / ${Math.max(research.total_tasks ?? total, 1)} × 100 = ${value.toFixed(1)}` },
-    confidence_score: { lines: [`${processed} из ${total} ответов обработано`, `${entities.length} извлечённых сущностей`, `Средняя entity confidence: ${averageConfidence.toFixed(1)}`], formula: `70% processing success + 30% entity confidence = ${value.toFixed(1)}` },
+    coverage_score: { lines: [`${uniqueModels} уникальных пар «провайдер/модель»`, `${research.total_tasks ?? total} запланированных задач`], formula: `${uniqueModels} / ${Math.max(research.total_tasks ?? total, 1)} × 100 = ${value.toFixed(1)}` },
+    confidence_score: { lines: [`${processed} из ${total} ответов обработано`, `${entities.length} извлечённых сущностей`, `Средняя достоверность сущностей: ${averageConfidence.toFixed(1)}`], formula: `70% успешности обработки + 30% достоверности сущностей = ${value.toFixed(1)}` },
     visibility_score: { lines: ["Mention × 35%", "Recommendation × 20%", "Citation × 15%", "Coverage × 20%", "Confidence × 10%"], formula: `Взвешенная сумма Scoring ${String(score.version ?? "1.0")} = ${value.toFixed(1)}` },
   };
   return details[key] ?? { lines: [`Research #${research.id}`], formula: value.toFixed(1) };
@@ -681,11 +686,11 @@ function Dashboard({
     .map(([label, key]) => ({ label, value: valueOf(score, key) }))
     .sort((a, b) => a.value - b.value)[0];
   const kpis = [
-    ["✦", "Recommendation", "recommendation_score", "recommendation"],
-    ["◉", "Mention", "mention_score", "mention"],
-    ["◎", "Coverage", "coverage_score", "coverage"],
-    ["↗", "Citation", "citation_score", "citation"],
-    ["◆", "Confidence", "confidence_score", "confidence"],
+    ["✦", "Рекомендации", "recommendation_score", "recommendation"],
+    ["◉", "Упоминания", "mention_score", "mention"],
+    ["◎", "Покрытие", "coverage_score", "coverage"],
+    ["↗", "Цитирование", "citation_score", "citation"],
+    ["◆", "Достоверность", "confidence_score", "confidence"],
   ] as const;
   const selectedKey = kpis.find(([, label]) => label === detail)?.[2] ?? "visibility_score";
   const evidence = metricEvidence(selectedKey, data, research);
@@ -771,11 +776,11 @@ function Dashboard({
         <ChartContainer title="Баланс AI-сигналов" caption="RADAR">
           <RadarChart
             labels={[
-              "Mention",
-              "Citation",
-              "Coverage",
-              "Recommend",
-              "Confidence",
+              "Упоминания",
+              "Цитирование",
+              "Покрытие",
+              "Рекомендации",
+              "Достоверность",
             ]}
             values={[
               valueOf(score, "mention_score"),
@@ -956,6 +961,7 @@ function ActionCenter({ recommendations }: { recommendations: NonNullable<Report
           </article>
         )) : <div className="empty-state">Рекомендации не сформированы.</div>}
       </div>
+      <button className="primary-action" onClick={() => { window.history.pushState({ screen: "recommendations" }, "", "/recommendations"); window.dispatchEvent(new PopStateEvent("popstate")); }}>Открыть рекомендации</button>
     </section>
   );
 }
@@ -1172,19 +1178,29 @@ function Wizard({
   );
 }
 
-function RecommendationCard({ recommendation }: { recommendation: NonNullable<ReportShape["recommendations"]>[number] }) {
+const metricNames: Record<string, string> = { mention_score: "Упоминания", recommendation_score: "Рекомендации", citation_score: "Цитирование", coverage_score: "Покрытие", confidence_score: "Достоверность", visibility_score: "AI-видимость" };
+function cleanBrand(title: string) { const raw = title.replace(/^AI Visibility:\s*/i, "").trim(); return raw ? raw.charAt(0).toLocaleUpperCase() + raw.slice(1) : "Бренд"; }
+
+function RecommendationCard({ recommendation, plan, simulation }: { recommendation: NonNullable<ReportShape["recommendations"]>[number]; plan?: ActionPlanItem; simulation?: SimulationItem }) {
+  const metric = metricNames[recommendation.metric ?? ""] ?? recommendation.metric ?? "Метрика";
+  const priorities: Record<string, string> = { LOW: "НИЗКИЙ", MEDIUM: "СРЕДНИЙ", HIGH: "ВЫСОКИЙ", CRITICAL: "КРИТИЧЕСКИЙ" };
   return (
     <article className="action-card">
       <div className="action-top">
-        <span className="priority">{recommendation.priority ?? "Приоритет не указан"}</span>
-        <span>{recommendation.metric ?? "Метрика"}</span>
+        <span className="priority">{priorities[recommendation.priority ?? ""] ?? "Приоритет не указан"}</span>
+        <span>{metric} · сейчас {recommendation.metric_value?.toFixed(1) ?? "—"}</span>
       </div>
-      <h3>{recommendation.explanation ?? "Рекомендация"}</h3>
+      <h3>{plan?.template?.title ?? `Улучшить показатель «${metric}»`}</h3>
+      <p><b>Почему:</b> {metric} имеет значение {recommendation.metric_value?.toFixed(1) ?? "—"} из 100; детерминированное правило версии 1.0 сработало для исследования.</p>
+      <p><b>Что сделать:</b> {plan?.template?.description ?? recommendation.explanation ?? "Открыть рекомендации и подготовить план улучшения."}</p>
+      {plan?.steps?.length ? <ol>{plan.steps.map((step) => <li key={step}>{step}</li>)}</ol> : null}
       <div className="action-meta">
         <div>
           <span>Ожидаемый эффект</span>
-          <b className="good">{recommendation.expected_effect ?? "Не рассчитан"}</b>
+          <b className="good">{simulation ? `+${simulation.expected_metric_change.toFixed(1)} к «${metric}»` : plan?.expected_effect ?? recommendation.expected_effect ?? "Не рассчитан"}</b>
         </div>
+        <div><span>Вероятность</span><b>{simulation ? `${simulation.confidence_min.toFixed(0)}–${simulation.confidence_max.toFixed(0)}%` : "Не рассчитана"}</b></div>
+        <div><span>Срок</span><b>{plan?.estimated_time ?? (simulation ? `${simulation.estimated_duration_days} дней` : "Не рассчитан")}</b></div>
       </div>
     </article>
   );
@@ -1199,6 +1215,7 @@ function Report({
 }) {
   const report = result.report as ReportShape;
   const score = report.score ?? {};
+  const brand = cleanBrand(result.research.title);
   const visibility = valueOf(score, "visibility_score");
   const weakest = metricMeta.map(([label, key]) => ({ label, value: valueOf(score, key) })).sort((a, b) => a.value - b.value)[0];
   const visibilityMetric = report.trend?.metrics?.find((item) => item.metric === "visibility");
@@ -1206,6 +1223,15 @@ function Report({
   const strengths = metricMeta
     .filter(([, key]) => valueOf(score, key) >= 80)
     .map(([label]) => label);
+  const responses = report.responses ?? [];
+  const models = [...new Set(responses.map((item) => `${item.provider}/${item.model}`))];
+  const graph = report.knowledge_graph_summary;
+  const previousPoint = visibilityMetric?.points.at(-2);
+  const currentPoint = visibilityMetric?.points.at(-1);
+  const evidenceResearch = (report.research ?? result.research) as ResearchItem;
+  const visibilityEvidence = metricEvidence("visibility_score", report, evidenceResearch);
+  const planFor = (recommendation: NonNullable<ReportShape["recommendations"]>[number]) => result.actionPlan?.items.find((item) => item.recommendation.metric === recommendation.metric);
+  const simulationFor = (recommendation: NonNullable<ReportShape["recommendations"]>[number]) => result.simulation?.simulations.find((item) => item.metric === recommendation.metric);
   return (
     <main className="page report-page">
       <button className="back-link" onClick={onHome}>
@@ -1214,39 +1240,44 @@ function Report({
       <section className="report-hero">
         <div>
           <span className="eyebrow">
-            EXECUTIVE REPORT · #{result.research.id}
+            АНАЛИТИЧЕСКИЙ ОТЧЁТ · #{result.research.id}
           </span>
-          <h1>{result.research.title}</h1>
-          <p>{report.executive_summary ?? "Executive Summary не сформирован."}</p>
+          <h1>{brand}</h1>
+          <p>AI-видимость бренда составляет {visibility.toFixed(1)} из 100. Главная точка роста — «{weakest.label}» ({weakest.value.toFixed(1)}). Оценка основана только на сохранённых результатах исследования #{result.research.id}.</p>
         </div>
         <div className="report-score">
-          <span>AI Visibility</span>
+          <span>AI-видимость</span>
           <strong>{visibility.toFixed(1)}</strong>
           <em className={latestDelta == null ? "" : latestDelta >= 0 ? "good" : "critical"}>{latestDelta == null ? "Нет сравнения" : `${latestDelta >= 0 ? "↑" : "↓"} ${Math.abs(latestDelta).toFixed(1)}%`}</em>
         </div>
       </section>
+      <nav className="report-nav" aria-label="Разделы отчёта"><a href="#summary">Сводка</a><a href="#findings">Выводы</a><a href="#evidence">Доказательства</a><a href="#sources">Источники</a><a href="#graph">Граф</a><a href="#actions">План действий</a></nav>
+      <section id="summary" className="panel report-proof"><div><span>Как сформирована оценка</span><strong>{visibility.toFixed(1)}</strong></div><dl><div><dt>Моделей</dt><dd>{models.length}</dd></div><div><dt>Ответов</dt><dd>{responses.length}</dd></div><div><dt>Сущностей</dt><dd>{report.detected_entities?.length ?? 0}</dd></div><div><dt>Рекомендаций</dt><dd>{report.recommendations?.length ?? 0}</dd></div><div><dt>Исследование</dt><dd>#{result.research.id}</dd></div><div><dt>Алгоритм</dt><dd>{String(score.version ?? "не указан")}</dd></div></dl><details><summary>Показать расчёт</summary>{visibilityEvidence.lines.map((line) => <p key={line}>{line}</p>)}<code>{visibilityEvidence.formula}</code></details></section>
       <section className="score-strip">
         {[["Visibility", "visibility_score"], ...metricMeta].map(
           ([label, key]) => (
             <div key={key}>
-              <span>{label}</span>
+              <span>{metricNames[String(key)] ?? label}</span>
               <strong>{valueOf(score, key).toFixed(1)}</strong>
               <i className={tone(valueOf(score, key))} />
             </div>
           ),
         )}
       </section>
-      <section className="report-layout">
+      <section id="evidence" className="report-layout">
         <article className="panel strengths">
-          <span className="section-label">TOP STRENGTHS</span>
+          <span className="section-label">СИЛЬНЫЕ СТОРОНЫ</span>
           <h2>Что уже работает</h2>
-          {strengths.map((item) => (
+          {strengths.length ? strengths.map((item) => {
+            const key = metricMeta.find(([label]) => label === item)?.[1] ?? "visibility_score";
+            const evidence = metricEvidence(key, report, evidenceResearch);
+            return (
             <div className="strength" key={item}>
               <span>★★★★★</span>
-              <b>{item}</b>
-              <small>Сильный сигнал бренда</small>
+              <b>{metricNames[key] ?? item} · {valueOf(score, key).toFixed(1)}</b>
+              <small>{evidence.lines.join(" · ")}</small>
             </div>
-          ))}
+          )}) : <p className="empty-state">Метрик выше 80 баллов в текущем исследовании нет.</p>}
         </article>
         <article className="panel weakness">
           <span className="section-label">ГЛАВНОЕ ОГРАНИЧЕНИЕ</span>
@@ -1257,26 +1288,27 @@ function Report({
             <span className={tone(weakest.value)} style={{ width: `${weakest.value}%` }} />
           </div>
         </article>
-        <article className="panel narrative">
-          <span className="section-label">ЧТО ХОРОШО</span>
-          <h2>Ключевые выводы</h2>
-          {report.insights?.length ? <ul>{report.insights.map((insight, index) => <li key={`${insight.title}-${index}`}>{insight.title ?? insight.explanation ?? "Аналитический вывод"}</li>)}</ul> : <p className="empty-state">Insights не сформированы.</p>}
+        <article id="findings" className="panel narrative">
+          <span className="section-label">КЛЮЧЕВЫЕ ВЫВОДЫ</span>
+          <h2>Изменение относительно предыдущего исследования</h2>
+          {previousPoint && currentPoint ? <div className="finding-change"><span>Было <b>{previousPoint.value.toFixed(1)}</b> · {new Date(previousPoint.observed_at).toLocaleDateString("ru-RU")}</span><span>Стало <b>{currentPoint.value.toFixed(1)}</b> · {new Date(currentPoint.observed_at).toLocaleDateString("ru-RU")}</span><p>Изменение: {currentPoint.percentage_change == null ? "не рассчитано" : `${currentPoint.percentage_change >= 0 ? "+" : ""}${currentPoint.percentage_change.toFixed(1)}%`}. Причина определяется фактическими ответами, источниками и покрытием текущего запуска.</p></div> : <p className="empty-state">Недостаточно данных для сравнения: требуется предыдущее исследование того же объекта.</p>}
         </article>
-        <article className="panel sources">
-          <span className="section-label">KNOWLEDGE SOURCES</span>
+        <article id="sources" className="panel sources">
+          <span className="section-label">ИСТОЧНИКИ ЗНАНИЙ</span>
           <h2>Источники знаний</h2>
           <div className="source-number">{report.sources?.length ?? 0}</div>
-          <p>источника обнаружено и связано с ответами моделей</p>
+          {report.sources?.length ? <ul>{report.sources.map((source, index) => <li key={source.id ?? index}>{source.title ?? source.source ?? source.url ?? "Источник без названия"}{source.url ? <a href={source.url} target="_blank" rel="noreferrer">Открыть</a> : null}</li>)}</ul> : <p className="empty-state"><b>Источники отсутствуют.</b> В ответах моделей не найдено независимых внешних подтверждений: официальных сайтов, энциклопедий, научных публикаций или отраслевых СМИ. Поэтому «Цитирование» равно {valueOf(score, "citation_score").toFixed(1)}.</p>}
         </article>
       </section>
-      <section className="plan-section">
+      <section id="graph" className="panel report-graph"><span className="section-label">ГРАФ ЗНАНИЙ</span><h2>{graph?.node_count ?? 0} узлов · {graph?.edge_count ?? 0} связей</h2>{(graph?.edge_count ?? 0) > 0 ? <p>Связи построены из извлечённых сущностей и доказательств текущего исследования. Подробности доступны в разделе «Граф знаний».</p> : <p className="empty-state"><b>Связи не найдены.</b> Извлечённых сущностей недостаточно либо ответы не содержат подтверждённых отношений между ними.</p>}</section>
+      <section id="actions" className="plan-section">
         <div className="section-head">
           <div>
             <span className="eyebrow">ПЛАН ДЕЙСТВИЙ</span>
             <h2>Как улучшить результат</h2>
           </div>
         </div>
-        {report.recommendations?.length ? report.recommendations.map((recommendation, index) => <RecommendationCard recommendation={recommendation} key={`${recommendation.explanation}-${index}`} />) : <div className="empty-state">Рекомендации не сформированы.</div>}
+        {report.recommendations?.length ? report.recommendations.map((recommendation, index) => <RecommendationCard recommendation={recommendation} plan={planFor(recommendation)} simulation={simulationFor(recommendation)} key={`${recommendation.explanation}-${index}`} />) : <div className="empty-state">Рекомендации не сформированы: все правила v1 пройдены либо недостаточно данных.</div>}
       </section>
       <section className="report-footer panel">
         <div>
@@ -1288,8 +1320,8 @@ function Report({
           <b>{report.sources?.length ?? 0}</b>
         </div>
         <div>
-          <span>Время ответа</span>
-          <b>{report.latency_ms ?? 0} ms</b>
+          <span>Время выполнения</span>
+          <b>{((report.execution_time_ms ?? report.latency_ms ?? 0) / 1000).toFixed(1)} сек</b>
         </div>
         <div>
           <span>Токены</span>
@@ -1297,8 +1329,12 @@ function Report({
         </div>
         <div>
           <span>Стоимость</span>
-          <b>${report.cost ?? 0}</b>
+          <b>${Number(report.cost ?? 0).toFixed(6)}</b>
         </div>
+        <div><span>Модели</span><b>{models.length}</b></div>
+        <div><span>Ответы</span><b>{responses.length}</b></div>
+        <div><span>Связи графа</span><b>{graph?.edge_count ?? 0}</b></div>
+        <div><span>Рекомендации</span><b>{report.recommendations?.length ?? 0}</b></div>
       </section>
     </main>
   );
@@ -1314,8 +1350,11 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const loadReport = useCallback(async (research: ResearchItem) => {
-    const [data, tasks] = await Promise.all([api.finalReport(research.id), api.researchTasks(research.id).catch(() => [])]);
-    setReport({ research, report_url: `/research/${research.id}/final-report`, report: data, tasks });
+    const [data, tasks, actionPlan, simulation] = await Promise.all([
+      api.finalReport(research.id), api.researchTasks(research.id).catch(() => []),
+      api.actionPlan(research.id).catch(() => undefined), api.simulation(research.id).catch(() => undefined),
+    ]);
+    setReport({ research, report_url: `/research/${research.id}/final-report`, report: data, tasks, actionPlan, simulation });
   }, []);
   const navigate = useCallback((next: Screen, replace = false) => {
     const path = screenPaths[next];
@@ -1352,10 +1391,7 @@ function App() {
       screen === "wizard" ? (
         <Wizard
           onCancel={() => navigate("home")}
-          onComplete={(value) => {
-            setReport(value);
-            navigate("report");
-          }}
+          onComplete={(value) => { loadReport(value.research as ResearchItem).then(() => navigate("report")); }}
         />
       ) : screen === "research" ? (
         <RecordsScreen key="research" kind="research" onNewResearch={() => navigate("wizard")} />
