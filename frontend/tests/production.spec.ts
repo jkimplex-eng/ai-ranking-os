@@ -54,7 +54,7 @@ test("all production navigation routes use the real backend", async ({ page }) =
 test("authenticated Skinjestique research completes through Web UI", async ({ page }) => {
   await login(page);
   await page.getByRole("button", { name: "Новое исследование" }).click();
-  await expect(page.getByLabel("Название бренда")).toHaveValue("Skinjestique");
+  await page.getByLabel("Название бренда").fill("Skinjestique");
   await page.getByRole("button", { name: /Продолжить/ }).click();
   await page.getByRole("button", { name: /Продолжить/ }).click();
   await page.getByRole("button", { name: /Продолжить/ }).click();

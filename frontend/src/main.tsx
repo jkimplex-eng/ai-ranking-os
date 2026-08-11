@@ -338,26 +338,13 @@ function RecordsScreen({ kind, onNewResearch }: { kind: RecordsKind; onNewResear
   </main>;
 }
 
-function OnboardingScreen({ onResearch }: { onResearch: () => void }) {
+function OnboardingScreen({ onResearch, onOrganization }: { onResearch: () => void; onOrganization: () => void }) {
   const [organizations, setOrganizations] = useState<OrganizationItem[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
   useEffect(() => { api.organizations().then(setOrganizations).catch(() => undefined); }, []);
   const ready = organizations.length > 0;
-  async function createDemoWorkspace() {
-    setBusy(true); setMessage("");
-    try {
-      const existing = organizations.find((item) => item.slug === "demo-organization");
-      const organization = existing ?? await api.createOrganization({ name: "Demo Organization", slug: "demo-organization" });
-      await api.switchOrganization(organization.id);
-      setOrganizations((items) => existing ? items : [...items, organization]);
-      setMessage("Demo Organization готова. Можно запускать первое исследование.");
-    } catch (reason) { setMessage(reason instanceof Error ? reason.message : "Не удалось подготовить demo"); }
-    finally { setBusy(false); }
-  }
   return <main className="analytics-page onboarding-page"><header className="analytics-hero"><div><span className="eyebrow">CLOSED BETA</span><h1>Начните с первого результата</h1><p>Три коротких шага — и AI Ranking OS покажет, как модели видят ваш бренд.</p></div><Badge tone={ready ? "success" : "warning"}>● {ready ? "Workspace готов" : "Нужна организация"}</Badge></header>
-    <section className="onboarding-steps"><article className="analytics-card onboarding-step"><span>01</span><h2>Создайте пространство</h2><p>Организация объединяет команду, проекты и лимиты.</p><button onClick={createDemoWorkspace} disabled={busy || ready}>{ready ? "Готово ✓" : busy ? "Создаём…" : "Создать Demo Organization"}</button></article><article className="analytics-card onboarding-step"><span>02</span><h2>Проверьте Skinjestique</h2><p>Воспроизводимый пример уже настроен в Research Wizard.</p><button onClick={onResearch} disabled={!ready}>Открыть исследование</button></article><article className="analytics-card onboarding-step"><span>03</span><h2>Получите отчёт</h2><p>Visibility, источники и план действий собираются автоматически.</p><div className="onboarding-result">Report → Share → Improve</div></article></section>
-    {message && <div className="onboarding-message">{message}</div>}<section className="analytics-card beta-expectations"><h3>Что проверить в закрытой бете</h3><div><span>Исследование проходит без ручного вмешательства</span><b>Pipeline</b></div><div><span>Рекомендации понятны и применимы</span><b>Value</b></div><div><span>Отчёт можно передать клиенту</span><b>Sharing</b></div></section>
+    <section className="onboarding-steps"><article className="analytics-card onboarding-step"><span>01</span><h2>Настройте пространство</h2><p>Организация объединяет команду, проекты и лимиты.</p><button onClick={onOrganization}>{ready ? "Открыть организацию" : "Создать организацию"}</button></article><article className="analytics-card onboarding-step"><span>02</span><h2>Проверьте свой бренд</h2><p>Укажите бренд, регион, язык и профиль маршрутизации.</p><button onClick={onResearch} disabled={!ready}>Открыть исследование</button></article><article className="analytics-card onboarding-step"><span>03</span><h2>Получите отчёт</h2><p>Visibility, источники и план действий собираются автоматически.</p><div className="onboarding-result">Report → Share → Improve</div></article></section>
+    <section className="analytics-card beta-expectations"><h3>Что проверить в закрытой бете</h3><div><span>Исследование проходит без ручного вмешательства</span><b>Pipeline</b></div><div><span>Рекомендации понятны и применимы</span><b>Value</b></div><div><span>Отчёт можно передать клиенту</span><b>Sharing</b></div></section>
   </main>;
 }
 
@@ -1032,7 +1019,7 @@ function Wizard({
   onCancel: () => void;
 }) {
   const [step, setStep] = useState(1);
-  const [brand, setBrand] = useState("Skinjestique");
+  const [brand, setBrand] = useState("");
   const [region, setRegion] = useState("GLOBAL");
   const [language, setLanguage] = useState("ru");
   const [profile, setProfile] = useState<WizardPayload["routing_profile"]>("BALANCED");
@@ -1552,7 +1539,7 @@ function App() {
       ) : screen === "admin" ? (
         <AdminConsoleScreen />
       ) : screen === "onboarding" ? (
-        <OnboardingScreen onResearch={() => navigate("wizard")} />
+        <OnboardingScreen onResearch={() => navigate("wizard")} onOrganization={() => navigate("organization")} />
       ) : screen === "report" && report ? (
         <Report result={report} onHome={() => navigate("home")} />
       ) : loading ? (
