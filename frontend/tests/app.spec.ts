@@ -69,7 +69,7 @@ test("authenticated routes survive refresh and browser history", async ({ page }
     ["Admin Console", "/admin", "Admin Console"],
   ] as const;
   for (const [link, path, heading] of routes) {
-    await page.getByRole("button").filter({ hasText: link }).click();
+    await page.getByRole("navigation").getByRole("button").filter({ hasText: link }).click();
     await expect(page).toHaveURL(new RegExp(`${path.replace("/", "\\/")}$`));
     await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
   }
