@@ -9,4 +9,5 @@ __pycache__
 htmlcov
 *.pyc
 tests
-/scripts
+/scripts/seed_closed_beta.py
+/scripts/run_skinjestique_demo.py
