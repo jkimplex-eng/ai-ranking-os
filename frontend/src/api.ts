@@ -1,4 +1,5 @@
 export type TokenPair = { access_token: string; refresh_token: string };
+export type AuthProfile = { id: number; display_name: string; email: string; roles: string[] };
 export type ModelSelection = { provider: string; model: string };
 export type WizardPayload = {
   brand: string;
@@ -23,13 +24,21 @@ export type ReportResult = {
   report_url: string;
   report: Record<string, unknown>;
 };
-export type ResearchItem = { id: number; title: string; status: string };
+export type ResearchItem = { id: number; title: string; status: string; progress_percent?: number; total_tasks?: number; completed_tasks?: number; failed_tasks?: number; created_at?: string };
+export type WorkspaceProjectItem = { id: number; name: string; description: string; research_count: number };
+export type CompetitorItem = { id: number; project_id: number; name: string; domains: string[]; active: boolean };
+export type ReportCatalogItem = { research_id: number; title: string; status: string; visibility_score?: number; created_at: string };
+export type RecommendationItem = { id: number; recommendation_type: string; priority: string; explanation: string; metric: string; metric_value: number; expected_effect: string };
+export type GraphSnapshot = { id: number; structure_version: string; node_count: number; edge_count: number; created_at: string; nodes: Array<{ id: number; name: string; node_type: string; confidence: number }>; edges: unknown[] };
+export type FeedbackItem = { id: number; title: string; feedback_type: string; priority: string; status: string; created_at: string };
 export type ProviderItem = {
   id: string; display_name: string; capabilities: string[];
   pricing: Record<string, unknown>; context_window: number;
   availability: string; free_tier: boolean; priority: number;
   streaming: boolean; reasoning: boolean; vision: boolean;
 };
+export type SystemProviderItem = { model_id: string; provider: string; latency_ms: number; circuit_state: string; interface: { available?: boolean; mock?: boolean; checked_at?: string; models?: number | string[] } };
+export type RouterHistoryItem = { id: number; selected_models: string[]; latency_ms: number; estimated_cost_usd: number; error?: string | null; created_at: string };
 export type ProductAnalyticsDashboard = {
   period: "HOURLY" | "DAILY" | "WEEKLY" | "MONTHLY";
   overview: Record<string, number>;
@@ -69,9 +78,18 @@ export type AdminFeedback = { id: number; title: string; feedback_type: string; 
 export type AdminAudit = { id: number; actor_id: string; action: string; category: string; resource: string; created_at: string };
 
 export class ApiClient {
-  private token?: string;
+  private token = sessionStorage.getItem("access_token") ?? undefined;
 
-  setToken(token: string) { this.token = token; }
+  setToken(token: string) {
+    this.token = token;
+    sessionStorage.setItem("access_token", token);
+  }
+
+  private saveTokens(tokens: TokenPair) {
+    this.setToken(tokens.access_token);
+    sessionStorage.setItem("refresh_token", tokens.refresh_token);
+    return tokens;
+  }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await fetch(`/api${path}`, {
@@ -93,9 +111,17 @@ export class ApiClient {
     return this.request<TokenPair>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
-    });
+    }).then((tokens) => this.saveTokens(tokens));
   }
-  me() { return this.request<{ display_name: string; email: string }>("/auth/me"); }
+  restoreSession() {
+    const refreshToken = sessionStorage.getItem("refresh_token");
+    if (!refreshToken) return Promise.reject(new Error("No active session"));
+    return this.request<TokenPair>("/auth/refresh", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    }).then((tokens) => this.saveTokens(tokens));
+  }
+  me() { return this.request<AuthProfile>("/auth/me"); }
   workspace() { return this.request<WorkspaceSettings>("/workspace"); }
   updateWorkspace(settings: Record<string, unknown>) { return this.request<WorkspaceSettings>("/workspace", { method: "PATCH", body: JSON.stringify({ settings }) }); }
   apiKeys() { return this.request<ApiKeyItem[]>("/api-keys"); }
@@ -105,6 +131,9 @@ export class ApiClient {
   adminReports() { return this.request<{ items: Array<{ research_id: number; title: string; status: string; visibility_score?: number }>; total: number }>("/reports?limit=20"); }
   adminJobs() { return this.request<Array<{ id: number; state: string; agent_id?: number; attempts: number }>>("/execution/history"); }
   systemHealth() { return this.request<Record<string, unknown>>("/system/health"); }
+  systemProviders() { return this.request<{ providers: SystemProviderItem[] }>("/system/providers"); }
+  systemCosts() { return this.request<Record<string, number>>("/system/costs"); }
+  routerHistory(limit = 100) { return this.request<{ items: RouterHistoryItem[] }>(`/router/history?limit=${limit}`); }
   review(payload: WizardPayload) {
     return this.request<WizardReview>("/research/wizard/review", {
       method: "POST",
@@ -118,6 +147,12 @@ export class ApiClient {
     });
   }
   listResearch() { return this.request<ResearchItem[]>("/research"); }
+  reports() { return this.request<{ items: ReportCatalogItem[]; total: number }>("/reports?limit=100"); }
+  recommendations(researchId: number) { return this.request<{ recommendations: RecommendationItem[] }>(`/research/${researchId}/recommendations`); }
+  graph() { return this.request<GraphSnapshot>("/graph"); }
+  workspaceProjects() { return this.request<WorkspaceProjectItem[]>("/workspace/projects"); }
+  projectCompetitors(projectId: number) { return this.request<CompetitorItem[]>(`/workspace/projects/${projectId}/competitors`); }
+  feedback() { return this.request<FeedbackItem[]>("/feedback"); }
   listProviders() { return this.request<ProviderItem[]>("/providers"); }
   routerStatus() {
     return this.request<{status: string; costs: Record<string, number>}>('/router/status');
@@ -162,6 +197,7 @@ export class ApiClient {
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
     this.token = undefined;
+    sessionStorage.removeItem("access_token");
     sessionStorage.removeItem("refresh_token");
   }
 }

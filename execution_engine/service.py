@@ -1,6 +1,7 @@
+import os
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import case, exists, select
@@ -123,6 +124,27 @@ def _select_task(db: Session, task_id: int) -> Task:
 
 
 def _select_agent(db: Session, task: Task, manager: WorkerManager) -> Agent:
+    cutoff = _now() - timedelta(seconds=float(os.getenv("EXECUTION_STALE_SECONDS", "900")))
+    stale = list(
+        db.scalars(
+            select(Execution).where(
+                Execution.state.in_(ACTIVE_STATES),
+                Execution.started_at.is_not(None),
+                Execution.started_at < cutoff,
+            )
+        )
+    )
+    for execution in stale:
+        execution.state = ExecutionState.FAILED
+        execution.error = "Execution expired after worker interruption"
+        _finish(execution)
+        stale_task = db.get(Task, execution.task_id)
+        if stale_task is not None:
+            stale_task.status = TaskStatus.BLOCKED
+            stale_task.owner_id = None
+        _log(db, execution, "STALE_EXECUTION_RECOVERED", {"cutoff": cutoff.isoformat()})
+    if stale:
+        db.commit()
     active_task = exists().where(
         Task.owner_id == Agent.id,
         Task.status == TaskStatus.IN_PROGRESS,
@@ -231,9 +253,12 @@ def schedule_task_execution(
 def _finish(execution: Execution) -> None:
     execution.finished_at = _now()
     if execution.started_at is not None:
+        started_at = execution.started_at
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=UTC)
         execution.duration_ms = max(
             0,
-            int((execution.finished_at - execution.started_at).total_seconds() * 1000),
+            int((execution.finished_at - started_at).total_seconds() * 1000),
         )
 
 

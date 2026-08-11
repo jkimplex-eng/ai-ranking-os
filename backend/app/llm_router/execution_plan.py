@@ -1,5 +1,16 @@
+import os
+
 from backend.app.llm_router.schemas import ModelRead, RouteRequest
 from query_executor.schemas import ExecutionMode, ExecutionPlan
+
+
+def _timeout_seconds(model: ModelRead) -> float:
+    configured = model.metadata.get("timeout_seconds")
+    if configured is None and model.provider == "ollama":
+        configured = os.getenv("OLLAMA_TIMEOUT_SECONDS")
+    if configured is None:
+        configured = os.getenv("ROUTER_STEP_TIMEOUT_SECONDS", "30")
+    return max(1.0, float(configured))
 
 
 def build_execution_plan(
@@ -27,7 +38,7 @@ def build_execution_plan(
                         "correlation_id": correlation_id,
                     },
                 },
-                "timeout_seconds": 30,
+                "timeout_seconds": _timeout_seconds(model),
                 "max_retries": 2,
                 "required": index == 1,
             }

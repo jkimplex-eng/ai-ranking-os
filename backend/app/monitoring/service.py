@@ -126,7 +126,7 @@ def provider_status(db: Session) -> list[dict[str, Any]]:
             "circuit_state": circuits.get(model.id, "CLOSED"),
             "interface": configured.get(
                 model.provider,
-                {"status": "unknown", "mock": True},
+                {"status": "unknown", "mock": False, "available": False},
             ),
         }
         for model in db.scalars(select(RegisteredModel).order_by(RegisteredModel.id))

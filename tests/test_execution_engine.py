@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -11,7 +12,7 @@ from backend.app.database import Base, get_db
 from backend.app.main import app
 from decision_center.models import AgentType, Task, TaskStatus
 from execution_engine import service
-from execution_engine.models import ExecutionState
+from execution_engine.models import Execution, ExecutionState
 from execution_engine.worker_manager import WorkerManager
 
 test_engine = create_engine(
@@ -211,6 +212,38 @@ def test_scheduler_does_not_assign_two_active_tasks_to_one_agent(
 
     with TestingSession() as session, pytest.raises(service.NoAgentAvailableError):
         service.schedule_execution(session, manager)
+
+
+def test_scheduler_recovers_execution_left_running_by_interrupted_worker(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    create_agent(client, name="Recoverable Agent")
+    stale_task = create_ready_task(client, title="Interrupted", priority="HIGH")
+    next_task = create_ready_task(client, title="Next", priority="LOW")
+
+    with TestingSession() as session:
+        stale_execution, task, _ = service.schedule_execution(session, WorkerManager())
+        stale_execution.state = ExecutionState.RUNNING
+        stale_execution.started_at = datetime.now(UTC) - timedelta(minutes=30)
+        session.commit()
+        stale_execution_id = stale_execution.id
+        assert task.id == stale_task["id"]
+
+    monkeypatch.setenv("EXECUTION_STALE_SECONDS", "900")
+    with TestingSession() as session:
+        execution, task, _ = service.schedule_execution(session, WorkerManager())
+        recovered = session.get(Execution, stale_execution_id)
+        interrupted = session.get(Task, stale_task["id"])
+
+    assert recovered is not None
+    assert recovered.state == ExecutionState.FAILED
+    assert recovered.error == "Execution expired after worker interruption"
+    assert interrupted is not None
+    assert interrupted.status == TaskStatus.BLOCKED
+    assert interrupted.owner_id is None
+    assert task.id == next_task["id"]
+    assert execution.state == ExecutionState.ASSIGNED
 
 
 def test_cancel_requeues_an_active_execution(client: TestClient) -> None:
