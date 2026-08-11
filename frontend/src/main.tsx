@@ -2,23 +2,30 @@ import { StrictMode, useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ApiClient,
+  type AuthProfile,
   type AdminAudit,
   type AdminFeedback,
   type AdminUser,
+  type CompetitorItem,
+  type FeedbackItem,
+  type GraphSnapshot,
   type ProductAnalyticsDashboard as AnalyticsDashboard,
   type NotificationItem,
   type OrganizationItem,
   type ProviderItem,
+  type RecommendationItem,
+  type ReportCatalogItem,
   type ReportResult,
+  type ResearchItem,
+  type RouterHistoryItem,
+  type SystemProviderItem,
+  type WorkspaceProjectItem,
   type WizardPayload,
   type WizardReview,
 } from "./api";
 import {
   AreaLineChart,
-  Heatmap,
-  NetworkGraph,
   RadarChart,
-  Treemap,
 } from "./charts";
 import {
   Badge,
@@ -32,6 +39,29 @@ import {
 import "./styles.css";
 
 const api = new ApiClient();
+const screenPaths: Record<Screen, string> = {
+  home: "/",
+  onboarding: "/getting-started",
+  research: "/research",
+  wizard: "/research/new",
+  reports: "/reports",
+  report: "/reports/latest",
+  recommendations: "/recommendations",
+  graph: "/knowledge-graph",
+  competitors: "/competitors",
+  history: "/history",
+  providers: "/providers",
+  analytics: "/product-analytics",
+  notifications: "/notifications",
+  organization: "/organizations",
+  settings: "/settings",
+  feedback: "/feedback",
+  profile: "/profile",
+  admin: "/admin",
+};
+const pathScreens = Object.fromEntries(
+  Object.entries(screenPaths).map(([screen, path]) => [path, screen]),
+) as Record<string, Screen>;
 const routingProfiles = [
   ["FAST", "Fast", "Минимальная задержка для быстрых проверок", "⚡"],
   ["BALANCED", "Balanced", "Баланс качества, скорости и цены", "◐"],
@@ -48,24 +78,39 @@ const metricMeta = [
   ["Confidence", "confidence_score"],
 ] as const;
 
-type Screen = "home" | "wizard" | "report" | "providers" | "analytics" | "notifications" | "organization" | "settings" | "admin" | "onboarding";
+type Screen = "home" | "research" | "wizard" | "reports" | "report" | "recommendations" | "graph" | "competitors" | "history" | "providers" | "analytics" | "notifications" | "organization" | "settings" | "feedback" | "profile" | "admin" | "onboarding";
 type ReportShape = {
   executive_summary?: string;
-  score?: Record<string, number | string>;
-  trend?: { points?: Array<Record<string, unknown>> };
-  benchmark?: Record<string, unknown>;
+  research?: ResearchItem;
+  score?: Record<string, number | string> & { id?: number; research_id?: number; calculated_at?: string; version?: string };
+  trend?: { metrics?: TrendMetric[] };
+  benchmark?: { entity_count?: number; calculated_at?: string; entries?: BenchmarkEntry[] };
   insights?: Array<{ title?: string; explanation?: string }>;
   recommendations?: Array<{
     explanation?: string;
     priority?: string;
     metric?: string;
+    expected_effect?: string;
+    metric_value?: number;
+    created_at?: string;
   }>;
-  detected_entities?: unknown[];
-  sources?: unknown[];
+  provider_statistics?: Record<string, unknown>;
+  detected_entities?: Array<{ id?: number; response_id?: number; name?: string; entity_type?: string; confidence?: number }>;
+  sources?: Array<{ id?: number; response_id?: number; url?: string; title?: string; source?: string }>;
+  responses?: Array<{
+    id: number; provider: string; model: string; content: string;
+    processing_status: string; created_at: string; finished_at: string;
+    latency_ms?: number; total_tokens: number; cost: number; error_type?: string;
+  }>;
+  knowledge_graph_summary?: GraphSnapshot;
   latency_ms?: number;
   token_usage?: number;
   cost?: number;
 };
+type TrendPoint = { research_id: number; observed_at: string; value: number; moving_average: number; percentage_change?: number | null; direction: string };
+type TrendMetric = { metric: string; direction: string; points: TrendPoint[] };
+type BenchmarkMetric = { value: number; population_average: number; leader_value: number };
+type BenchmarkEntry = { observation_count: number; metrics: Record<string, BenchmarkMetric> };
 
 function valueOf(score: Record<string, number | string>, key: string) {
   const value = Number(score[key] ?? 0);
@@ -84,7 +129,7 @@ function healthLabel(value: number) {
         : "Критично";
 }
 
-function Login({ onReady }: { onReady: (name: string) => void }) {
+function Login({ onReady }: { onReady: (profile: AuthProfile) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -94,10 +139,8 @@ function Login({ onReady }: { onReady: (name: string) => void }) {
     setError("");
     setBusy(true);
     try {
-      const tokens = await api.login(email, password);
-      api.setToken(tokens.access_token);
-      sessionStorage.setItem("refresh_token", tokens.refresh_token);
-      onReady((await api.me()).display_name);
+      await api.login(email, password);
+      onReady(await api.me());
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Ошибка входа");
     } finally {
@@ -164,88 +207,45 @@ function Login({ onReady }: { onReady: (name: string) => void }) {
 function Shell({
   user,
   children,
-  onHome,
-  onProviders,
-  onAnalytics,
-  onNotifications,
-  onOrganization,
-  onSettings,
-  onAdmin,
-  onOnboarding,
+  onNavigate,
   active,
   onLogout,
+  roles,
 }: {
   user: string;
   children: React.ReactNode;
-  onHome: () => void;
-  onProviders: () => void;
-  onAnalytics: () => void;
-  onNotifications: () => void;
-  onOrganization: () => void;
-  onSettings: () => void;
-  onAdmin: () => void;
-  onOnboarding: () => void;
+  onNavigate: (screen: Screen) => void;
   active: Screen;
   onLogout: () => void;
+  roles: string[];
 }) {
-  const nav = [
-    ["⌂", "Dashboard"],
-    ["→", "Getting Started"],
-    ["◉", "Research"],
-    ["▤", "Reports"],
-    ["✓", "Recommendations"],
-    ["⌘", "Knowledge Graph"],
-    ["◇", "Competitors"],
-    ["↗", "History"],
-    ["✦", "AI Providers"],
-    ["◫", "Product Analytics"],
-    ["♢", "Notifications"],
-    ["◎", "Organization"],
-    ["⚙", "Settings"],
-    ["▦", "Admin Console"],
-  ];
+  const [systemReady, setSystemReady] = useState<boolean>();
+  useEffect(() => { api.systemHealth().then((health) => setSystemReady(health.status === "healthy" || health.status === "ready")).catch(() => setSystemReady(false)); }, []);
+  const isAdmin = roles.some((role) => ["superadmin", "admin", "organization_admin", "SUPERADMIN", "ADMIN", "ORGANIZATION_ADMIN"].includes(role));
+  const navSource = [
+    ["⌂", "Dashboard", "home"], ["→", "Getting Started", "onboarding"],
+    ["◉", "Research", "research"], ["▤", "Reports", "reports"],
+    ["✓", "Recommendations", "recommendations"], ["⌘", "Knowledge Graph", "graph"],
+    ["◇", "Competitors", "competitors"], ["↗", "History", "history"],
+    ["✦", "AI Providers", "providers"], ["◫", "Product Analytics", "analytics"],
+    ["♢", "Notifications", "notifications"], ["◎", "Organizations", "organization"],
+    ["◌", "Feedback", "feedback"], ["♙", "User Profile", "profile"],
+    ["⚙", "Settings", "settings"], ["▦", "Admin Console", "admin"],
+  ] as const;
+  const nav = navSource.filter(([, , target]) => isAdmin || (target !== "admin" && target !== "analytics"));
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <button className="wordmark" onClick={onHome}>
+        <button className="wordmark" onClick={() => onNavigate("home")}>
           <span className="logo-mark small">AR</span>
           <span>AI Ranking OS</span>
         </button>
         <nav>
-          {nav.map(([icon, label], index) => (
+          {nav.map(([icon, label, target]) => (
             <button
               key={label}
-              className={
-                (index === 0 && active === "home") ||
-                (label === "Getting Started" && active === "onboarding") ||
-                (label === "AI Providers" && active === "providers") ||
-                (label === "Product Analytics" && active === "analytics")
-                || (label === "Notifications" && active === "notifications")
-                || (label === "Organization" && active === "organization")
-                || (label === "Settings" && active === "settings")
-                || (label === "Admin Console" && active === "admin")
-                  ? "active"
-                  : ""
-              }
-              onClick={
-                index === 0
-                  ? onHome
-                  : label === "Getting Started"
-                    ? onOnboarding
-                  : label === "AI Providers"
-                    ? onProviders
-                    : label === "Product Analytics"
-                      ? onAnalytics
-                      : label === "Notifications"
-                        ? onNotifications
-                        : label === "Organization"
-                          ? onOrganization
-                          : label === "Settings"
-                            ? onSettings
-                            : label === "Admin Console"
-                              ? onAdmin
-                      : undefined
-              }
+              className={active === target ? "active" : ""}
+              onClick={() => onNavigate(target)}
             >
               <span>{icon}</span>
               {label}
@@ -276,8 +276,8 @@ function Shell({
             <span className="mobile-brand">AI Ranking OS</span>
           </div>
           <div className="top-actions">
-            <Badge tone="success">● Система работает</Badge>
-            <button className="icon-button" aria-label="Уведомления">
+            <Badge tone={systemReady === true ? "success" : systemReady === false ? "danger" : "neutral"}>● {systemReady === true ? "Система работает" : systemReady === false ? "Система недоступна" : "Проверка системы"}</Badge>
+            <button className="icon-button" aria-label="Уведомления" onClick={() => onNavigate("notifications")}>
               ♢
             </button>
           </div>
@@ -294,15 +294,17 @@ function SettingsScreen({ user }: { user: string }) {
   const [providers, setProviders] = useState<ProviderItem[]>([]);
   const [keys, setKeys] = useState<Array<{ id: number; name: string; prefix: string }>>([]);
   const [saved, setSaved] = useState(false);
-  useEffect(() => { Promise.all([api.workspace(), api.listProviders(), api.apiKeys()]).then(([workspace, providerItems, apiKeyItems]) => { setSettings((current) => ({ ...current, ...workspace.settings })); setProviders(providerItems); setKeys(apiKeyItems); }).catch(() => undefined); }, []);
+  const [error, setError] = useState("");
+  useEffect(() => { Promise.all([api.workspace(), api.listProviders(), api.apiKeys()]).then(([workspace, providerItems, apiKeyItems]) => { setSettings((current) => ({ ...current, ...workspace.settings })); setProviders(providerItems); setKeys(apiKeyItems); }).catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки настроек")); }, []);
   const tabs = [["profile", "Профиль"], ["security", "Безопасность"], ["api", "API Keys"], ["providers", "LLM Providers"], ["preferences", "Язык и регион"], ["notifications", "Уведомления"], ["theme", "Тема"], ["organization", "Организация"]];
   const set = (key: string, value: unknown) => { setSaved(false); setSettings((current) => ({ ...current, [key]: value })); };
   return <main className="analytics-page settings-page"><header className="analytics-hero"><div><span className="eyebrow">PREFERENCES</span><h1>Настройки</h1><p>Единый центр персональных и системных настроек.</p></div><button className="primary-action" onClick={() => api.updateWorkspace(settings).then(() => setSaved(true))}>{saved ? "Сохранено ✓" : "Сохранить"}</button></header>
+    {error && <div className="error" role="alert">{error}</div>}
     <div className="settings-layout"><nav className="settings-nav">{tabs.map(([key, label]) => <button className={tab === key ? "active" : ""} onClick={() => setTab(key)} key={key}>{label}</button>)}</nav><section className="analytics-card settings-panel">
       {tab === "profile" && <><h2>Профиль</h2><label>Имя<input value={user} disabled /></label><p className="empty-state">Контактные данные управляются Authentication.</p></>}
       {tab === "security" && <><h2>Безопасность</h2><div className="setting-row"><span>JWT-сессии и refresh rotation</span><b>Активно</b></div><div className="setting-row"><span>Отзыв токенов при выходе</span><b>Активно</b></div></>}
-      {tab === "api" && <><h2>API Keys</h2>{keys.map((key) => <div className="setting-row" key={key.id}><span>{key.name}</span><code>{key.prefix}••••</code></div>)}</>}
-      {tab === "providers" && <><h2>LLM Providers</h2>{providers.map((provider) => <div className="setting-row" key={provider.id}><span>{provider.display_name}</span><b>{provider.availability}</b></div>)}</>}
+      {tab === "api" && <><h2>API Keys</h2>{keys.length ? keys.map((key) => <div className="setting-row" key={key.id}><span>{key.name}</span><code>{key.prefix}••••</code></div>) : <p className="empty-state">API-ключи ещё не созданы.</p>}</>}
+      {tab === "providers" && <><h2>LLM Providers</h2>{providers.length ? providers.map((provider) => <div className="setting-row" key={provider.id}><span>{provider.display_name}</span><b>{provider.availability}</b></div>) : <p className="empty-state">Провайдеры недоступны.</p>}</>}
       {tab === "preferences" && <><h2>Язык и регион</h2><label>Язык<select value={String(settings.language)} onChange={(event) => set("language", event.target.value)}><option value="ru">Русский</option><option value="en">English</option></select></label><label>Регион<select value={String(settings.region)} onChange={(event) => set("region", event.target.value)}><option>GLOBAL</option><option>RU</option><option>EU</option><option>US</option></select></label></>}
       {tab === "notifications" && <><h2>Уведомления</h2><label className="toggle-row"><input type="checkbox" checked={Boolean((settings.notifications as Record<string, boolean>)?.in_app)} onChange={(event) => set("notifications", { ...(settings.notifications as object), in_app: event.target.checked })}/>In-app</label><label className="toggle-row"><input type="checkbox" checked={Boolean((settings.notifications as Record<string, boolean>)?.email)} onChange={(event) => set("notifications", { ...(settings.notifications as object), email: event.target.checked })}/>Email</label></>}
       {tab === "theme" && <><h2>Тема</h2><div className="theme-options">{["dark", "light", "system"].map((theme) => <button className={settings.theme === theme ? "active" : ""} onClick={() => set("theme", theme)} key={theme}>{theme}</button>)}</div></>}
@@ -310,26 +312,108 @@ function SettingsScreen({ user }: { user: string }) {
     </section></div></main>;
 }
 
-function OnboardingScreen({ onResearch }: { onResearch: () => void }) {
+function metricEvidence(key: string, data: ReportShape, research: ResearchItem) {
+  const responses = data.responses ?? [];
+  const score = data.score ?? {};
+  const processed = responses.filter((item) => item.processing_status === "PROCESSED").length;
+  const total = responses.length;
+  const value = valueOf(score, key);
+  const target = String(research.metadata?.brand ?? research.title.replace(/^AI Visibility:\s*/, ""));
+  const mentions = responses.filter((item) => item.content.toLocaleLowerCase().includes(target.toLocaleLowerCase())).length;
+  const recommended = Math.round(valueOf(score, "recommendation_score") / 100 * total);
+  const citations = data.sources?.length ?? 0;
+  const uniqueModels = new Set(responses.map((item) => `${item.provider}/${item.model}`)).size;
+  const entities = data.detected_entities ?? [];
+  const averageConfidence = entities.length ? entities.reduce((sum, item) => sum + Number(item.confidence ?? 0), 0) / entities.length * 100 : 50;
+  const details: Record<string, { lines: string[]; formula: string }> = {
+    mention_score: { lines: [`${total} ответов моделей`, `${mentions} ответов содержат бренд`], formula: `${mentions} / ${Math.max(total, 1)} × 100 = ${value.toFixed(1)}` },
+    recommendation_score: { lines: [`${total} ответов моделей`, `${recommended} ответов содержат извлечённую рекомендацию`], formula: `${recommended} / ${Math.max(total, 1)} × 100 = ${value.toFixed(1)}` },
+    citation_score: { lines: [`${total} ответов моделей`, `${citations} независимых источников`, `Максимум v1: ${total * 3} источников`], formula: `${citations} / ${Math.max(total * 3, 1)} × 100 = ${value.toFixed(1)}` },
+    coverage_score: { lines: [`${uniqueModels} уникальных provider/model`, `${research.total_tasks ?? total} запланированных задач`], formula: `${uniqueModels} / ${Math.max(research.total_tasks ?? total, 1)} × 100 = ${value.toFixed(1)}` },
+    confidence_score: { lines: [`${processed} из ${total} ответов обработано`, `${entities.length} извлечённых сущностей`, `Средняя entity confidence: ${averageConfidence.toFixed(1)}`], formula: `70% processing success + 30% entity confidence = ${value.toFixed(1)}` },
+    visibility_score: { lines: ["Mention × 35%", "Recommendation × 20%", "Citation × 15%", "Coverage × 20%", "Confidence × 10%"], formula: `Взвешенная сумма Scoring ${String(score.version ?? "1.0")} = ${value.toFixed(1)}` },
+  };
+  return details[key] ?? { lines: [`Research #${research.id}`], formula: value.toFixed(1) };
+}
+
+function GraphScreen() {
+  const [graph, setGraph] = useState<GraphSnapshot>();
+  const [query, setQuery] = useState("");
+  const [nodeType, setNodeType] = useState("ALL");
+  const [selected, setSelected] = useState<number>();
+  const [error, setError] = useState("");
+  useEffect(() => { api.graph().then(setGraph).catch((reason) => setError(reason instanceof Error ? reason.message : "Граф недоступен")); }, []);
+  if (error) return <main className="analytics-page"><div className="error" role="alert">{error}</div></main>;
+  if (!graph) return <DashboardSkeleton />;
+  const types = [...new Set(graph.nodes.map((node) => node.node_type))];
+  const visible = graph.nodes.filter((node) => (nodeType === "ALL" || node.node_type === nodeType) && (!query || `${node.name} ${node.aliases.join(" ")}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())));
+  const visibleIds = new Set(visible.map((node) => node.id));
+  const edges = graph.edges.filter((edge) => visibleIds.has(edge.source_node_id) && visibleIds.has(edge.target_node_id));
+  const positions = new Map(visible.map((node, index) => { const angle = index * Math.PI * 2 / Math.max(visible.length, 1) - Math.PI / 2; return [node.id, { x: 310 + Math.cos(angle) * 215, y: 230 + Math.sin(angle) * 165 }]; }));
+  const selectedNode = graph.nodes.find((node) => node.id === selected);
+  const connected = selected == null ? [] : graph.edges.filter((edge) => edge.source_node_id === selected || edge.target_node_id === selected);
+  return <main className="analytics-page graph-page"><header className="analytics-hero"><div><span className="eyebrow">SNAPSHOT #{graph.id} · v{graph.structure_version}</span><h1>Knowledge Graph</h1><p>{graph.node_count} сущностей · {graph.edge_count} связей · {new Date(graph.created_at).toLocaleString("ru-RU")}</p></div></header>
+    <section className="analytics-card graph-toolbar"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по имени или алиасу"/><select value={nodeType} onChange={(event) => setNodeType(event.target.value)}><option value="ALL">Все типы</option>{types.map((type) => <option key={type}>{type}</option>)}</select></section>
+    {!visible.length ? <div className="analytics-card empty-state">Сущности по выбранным условиям не найдены.</div> : <section className="graph-real-layout"><article className="analytics-card"><svg viewBox="0 0 620 460" className="network" aria-label="Реальный граф знаний"><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#607899"/></marker></defs>{edges.map((edge) => { const source = positions.get(edge.source_node_id); const target = positions.get(edge.target_node_id); if (!source || !target) return null; return <g key={edge.id}><line x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke="#607899" markerEnd="url(#arrow)"/><title>{edge.edge_type} · confidence {(edge.confidence * 100).toFixed(0)}%</title></g>; })}{visible.map((node) => { const point = positions.get(node.id)!; return <g key={node.id} className="graph-node" onClick={() => setSelected(node.id)}><circle cx={point.x} cy={point.y} r={selected === node.id ? 25 : 19} fill={selected === node.id ? "#3b82f6" : "#263d62"}/><text x={point.x} y={point.y + 34} textAnchor="middle" fill="#c8d4e6" fontSize="11">{node.name}</text><title>{node.node_type} · confidence {(node.confidence * 100).toFixed(0)}%</title></g>; })}</svg>{!edges.length && <p className="empty-state">Связи пока не обнаружены. Показаны только реальные узлы snapshot.</p>}</article><aside className="analytics-card graph-detail">{selectedNode ? <><span className="eyebrow">{selectedNode.node_type}</span><h2>{selectedNode.name}</h2><p>Confidence {(selectedNode.confidence * 100).toFixed(1)}%</p><p>Aliases: {selectedNode.aliases.join(", ") || "нет"}</p><h3>Связи ({connected.length})</h3>{connected.map((edge) => <div className="setting-row" key={edge.id}><span>{edge.edge_type}</span><b>{(edge.confidence * 100).toFixed(0)}%</b></div>)}</> : <p className="empty-state">Выберите узел, чтобы увидеть confidence, алиасы и связи.</p>}</aside></section>}
+  </main>;
+}
+
+type RecordsKind = "research" | "reports" | "recommendations" | "graph" | "competitors" | "history" | "feedback" | "profile";
+type DisplayRecord = { id: string; title: string; status: string; detail: string; meta?: string };
+
+function RecordsScreen({ kind, onNewResearch }: { kind: RecordsKind; onNewResearch: () => void }) {
+  const [records, setRecords] = useState<DisplayRecord[]>([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const titles: Record<RecordsKind, [string, string]> = {
+    research: ["Исследования", "Запуски, прогресс и состояние выполнения"],
+    reports: ["Отчёты", "Сформированные результаты исследований"],
+    recommendations: ["Рекомендации", "Приоритетные действия из последнего исследования"],
+    graph: ["Knowledge Graph", "Реальные сущности и связи последнего snapshot"],
+    competitors: ["Конкуренты", "Конкуренты из проектов рабочего пространства"],
+    history: ["История", "Хронология исследований от новых к старым"],
+    feedback: ["Feedback", "Ваши обращения и их текущий статус"],
+    profile: ["Профиль", "Данные текущей авторизованной учётной записи"],
+  };
+  useEffect(() => {
+    const load = async () => {
+      if (kind === "research" || kind === "history") {
+        const items: ResearchItem[] = await api.listResearch();
+        return [...items].sort((a, b) => b.id - a.id).map((item) => ({ id: String(item.id), title: item.title, status: item.status, detail: `${item.progress_percent ?? 0}% · ${item.completed_tasks ?? 0}/${item.total_tasks ?? 0} задач`, meta: item.created_at ? new Date(item.created_at).toLocaleString("ru-RU") : undefined }));
+      }
+      if (kind === "reports") return (await api.reports()).items.map((item: ReportCatalogItem) => ({ id: String(item.research_id), title: item.title, status: item.status, detail: `AI Visibility: ${item.visibility_score?.toFixed(1) ?? "—"}`, meta: new Date(item.created_at).toLocaleString("ru-RU") }));
+      if (kind === "recommendations") {
+        const latest = [...await api.listResearch()].sort((a, b) => b.id - a.id)[0];
+        if (!latest) return [];
+        return (await api.recommendations(latest.id)).recommendations.map((item: RecommendationItem) => ({ id: String(item.id), title: item.explanation, status: item.priority, detail: `${item.metric}: ${item.metric_value.toFixed(1)}`, meta: item.expected_effect }));
+      }
+      if (kind === "graph") {
+        const graph: GraphSnapshot = await api.graph();
+        return graph.nodes.map((node) => ({ id: String(node.id), title: node.name, status: node.node_type, detail: `Confidence ${(node.confidence * 100).toFixed(0)}%`, meta: `Snapshot #${graph.id} · ${graph.node_count} узлов · ${graph.edge_count} связей` }));
+      }
+      if (kind === "competitors") {
+        const projects: WorkspaceProjectItem[] = await api.workspaceProjects();
+        const groups = await Promise.all(projects.map(async (project) => ({ project, items: await api.projectCompetitors(project.id) })));
+        return groups.flatMap(({ project, items }) => items.map((item: CompetitorItem) => ({ id: `${project.id}-${item.id}`, title: item.name, status: item.active ? "ACTIVE" : "INACTIVE", detail: item.domains.join(", ") || "Домен не указан", meta: project.name })));
+      }
+      if (kind === "feedback") return (await api.feedback()).map((item: FeedbackItem) => ({ id: String(item.id), title: item.title, status: item.status, detail: `${item.feedback_type} · ${item.priority}`, meta: new Date(item.created_at).toLocaleString("ru-RU") }));
+      const profile = await api.me();
+      return [{ id: profile.email, title: profile.display_name, status: "ACTIVE", detail: profile.email }];
+    };
+    load().then(setRecords).catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки")).finally(() => setLoading(false));
+  }, [kind]);
+  return <main className="analytics-page records-page"><header className="analytics-hero"><div><span className="eyebrow">REAL DATA</span><h1>{titles[kind][0]}</h1><p>{titles[kind][1]}</p></div>{kind === "research" && <button className="primary-action" onClick={onNewResearch}>Новое исследование</button>}</header>
+    {error ? <div className="error" role="alert">{error}</div> : loading ? <DashboardSkeleton /> : <section className="records-list">{records.length ? records.map((item) => <article className="analytics-card record-card" key={item.id}><div><small>{item.meta}</small><h2>{item.title}</h2><p>{item.detail}</p></div><Badge tone={item.status === "COMPLETED" || item.status === "ACTIVE" ? "success" : item.status === "FAILED" || item.status === "CRITICAL" ? "danger" : "warning"}>{item.status}</Badge></article>) : <div className="analytics-card empty-state">Данных пока нет. Они появятся после первого действия в этом разделе.</div>}</section>}
+  </main>;
+}
+
+function OnboardingScreen({ onResearch, onOrganization }: { onResearch: () => void; onOrganization: () => void }) {
   const [organizations, setOrganizations] = useState<OrganizationItem[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
   useEffect(() => { api.organizations().then(setOrganizations).catch(() => undefined); }, []);
   const ready = organizations.length > 0;
-  async function createDemoWorkspace() {
-    setBusy(true); setMessage("");
-    try {
-      const existing = organizations.find((item) => item.slug === "demo-organization");
-      const organization = existing ?? await api.createOrganization({ name: "Demo Organization", slug: "demo-organization" });
-      await api.switchOrganization(organization.id);
-      setOrganizations((items) => existing ? items : [...items, organization]);
-      setMessage("Demo Organization готова. Можно запускать первое исследование.");
-    } catch (reason) { setMessage(reason instanceof Error ? reason.message : "Не удалось подготовить demo"); }
-    finally { setBusy(false); }
-  }
   return <main className="analytics-page onboarding-page"><header className="analytics-hero"><div><span className="eyebrow">CLOSED BETA</span><h1>Начните с первого результата</h1><p>Три коротких шага — и AI Ranking OS покажет, как модели видят ваш бренд.</p></div><Badge tone={ready ? "success" : "warning"}>● {ready ? "Workspace готов" : "Нужна организация"}</Badge></header>
-    <section className="onboarding-steps"><article className="analytics-card onboarding-step"><span>01</span><h2>Создайте пространство</h2><p>Организация объединяет команду, проекты и лимиты.</p><button onClick={createDemoWorkspace} disabled={busy || ready}>{ready ? "Готово ✓" : busy ? "Создаём…" : "Создать Demo Organization"}</button></article><article className="analytics-card onboarding-step"><span>02</span><h2>Проверьте Skinjestique</h2><p>Воспроизводимый пример уже настроен в Research Wizard.</p><button onClick={onResearch} disabled={!ready}>Открыть исследование</button></article><article className="analytics-card onboarding-step"><span>03</span><h2>Получите отчёт</h2><p>Visibility, источники и план действий собираются автоматически.</p><div className="onboarding-result">Report → Share → Improve</div></article></section>
-    {message && <div className="onboarding-message">{message}</div>}<section className="analytics-card beta-expectations"><h3>Что проверить в закрытой бете</h3><div><span>Исследование проходит без ручного вмешательства</span><b>Pipeline</b></div><div><span>Рекомендации понятны и применимы</span><b>Value</b></div><div><span>Отчёт можно передать клиенту</span><b>Sharing</b></div></section>
+    <section className="onboarding-steps"><article className="analytics-card onboarding-step"><span>01</span><h2>Настройте пространство</h2><p>Организация объединяет команду, проекты и лимиты.</p><button onClick={onOrganization}>{ready ? "Открыть организацию" : "Создать организацию"}</button></article><article className="analytics-card onboarding-step"><span>02</span><h2>Проверьте свой бренд</h2><p>Укажите бренд, регион, язык и профиль маршрутизации.</p><button onClick={onResearch} disabled={!ready}>Открыть исследование</button></article><article className="analytics-card onboarding-step"><span>03</span><h2>Получите отчёт</h2><p>Visibility, источники и план действий собираются автоматически.</p><div className="onboarding-result">Report → Share → Improve</div></article></section>
+    <section className="analytics-card beta-expectations"><h3>Что проверить в закрытой бете</h3><div><span>Исследование проходит без ручного вмешательства</span><b>Pipeline</b></div><div><span>Рекомендации понятны и применимы</span><b>Value</b></div><div><span>Отчёт можно передать клиенту</span><b>Sharing</b></div></section>
   </main>;
 }
 
@@ -378,13 +462,19 @@ function OrganizationScreen() {
   const [members, setMembers] = useState<Array<{ id: number; user_id: number; role: string }>>([]);
   const [activity, setActivity] = useState<Array<{ id: number; action: string; actor_id: number; created_at: string }>>([]);
   const [email, setEmail] = useState("");
+  const [newName, setNewName] = useState("");
+  const [error, setError] = useState("");
   const load = useCallback(() => api.organizations().then((items) => { setOrganizations(items); setSelected((current) => current ?? items.find((item) => item.is_default)?.id ?? items[0]?.id); }), []);
-  useEffect(() => { load().catch(() => undefined); }, [load]);
-  useEffect(() => { if (!selected) return; Promise.all([api.organizationMembers(selected), api.organizationActivity(selected)]).then(([memberItems, actions]) => { setMembers(memberItems); setActivity(actions); }).catch(() => undefined); }, [selected]);
+  useEffect(() => { load().catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки организаций")); }, [load]);
+  useEffect(() => { if (!selected) return; Promise.all([api.organizationMembers(selected), api.organizationActivity(selected)]).then(([memberItems, actions]) => { setMembers(memberItems); setActivity(actions); }).catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки организации")); }, [selected]);
   const current = organizations.find((item) => item.id === selected);
   return <main className="analytics-page organization-page"><header className="analytics-hero"><div><span className="eyebrow">TEAM WORKSPACE</span><h1>{current?.name ?? "Организация"}</h1><p>Участники, проекты, лимиты и журнал активности команды.</p></div><select value={selected ?? ""} onChange={(event) => { const id = Number(event.target.value); api.switchOrganization(id).then(() => { setSelected(id); load(); }); }}>{organizations.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.role}</option>)}</select></header>
+    {error && <div className="error" role="alert">{error}</div>}
+    {!organizations.length && <section className="analytics-card empty-state"><h2>Организаций пока нет</h2><p>Создайте рабочее пространство для проектов и исследований.</p><form className="invite-form" onSubmit={(event) => { event.preventDefault(); const slug = newName.trim().toLowerCase().replace(/[^a-z0-9а-яё]+/gi, "-").replace(/^-|-$/g, ""); api.createOrganization({ name: newName.trim(), slug }).then(() => { setNewName(""); load(); }).catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка создания")); }}><input value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Название организации" required/><button>Создать организацию</button></form></section>}
+    {current && <>
     <section className="analytics-kpis"><article className="analytics-card metric"><span>Участники</span><strong>{members.length}</strong><small>из {current?.limits.members ?? "—"}</small></article><article className="analytics-card metric"><span>Проекты</span><strong>{current?.limits.projects ?? "—"}</strong><small>доступный лимит</small></article><article className="analytics-card metric"><span>Часовой пояс</span><strong className="small-value">{current?.timezone ?? "UTC"}</strong><small>{current?.country ?? "GLOBAL"}</small></article></section>
     <section className="analytics-grid"><article className="analytics-card"><h3>Команда</h3>{members.map((member) => <div className="rank-row" key={member.id}><span>User {member.user_id}</span><b>{member.role}</b></div>)}<form className="invite-form" onSubmit={(event) => { event.preventDefault(); if (selected) api.inviteOrganizationMember(selected, email).then(() => setEmail("")); }}><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="email нового участника" required/><button>Пригласить</button></form></article><article className="analytics-card"><h3>Журнал активности</h3>{activity.slice(0, 8).map((item) => <div className="activity-row" key={item.id}><span>{item.action.replaceAll("_", " ")}</span><small>{new Date(item.created_at).toLocaleString("ru-RU")}</small></div>)}</article></section>
+    </>}
   </main>;
 }
 
@@ -392,15 +482,17 @@ function NotificationsScreen() {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [category, setCategory] = useState("");
   const [summary, setSummary] = useState({ unread: 0, total: 0, archived: 0 });
+  const [error, setError] = useState("");
   const load = useCallback(
     () => Promise.all([api.notifications(category), api.notificationSummary()])
       .then(([notifications, counts]) => { setItems(notifications); setSummary(counts); }),
     [category],
   );
-  useEffect(() => { load().catch(() => undefined); }, [load]);
+  useEffect(() => { load().catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки уведомлений")); }, [load]);
   return <main className="analytics-page notifications-page">
     <header className="analytics-hero"><div><span className="eyebrow">INBOX</span><h1>Уведомления</h1><p>Важные изменения проектов, исследований и вашей организации.</p></div>
       <div className="notification-summary"><b>{summary.unread}</b><span>непрочитанных</span></div></header>
+    {error && <div className="error" role="alert">{error}</div>}
     <div className="notification-filters" role="group" aria-label="Категории уведомлений">
       {["", "RESEARCH", "REPORT", "ORGANIZATION", "FEEDBACK", "SYSTEM"].map((value) => <button key={value || "ALL"} className={category === value ? "active" : ""} onClick={() => setCategory(value)}>{value || "Все"}</button>)}
     </div>
@@ -456,7 +548,7 @@ function ProductAnalyticsScreen() {
       </section>
       <section className="analytics-grid">
         <ChartContainer title="Динамика использования" caption="Все события продукта">
-          {trendPoints.length ? <AreaLineChart values={trendPoints.map((point) => point.value)} /> : <p className="empty-state">События появятся после первого действия.</p>}
+          {trendPoints.length ? <AreaLineChart points={trendPoints.map((point) => ({ value: point.value, label: point.label }))} /> : <p className="empty-state">События появятся после первого действия.</p>}
         </ChartContainer>
         <article className="analytics-card"><span className="eyebrow">RESEARCH HEALTH</span><h2>{numeric(data.research, "success_rate")}%</h2>
           <p>успешных исследований</p><div className="success-track"><span style={{ width: `${numeric(data.research, "success_rate")}%` }} /></div>
@@ -473,14 +565,24 @@ function ProductAnalyticsScreen() {
 
 function ProvidersDashboard() {
   const [providers, setProviders] = useState<ProviderItem[]>([]);
+  const [runtime, setRuntime] = useState<SystemProviderItem[]>([]);
+  const [history, setHistory] = useState<RouterHistoryItem[]>([]);
+  const [providerStats, setProviderStats] = useState<Record<string, Record<string, number>>>({});
   const [costs, setCosts] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
   useEffect(() => {
-    Promise.all([api.listProviders(), api.routerStatus()])
-      .then(([items, status]) => { setProviders(items); setCosts(status.costs); })
+    Promise.all([api.listProviders(), api.routerStatus(), api.systemProviders(), api.routerHistory(), api.listResearch()])
+      .then(async ([items, status, system, routerHistory, research]) => {
+        setProviders(items); setCosts(status.costs); setRuntime(system.providers); setHistory(routerHistory.items);
+        const latest = [...research].sort((a, b) => b.id - a.id)[0];
+        if (latest) {
+          const report = await api.finalReport(latest.id) as ReportShape;
+          setProviderStats((report.provider_statistics ?? {}) as Record<string, Record<string, number>>);
+        }
+      })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки"));
   }, []);
-  const available = providers.filter((item) => item.availability === "AVAILABLE").length;
+  const available = providers.filter((item) => item.availability === "READY").length;
   return (
     <main className="page providers-page">
       <div className="page-heading">
@@ -501,13 +603,13 @@ function ProvidersDashboard() {
             {['Models','Policies','Router','Benchmarks','Costs','Failover','Health'].map((tab, i) => <button className={i===0?'active':''} key={tab}>{tab}</button>)}
           </div>
           <section className="provider-cards">
-            {providers.map((provider) => <article className="panel provider-card" key={provider.id}>
+            {providers.map((provider) => { const health = runtime.find((item) => item.provider === provider.id); const last = history.find((item) => item.selected_models.some((model) => health?.model_id === model)); const stats = providerStats[provider.id] ?? {}; return <article className="panel provider-card" key={provider.id}>
               <header><span className="provider-logo">{provider.display_name.slice(0,2).toUpperCase()}</span>
                 <div><h2>{provider.display_name}</h2><small>{provider.id}</small></div>
-                <Badge tone={provider.availability === 'AVAILABLE' ? 'success' : 'warning'}>{provider.availability}</Badge></header>
-              <div className="provider-stats"><div><span>Context</span><b>{Math.round(provider.context_window/1000)}K</b></div><div><span>Priority</span><b>#{provider.priority}</b></div><div><span>Tier</span><b>{provider.free_tier?'FREE':'PAID'}</b></div></div>
+                <Badge tone={provider.availability === 'READY' ? 'success' : 'warning'}>{provider.availability}</Badge></header>
+              <div className="provider-stats"><div><span>Configured</span><b>{provider.availability === "NOT_CONFIGURED" ? "NO" : "YES"}</b></div><div><span>Connected</span><b>{health?.interface.available ? "YES" : "NO"}</b></div><div><span>Mock</span><b>{health?.interface.mock ? "YES" : "NO"}</b></div><div><span>Last Request</span><b>{last ? new Date(last.created_at).toLocaleString("ru-RU") : "—"}</b></div><div><span>Last Success</span><b>{last && !last.error ? new Date(last.created_at).toLocaleString("ru-RU") : "—"}</b></div><div><span>Last Error</span><b>{last?.error || "—"}</b></div><div><span>Tokens</span><b>{Number(stats.total_tokens ?? stats.tokens ?? 0) || "—"}</b></div><div><span>Cost</span><b>{last ? `$${last.estimated_cost_usd.toFixed(4)}` : "—"}</b></div><div><span>Latency</span><b>{Number(stats.latency_ms ?? last?.latency_ms ?? 0) ? `${Number(stats.latency_ms ?? last?.latency_ms).toFixed(0)} ms` : "—"}</b></div></div>
               <div className="capability-tags">{provider.capabilities.slice(0,6).map(cap => <span key={cap}>{cap}</span>)}</div>
-            </article>)}
+            </article>})}
           </section>
         </>
       )}
@@ -515,31 +617,16 @@ function ProvidersDashboard() {
   );
 }
 
-function MetricBar({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="metric-row">
-      <div>
-        <span>{label}</span>
-        <strong>{value.toFixed(value % 1 ? 1 : 0)}</strong>
-      </div>
-      <div className="track" aria-label={`${label}: ${value}`}>
-        <span
-          className={tone(value)}
-          style={{ width: `${Math.min(value, 100)}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 function Dashboard({
   report,
   onStart,
   onOpen,
+  onNavigate,
 }: {
   report?: ReportResult;
   onStart: () => void;
-  onOpen: () => void;
+  onOpen: (researchId?: number) => void;
+  onNavigate: (screen: Screen) => void;
 }) {
   const [detail, setDetail] = useState<string>();
   if (!report)
@@ -559,41 +646,51 @@ function Dashboard({
               <small>Узнать видимость в ответах AI</small>
               <i>Начать →</i>
             </button>
-            <button className="choice">
+            <button className="choice" onClick={() => onNavigate("competitors")}>
               <span className="choice-icon">◇</span>
               <b>Исследовать конкурента</b>
               <small>Сравнить позиции и рекомендации</small>
-              <i>Скоро</i>
+              <i>Открыть →</i>
             </button>
-            <button className="choice">
+            <button className="choice" onClick={() => onNavigate("history")}>
               <span className="choice-icon">↗</span>
               <b>Посмотреть историю</b>
               <small>Следить за динамикой показателей</small>
-              <i>Скоро</i>
+              <i>Открыть →</i>
             </button>
-            <button className="choice">
+            <button className="choice" onClick={() => onNavigate("recommendations")}>
               <span className="choice-icon">✓</span>
               <b>Открыть рекомендации</b>
               <small>Перейти к плану улучшений</small>
-              <i>Скоро</i>
+              <i>Открыть →</i>
             </button>
           </div>
         </section>
       </main>
     );
   const data = report.report as ReportShape;
+  const research = (data.research ?? report.research) as ResearchItem;
   const score = data.score ?? {};
   const visibility = valueOf(score, "visibility_score");
+  const trends = data.trend?.metrics ?? [];
+  const trendFor = (metric: string) => trends.find((item) => item.metric === metric);
+  const visibilityTrend = trendFor("visibility");
+  const visibilityPoints = visibilityTrend?.points.slice(-6) ?? [];
+  const visibilityDelta = visibilityPoints.at(-1)?.percentage_change;
   const weakest = metricMeta
     .map(([label, key]) => ({ label, value: valueOf(score, key) }))
     .sort((a, b) => a.value - b.value)[0];
   const kpis = [
-    ["✦", "Recommendation", "recommendation_score", 3.1],
-    ["◎", "Coverage", "coverage_score", 1.8],
-    ["↗", "Citation", "citation_score", -2.4],
-    ["◆", "Authority", "confidence_score", 2.2],
-    ["⌁", "Trend", "visibility_score", 4.2],
+    ["✦", "Recommendation", "recommendation_score", "recommendation"],
+    ["◉", "Mention", "mention_score", "mention"],
+    ["◎", "Coverage", "coverage_score", "coverage"],
+    ["↗", "Citation", "citation_score", "citation"],
+    ["◆", "Confidence", "confidence_score", "confidence"],
   ] as const;
+  const selectedKey = kpis.find(([, label]) => label === detail)?.[2] ?? "visibility_score";
+  const evidence = metricEvidence(selectedKey, data, research);
+  const latestResponse = [...(data.responses ?? [])].sort((a, b) => String(b.finished_at).localeCompare(String(a.finished_at)))[0];
+  const calculatedAt = typeof score.calculated_at === "string" ? score.calculated_at : undefined;
   const activeValue = detail
     ? valueOf(
         score,
@@ -605,8 +702,8 @@ function Dashboard({
       <div className="page-heading">
         <div>
           <span className="eyebrow">СОСТОЯНИЕ БРЕНДА</span>
-          <h1>{report.research.title.replace(/^AI Visibility:\s*/, "")}</h1>
-          <p>Последнее исследование · данные обновлены недавно</p>
+          <h1>{research.title.replace(/^AI Visibility:\s*/, "")}</h1>
+          <p>Исследование #{research.id} · {research.created_at ? new Date(research.created_at).toLocaleString("ru-RU") : "дата не записана"}</p>
         </div>
         <Button onClick={onStart}>Новое исследование</Button>
       </div>
@@ -619,13 +716,10 @@ function Dashboard({
               ● {healthLabel(visibility)}
             </span>
           </div>
-          <div className="rating" aria-label="Пять звёзд">
-            ★★★★★
-          </div>
-          <div className="delta good">
-            ↑ 4.2 <span>за последний месяц</span>
-          </div>
-          <button className="text-action" onClick={onOpen}>
+          {visibilityDelta == null ? <div className="delta"><span>Недостаточно данных для сравнения</span></div> : <div className={`delta ${visibilityDelta >= 0 ? "good" : "critical"}`}>
+            {visibilityDelta >= 0 ? "↑" : "↓"} {Math.abs(visibilityDelta).toFixed(1)}% <span>к предыдущему исследованию</span>
+          </div>}
+          <button className="text-action" onClick={() => onOpen(research.id)}>
             Открыть полный отчёт →
           </button>
         </article>
@@ -641,10 +735,7 @@ function Dashboard({
           </div>
           <div>
             <h2>{healthLabel(visibility)}</h2>
-            <p>
-              Сильное присутствие в AI-ответах. Основной резерв роста — качество
-              подтверждающих источников.
-            </p>
+            <p>Состояние рассчитано из фактических ответов моделей. Минимальная базовая метрика — {weakest.label}.</p>
             <div className="problem">
               <span>Главная проблема</span>
               <b>{weakest.label}</b>
@@ -654,83 +745,54 @@ function Dashboard({
         </article>
       </section>
       <section className="kpi-grid">
-        {kpis.map(([icon, title, key, delta], index) => (
+        {kpis.map(([icon, title, key, trendKey]) => {
+          const metricTrend = trendFor(trendKey);
+          const metricPoints = metricTrend?.points.slice(-5) ?? [];
+          return (
           <KpiCard
             key={title}
             icon={icon}
             title={title}
             value={valueOf(score, key)}
-            delta={delta}
-            points={[
-              56 + index * 2,
-              64 + index,
-              61 + index * 3,
-              74 + index * 2,
-              valueOf(score, key),
-            ]}
+            delta={metricPoints.at(-1)?.percentage_change}
+            points={metricPoints.length ? metricPoints.map((point) => point.value) : [valueOf(score, key)]}
             onClick={() => setDetail(title)}
           />
-        ))}
+        )})}
       </section>
       <section className="analytics-grid">
         <ChartContainer
           title="Динамика AI Visibility"
           caption="TREND"
-          action={<Badge tone="success">↑ 8% за период</Badge>}
+          action={visibilityDelta == null ? <Badge tone="neutral">Нет сравнения</Badge> : <Badge tone={visibilityDelta >= 0 ? "success" : "danger"}>{visibilityDelta >= 0 ? "↑" : "↓"} {Math.abs(visibilityDelta).toFixed(1)}%</Badge>}
         >
-          <AreaLineChart values={[68, 72, 71, 78, 82, visibility]} />
+          {visibilityPoints.length > 1 ? <AreaLineChart points={visibilityPoints.map((point) => ({ value: point.value, label: new Date(point.observed_at).toLocaleDateString("ru-RU"), researchId: point.research_id }))} onSelect={(id) => onOpen(id)} /> : <p className="empty-state">Недостаточно данных: для тренда нужны минимум два исследования.</p>}
         </ChartContainer>
         <ChartContainer title="Баланс AI-сигналов" caption="RADAR">
           <RadarChart
             labels={[
-              "Visibility",
+              "Mention",
               "Citation",
               "Coverage",
-              "Authority",
               "Recommend",
               "Confidence",
             ]}
             values={[
-              visibility,
+              valueOf(score, "mention_score"),
               valueOf(score, "citation_score"),
               valueOf(score, "coverage_score"),
-              valueOf(score, "confidence_score"),
               valueOf(score, "recommendation_score"),
               valueOf(score, "confidence_score"),
             ]}
           />
         </ChartContainer>
         <ChartContainer title="Pipeline исследования" caption="TIMELINE">
-          <Timeline
-            items={[
-              {
-                title: "Исследование завершено",
-                detail: "Ответы всех моделей получены",
-                done: true,
-              },
-              {
-                title: "Граф построен",
-                detail: "Сущности и связи обработаны",
-                done: true,
-              },
-              {
-                title: "Отчёт сформирован",
-                detail: "Метрики рассчитаны",
-                done: true,
-              },
-              {
-                title: "Рекомендации готовы",
-                detail: "План доступен в Action Center",
-                done: true,
-              },
-              { title: "Следующая проверка", detail: "Через 30 дней" },
-            ]}
-          />
+          <PipelineStatus result={report} data={data} />
         </ChartContainer>
-        <Benchmark visibility={visibility} />
-        <Trend visibility={visibility} />
+        <Benchmark brand={research.title.replace(/^AI Visibility:\s*/, "")} entry={data.benchmark?.entries?.[0]} entityCount={data.benchmark?.entity_count} />
+        <Trend metric={visibilityTrend} />
       </section>
-      <ActionCenter citation={valueOf(score, "citation_score")} />
+      <ActionCenter recommendations={data.recommendations ?? []} />
       <Drawer
         open={Boolean(detail)}
         title={detail ?? "Метрика"}
@@ -751,22 +813,12 @@ function Dashboard({
           </Badge>
         </div>
         <h3>Почему такая оценка</h3>
-        <p>
-          Показатель рассчитан по упоминаниям бренда, позиции рекомендации,
-          качеству источников и согласованности ответов выбранных моделей.
-        </p>
+        {evidence.lines.map((line) => <p key={line}>{line}</p>)}
         <h3>Что влияет</h3>
-        <MetricBar label="Качество источников" value={activeValue} />
-        <MetricBar
-          label="Покрытие моделей"
-          value={Math.min(100, activeValue + 12)}
-        />
-        <div className="drawer-callout">
-          <span>Ожидаемый рост</span>
-          <strong>+{Math.max(6, Math.round((85 - activeValue) * 0.35))}</strong>
-          <p>После выполнения приоритетного действия</p>
-        </div>
-        <Button onClick={onOpen}>Показать план действий</Button>
+        <div className="drawer-callout"><span>Расчёт</span><strong>{evidence.formula}</strong></div>
+        {latestResponse && <p>Последний ответ: {latestResponse.provider}/{latestResponse.model} · {latestResponse.total_tokens} токенов · {latestResponse.latency_ms ?? "—"} ms.</p>}
+        {calculatedAt && <p>Оценка рассчитана {new Date(calculatedAt).toLocaleString("ru-RU")} · алгоритм {String(score.version ?? "—")}.</p>}
+        <Button onClick={() => onOpen(research.id)}>Открыть полный отчёт</Button>
       </Drawer>
     </main>
   );
@@ -792,7 +844,8 @@ function DashboardSkeleton() {
   );
 }
 
-function Benchmark({ visibility }: { visibility: number }) {
+function Benchmark({ brand, entry, entityCount = 0 }: { brand: string; entry?: BenchmarkEntry; entityCount?: number }) {
+  const metric = entry?.metrics.visibility;
   return (
     <article className="benchmark panel">
       <div className="section-head">
@@ -800,12 +853,12 @@ function Benchmark({ visibility }: { visibility: number }) {
           <span className="section-label">Benchmark</span>
           <h2>Позиция относительно рынка</h2>
         </div>
-        <span className="badge neutral">Предварительно</span>
+        <span className="badge neutral">{metric && entityCount >= 2 ? `${entityCount} объектов` : "Нет данных"}</span>
       </div>
-      {[
-        ["Skinjestique", visibility],
-        ["Среднее рынка", 61],
-        ["Лидеры категории", 95],
+      {metric && entityCount >= 2 ? [
+        [brand, metric.value],
+        ["Среднее выборки", metric.population_average],
+        ["Лидер выборки", metric.leader_value],
       ].map(([name, value]) => (
         <div className="benchmark-row" key={String(name)}>
           <span>{name}</span>
@@ -814,17 +867,15 @@ function Benchmark({ visibility }: { visibility: number }) {
           </div>
           <strong>{Number(value).toFixed(0)}</strong>
         </div>
-      ))}
+      )) : <p className="empty-state">Benchmark появится, когда будет достаточно объектов для сравнения.</p>}
     </article>
   );
 }
 
-function Trend({ visibility }: { visibility: number }) {
-  const points = [
-    Math.max(0, visibility - 12),
-    Math.max(0, visibility - 6),
-    visibility,
-  ];
+function Trend({ metric }: { metric?: TrendMetric }) {
+  const source = metric?.points.slice(-3) ?? [];
+  const points = source.map((point) => point.value);
+  if (points.length < 2) return <article className="trend panel"><div className="section-head"><div><span className="section-label">Динамика</span><h2>AI Visibility</h2></div></div><p className="empty-state">Тренд появится после повторного исследования.</p></article>;
   const coords = points
     .map((value, i) => `${18 + i * 132},${150 - value}`)
     .join(" ");
@@ -833,9 +884,9 @@ function Trend({ visibility }: { visibility: number }) {
       <div className="section-head">
         <div>
           <span className="section-label">Динамика</span>
-          <h2>AI Visibility растёт</h2>
+          <h2>AI Visibility · {metric?.direction ?? "STABLE"}</h2>
         </div>
-        <span className="delta good">↑ 8%</span>
+        {source.at(-1)?.percentage_change != null && <span className={`delta ${(source.at(-1)?.percentage_change ?? 0) >= 0 ? "good" : "critical"}`}>{(source.at(-1)?.percentage_change ?? 0) >= 0 ? "↑" : "↓"} {Math.abs(source.at(-1)?.percentage_change ?? 0).toFixed(1)}%</span>}
       </div>
       <svg
         viewBox="0 0 300 170"
@@ -870,9 +921,9 @@ function Trend({ visibility }: { visibility: number }) {
         ))}
       </svg>
       <div className="timeline">
-        {["Июнь", "Июль", "Август"].map((month, i) => (
-          <div key={month}>
-            <span>{month}</span>
+        {source.map((point, i) => (
+          <div key={point.observed_at}>
+            <span>{new Date(point.observed_at).toLocaleDateString("ru-RU", { day: "2-digit", month: "short" })}</span>
             <strong>{points[i].toFixed(0)}</strong>
           </div>
         ))}
@@ -881,119 +932,42 @@ function Trend({ visibility }: { visibility: number }) {
   );
 }
 
-function ActionCenter({ citation }: { citation: number }) {
-  const [sort, setSort] = useState<"impact" | "time">("impact");
-  const [done, setDone] = useState<number[]>([]);
-  const [open, setOpen] = useState<number>();
-  const actions = [
-    {
-      title: "Добавить публикации в отраслевых СМИ",
-      impact: 11,
-      days: 15,
-      difficulty: "Средняя",
-    },
-    {
-      title: "Усилить страницы с экспертными доказательствами",
-      impact: 7,
-      days: 7,
-      difficulty: "Низкая",
-    },
-    {
-      title: "Разместить бренд в независимых каталогах",
-      impact: 5,
-      days: 10,
-      difficulty: "Средняя",
-    },
-  ].sort((a, b) => (sort === "impact" ? b.impact - a.impact : a.days - b.days));
+function ActionCenter({ recommendations }: { recommendations: NonNullable<ReportShape["recommendations"]> }) {
   return (
     <section className="action-center">
       <div className="section-head">
         <div>
           <span className="eyebrow">ACTION CENTER</span>
           <h2>Что делать дальше</h2>
-          <p>
-            Три действия способны поднять Visibility до{" "}
-            {Math.min(99, Math.round(89 + (60 - citation) * 0.14))}.
-          </p>
+          <p>Рекомендации, рассчитанные для последнего исследования.</p>
         </div>
-        <label className="sort-control">
-          Сортировка
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as "impact" | "time")}
-          >
-            <option value="impact">По эффекту</option>
-            <option value="time">По сроку</option>
-          </select>
-        </label>
       </div>
       <div className="action-list">
-        {actions.map((action, index) => (
-          <article
-            className={`action-item ${done.includes(index) ? "completed" : ""}`}
-            key={action.title}
-          >
-            <button
-              className="complete-action"
-              aria-label={`Отметить «${action.title}» выполненным`}
-              onClick={() =>
-                setDone((items) =>
-                  items.includes(index)
-                    ? items.filter((x) => x !== index)
-                    : [...items, index],
-                )
-              }
-            >
-              {done.includes(index) ? "✓" : ""}
-            </button>
+        {recommendations.length ? recommendations.map((action, index) => (
+          <article className="action-item" key={`${action.explanation}-${index}`}>
             <div>
-              <span className="priority">Приоритет</span>
-              <h3>{action.title}</h3>
+              <span className="priority">{action.priority ?? "Приоритет не указан"}</span>
+              <h3>{action.explanation ?? "Рекомендация"}</h3>
               <div className="action-facts">
-                <b className="good">+{action.impact} Visibility</b>
-                <span>{action.days} дней</span>
-                <span>{action.difficulty} сложность</span>
+                <b>{action.metric ?? "Метрика не указана"}</b>
+                <span>{action.expected_effect ?? "Эффект не рассчитан"}</span>
               </div>
-              {open === index && (
-                <p>
-                  Соберите список релевантных площадок, подготовьте материал с
-                  проверяемыми данными и обеспечьте корректную ссылку на
-                  официальный ресурс бренда.
-                </p>
-              )}
             </div>
-            <button
-              className="expand-action"
-              onClick={() => setOpen(open === index ? undefined : index)}
-            >
-              {open === index ? "Свернуть" : "Раскрыть"} ↓
-            </button>
           </article>
-        ))}
-      </div>
-      <div className="roadmap">
-        <div>
-          <span>Сегодня</span>
-          <b>План утверждён</b>
-        </div>
-        <i>→</i>
-        <div>
-          <span>Через неделю</span>
-          <b>Первые публикации</b>
-        </div>
-        <i>→</i>
-        <div>
-          <span>Через месяц</span>
-          <b>Visibility 94</b>
-        </div>
-        <i>→</i>
-        <div>
-          <span>Через квартал</span>
-          <b>Устойчивый рост</b>
-        </div>
+        )) : <div className="empty-state">Рекомендации не сформированы.</div>}
       </div>
     </section>
   );
+}
+
+function PipelineStatus({ result, data }: { result: ReportResult; data: ReportShape }) {
+  const rows = [
+    ...(result.tasks ?? []).map((task) => ({ title: `${task.provider ?? "Provider"}/${task.model ?? "model"}`, detail: `${task.status} · ${new Date(task.created_at).toLocaleString("ru-RU")}${task.error ? ` · ${task.error}` : ""}`, done: task.status === "COMPLETED" })),
+    ...(data.responses ?? []).map((response) => ({ title: `Response #${response.id}: ${response.processing_status}`, detail: `${response.provider}/${response.model} · ${response.total_tokens} токенов · ${response.latency_ms ?? "—"} ms · $${Number(response.cost).toFixed(6)}`, done: response.processing_status === "PROCESSED" })),
+    ...(data.knowledge_graph_summary?.created_at ? [{ title: "Knowledge Graph", detail: new Date(data.knowledge_graph_summary.created_at).toLocaleString("ru-RU"), done: true }] : []),
+    ...(typeof data.score?.calculated_at === "string" ? [{ title: "Scoring", detail: `${new Date(data.score.calculated_at).toLocaleString("ru-RU")} · v${String(data.score.version ?? "—")}`, done: true }] : []),
+  ];
+  return rows.length ? <Timeline items={rows} /> : <p className="empty-state">Pipeline stages не записаны для этого исследования.</p>;
 }
 
 function Wizard({
@@ -1003,14 +977,16 @@ function Wizard({
   onComplete: (result: ReportResult) => void;
   onCancel: () => void;
 }) {
-  const [step, setStep] = useState(1);
-  const [brand, setBrand] = useState("Skinjestique");
-  const [region, setRegion] = useState("GLOBAL");
-  const [language, setLanguage] = useState("ru");
-  const [profile, setProfile] = useState<WizardPayload["routing_profile"]>("BALANCED");
+  const saved = useMemo(() => { try { return JSON.parse(sessionStorage.getItem("research-wizard") ?? "{}") as Partial<{ step: number; brand: string; region: string; language: string; profile: WizardPayload["routing_profile"] }>; } catch { return {}; } }, []);
+  const [step, setStep] = useState(saved.step && saved.step >= 1 && saved.step <= 5 ? saved.step : 1);
+  const [brand, setBrand] = useState(saved.brand ?? "");
+  const [region, setRegion] = useState(saved.region ?? "GLOBAL");
+  const [language, setLanguage] = useState(saved.language ?? "ru");
+  const [profile, setProfile] = useState<WizardPayload["routing_profile"]>(saved.profile ?? "BALANCED");
   const [review, setReview] = useState<WizardReview>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  useEffect(() => { sessionStorage.setItem("research-wizard", JSON.stringify({ step, brand, region, language, profile })); }, [step, brand, region, language, profile]);
   const payload = (): WizardPayload => ({
     brand,
     routing_profile: profile,
@@ -1038,7 +1014,10 @@ function Wizard({
     setBusy(true);
     setError("");
     try {
-      onComplete(await api.run(payload()));
+      const result = await api.run(payload());
+      if (result.research.status !== "COMPLETED") throw new Error("Исследование завершилось с ошибкой. Подробности доступны в разделе Research.");
+      sessionStorage.removeItem("research-wizard");
+      onComplete(result);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Не удалось запустить исследование",
@@ -1058,7 +1037,7 @@ function Wizard({
     <main className="wizard-page">
       <button
         className="back-link"
-        onClick={step === 1 ? onCancel : () => setStep(step - 1)}
+        onClick={step === 1 ? () => { sessionStorage.removeItem("research-wizard"); onCancel(); } : () => setStep(step - 1)}
       >
         ← {step === 1 ? "На главную" : "Назад"}
       </button>
@@ -1164,6 +1143,9 @@ function Wizard({
               <b>{routingProfiles.find(([value]) => value === profile)?.[1]}</b>
             </div>
             <p>{review?.prompt}</p>
+            <div><span>Выбранные модели</span><b>{review?.selected_models?.join(", ") || review?.provider_models?.join(", ") || "Router не вернул план"}</b></div>
+            <div><span>Оценка времени</span><b>{review?.estimated_time_ms ? `${review.estimated_time_ms} ms` : "Не рассчитана"}</b></div>
+            <div><span>Оценка стоимости</span><b>{review?.estimated_cost_usd != null ? `$${review.estimated_cost_usd.toFixed(6)}` : "Не рассчитана"}</b></div>
           </div>
         )}
         {error && (
@@ -1190,35 +1172,20 @@ function Wizard({
   );
 }
 
-function RecommendationCard({ citation }: { citation: number }) {
+function RecommendationCard({ recommendation }: { recommendation: NonNullable<ReportShape["recommendations"]>[number] }) {
   return (
     <article className="action-card">
       <div className="action-top">
-        <span className="priority">Высокий приоритет</span>
-        <span>Источник роста</span>
+        <span className="priority">{recommendation.priority ?? "Приоритет не указан"}</span>
+        <span>{recommendation.metric ?? "Метрика"}</span>
       </div>
-      <h3>Опубликовать экспертные материалы в отраслевых СМИ</h3>
-      <p>
-        Добавьте независимо проверяемые публикации и ссылки на бренд в
-        авторитетных источниках.
-      </p>
+      <h3>{recommendation.explanation ?? "Рекомендация"}</h3>
       <div className="action-meta">
         <div>
           <span>Ожидаемый эффект</span>
-          <b className="good">
-            +{Math.max(8, Math.round((60 - citation) * 0.68))} Citation
-          </b>
-        </div>
-        <div>
-          <span>Сложность</span>
-          <b>Средняя</b>
-        </div>
-        <div>
-          <span>Срок</span>
-          <b>2 недели</b>
+          <b className="good">{recommendation.expected_effect ?? "Не рассчитан"}</b>
         </div>
       </div>
-      <button className="secondary">Добавить в план</button>
     </article>
   );
 }
@@ -1233,7 +1200,9 @@ function Report({
   const report = result.report as ReportShape;
   const score = report.score ?? {};
   const visibility = valueOf(score, "visibility_score");
-  const citation = valueOf(score, "citation_score");
+  const weakest = metricMeta.map(([label, key]) => ({ label, value: valueOf(score, key) })).sort((a, b) => a.value - b.value)[0];
+  const visibilityMetric = report.trend?.metrics?.find((item) => item.metric === "visibility");
+  const latestDelta = visibilityMetric?.points.at(-1)?.percentage_change;
   const strengths = metricMeta
     .filter(([, key]) => valueOf(score, key) >= 80)
     .map(([label]) => label);
@@ -1248,16 +1217,12 @@ function Report({
             EXECUTIVE REPORT · #{result.research.id}
           </span>
           <h1>{result.research.title}</h1>
-          <p>
-            За последний период AI Visibility выросла. Бренд уверенно
-            присутствует в рекомендациях моделей; главное ограничение —
-            недостаток авторитетных цитирований.
-          </p>
+          <p>{report.executive_summary ?? "Executive Summary не сформирован."}</p>
         </div>
         <div className="report-score">
           <span>AI Visibility</span>
           <strong>{visibility.toFixed(1)}</strong>
-          <em className="good">↑ 8%</em>
+          <em className={latestDelta == null ? "" : latestDelta >= 0 ? "good" : "critical"}>{latestDelta == null ? "Нет сравнения" : `${latestDelta >= 0 ? "↑" : "↓"} ${Math.abs(latestDelta).toFixed(1)}%`}</em>
         </div>
       </section>
       <section className="score-strip">
@@ -1285,53 +1250,24 @@ function Report({
         </article>
         <article className="panel weakness">
           <span className="section-label">ГЛАВНОЕ ОГРАНИЧЕНИЕ</span>
-          <h2>Citation</h2>
-          <strong>{citation.toFixed(1)}</strong>
-          <p>
-            AI знает и рекомендует бренд, но недостаточно часто подтверждает
-            ответы независимыми источниками.
-          </p>
+          <h2>{weakest.label}</h2>
+          <strong>{weakest.value.toFixed(1)}</strong>
+          <p>Минимальное значение среди метрик текущего исследования.</p>
           <div className="track">
-            <span className="watch" style={{ width: `${citation}%` }} />
+            <span className={tone(weakest.value)} style={{ width: `${weakest.value}%` }} />
           </div>
         </article>
         <article className="panel narrative">
           <span className="section-label">ЧТО ХОРОШО</span>
           <h2>Ключевые выводы</h2>
-          <ul>
-            <li>AI рекомендует бренд в целевых запросах</li>
-            <li>Высокая узнаваемость названия</li>
-            <li>Хорошее покрытие выбранных моделей</li>
-            <li>Высокая уверенность в результатах</li>
-          </ul>
+          {report.insights?.length ? <ul>{report.insights.map((insight, index) => <li key={`${insight.title}-${index}`}>{insight.title ?? insight.explanation ?? "Аналитический вывод"}</li>)}</ul> : <p className="empty-state">Insights не сформированы.</p>}
         </article>
         <article className="panel sources">
           <span className="section-label">KNOWLEDGE SOURCES</span>
           <h2>Источники знаний</h2>
           <div className="source-number">{report.sources?.length ?? 0}</div>
           <p>источника обнаружено и связано с ответами моделей</p>
-          <button className="text-action">Изучить источники →</button>
         </article>
-      </section>
-      <section className="visualization-grid">
-        <ChartContainer title="Присутствие по моделям" caption="HEATMAP">
-          <Heatmap
-            values={[
-              visibility,
-              citation,
-              valueOf(score, "coverage_score"),
-              valueOf(score, "recommendation_score"),
-            ]}
-          />
-        </ChartContainer>
-        <ChartContainer title="Структура источников" caption="TREEMAP">
-          <Treemap sources={report.sources?.length ?? 0} />
-        </ChartContainer>
-        <ChartContainer title="Knowledge Graph" caption="ENTITY NETWORK">
-          <NetworkGraph
-            brand={result.research.title.replace(/^AI Visibility:\s*/, "")}
-          />
-        </ChartContainer>
       </section>
       <section className="plan-section">
         <div className="section-head">
@@ -1339,33 +1275,8 @@ function Report({
             <span className="eyebrow">ПЛАН ДЕЙСТВИЙ</span>
             <h2>Как улучшить результат</h2>
           </div>
-          <span>Горизонт · 3 недели</span>
         </div>
-        <RecommendationCard citation={citation} />
-        <div className="weeks">
-          {[
-            [
-              "Неделя 1",
-              "Подготовить экспертную тему и список отраслевых площадок",
-            ],
-            [
-              "Неделя 2",
-              "Опубликовать материал и обеспечить корректные ссылки",
-            ],
-            [
-              "Неделя 3",
-              "Повторить исследование и измерить изменение Citation",
-            ],
-          ].map(([week, text], i) => (
-            <div key={week}>
-              <span>{i + 1}</span>
-              <div>
-                <b>{week}</b>
-                <p>{text}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+        {report.recommendations?.length ? report.recommendations.map((recommendation, index) => <RecommendationCard recommendation={recommendation} key={`${recommendation.explanation}-${index}`} />) : <div className="empty-state">Рекомендации не сформированы.</div>}
       </section>
       <section className="report-footer panel">
         <div>
@@ -1393,61 +1304,36 @@ function Report({
   );
 }
 
-function Assistant({
-  open,
-  onToggle,
-}: {
-  open: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <aside className={`assistant ${open ? "open" : ""}`}>
-      <button
-        className="assistant-toggle"
-        onClick={onToggle}
-        aria-label="AI-помощник"
-      >
-        ✦
-      </button>
-      {open && (
-        <div className="assistant-body">
-          <div className="assistant-head">
-            <span className="logo-mark small">AI</span>
-            <div>
-              <b>Помощник</b>
-              <small>Онлайн</small>
-            </div>
-            <button className="icon-button" onClick={onToggle}>
-              ×
-            </button>
-          </div>
-          <div className="assistant-message">
-            <span>AI</span>
-            <p>
-              <b>Что означает Citation?</b>
-              <br />
-              Это показатель того, насколько часто ответы AI подтверждаются
-              независимыми и авторитетными источниками. Чем он выше, тем больше
-              доверия к упоминаниям бренда.
-            </p>
-          </div>
-          <button className="assistant-action">Исправить автоматически</button>
-          <div className="assistant-input">
-            <input placeholder="Задайте вопрос об отчёте…" />
-            <button>↑</button>
-          </div>
-        </div>
-      )}
-    </aside>
-  );
-}
-
 function App() {
   const [user, setUser] = useState("");
-  const [screen, setScreen] = useState<Screen>("home");
+  const [roles, setRoles] = useState<string[]>([]);
+  const [screen, setScreen] = useState<Screen>(
+    () => pathScreens[window.location.pathname] ?? "home",
+  );
   const [report, setReport] = useState<ReportResult>();
-  const [assistant, setAssistant] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const loadReport = useCallback(async (research: ResearchItem) => {
+    const [data, tasks] = await Promise.all([api.finalReport(research.id), api.researchTasks(research.id).catch(() => [])]);
+    setReport({ research, report_url: `/research/${research.id}/final-report`, report: data, tasks });
+  }, []);
+  const navigate = useCallback((next: Screen, replace = false) => {
+    const path = screenPaths[next];
+    window.history[replace ? "replaceState" : "pushState"]({ screen: next }, "", path);
+    setScreen(next);
+  }, []);
+  useEffect(() => {
+    const onPopState = () => setScreen(pathScreens[window.location.pathname] ?? "home");
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+  useEffect(() => {
+    api.restoreSession()
+      .then(() => api.me())
+      .then((profile) => { setUser(profile.display_name); setRoles(profile.roles); setLoading(true); })
+      .catch(() => undefined)
+      .finally(() => setAuthReady(true));
+  }, []);
   useEffect(() => {
     if (!user || report) return;
     api
@@ -1455,29 +1341,41 @@ function App() {
       .then(async (items) => {
         const latest = [...items].sort((a, b) => b.id - a.id)[0];
         if (!latest) return;
-        const data = await api.finalReport(latest.id);
-        setReport({
-          research: latest,
-          report_url: `/research/${latest.id}/final-report`,
-          report: data,
-        });
+        await loadReport(latest);
       })
       .catch(() => undefined)
       .finally(() => setLoading(false));
-  }, [user, report]);
+  }, [user, report, loadReport]);
+  const isAdmin = roles.some((role) => ["superadmin", "admin", "organization_admin", "SUPERADMIN", "ADMIN", "ORGANIZATION_ADMIN"].includes(role));
   const content = useMemo(
     () =>
       screen === "wizard" ? (
         <Wizard
-          onCancel={() => setScreen("home")}
+          onCancel={() => navigate("home")}
           onComplete={(value) => {
             setReport(value);
-            setScreen("report");
+            navigate("report");
           }}
         />
+      ) : screen === "research" ? (
+        <RecordsScreen key="research" kind="research" onNewResearch={() => navigate("wizard")} />
+      ) : screen === "reports" ? (
+        <RecordsScreen key="reports" kind="reports" onNewResearch={() => navigate("wizard")} />
+      ) : screen === "recommendations" ? (
+        <RecordsScreen key="recommendations" kind="recommendations" onNewResearch={() => navigate("wizard")} />
+      ) : screen === "graph" ? (
+        <GraphScreen />
+      ) : screen === "competitors" ? (
+        <RecordsScreen key="competitors" kind="competitors" onNewResearch={() => navigate("wizard")} />
+      ) : screen === "history" ? (
+        <RecordsScreen key="history" kind="history" onNewResearch={() => navigate("wizard")} />
+      ) : screen === "feedback" ? (
+        <RecordsScreen key="feedback" kind="feedback" onNewResearch={() => navigate("wizard")} />
+      ) : screen === "profile" ? (
+        <RecordsScreen key="profile" kind="profile" onNewResearch={() => navigate("wizard")} />
       ) : screen === "providers" ? (
         <ProvidersDashboard />
-      ) : screen === "analytics" ? (
+      ) : screen === "analytics" && isAdmin ? (
         <ProductAnalyticsScreen />
       ) : screen === "notifications" ? (
         <NotificationsScreen />
@@ -1485,51 +1383,56 @@ function App() {
         <OrganizationScreen />
       ) : screen === "settings" ? (
         <SettingsScreen user={user} />
-      ) : screen === "admin" ? (
+      ) : screen === "admin" && isAdmin ? (
         <AdminConsoleScreen />
+      ) : screen === "admin" || screen === "analytics" ? (
+        <main className="analytics-page"><div className="error" role="alert">Недостаточно прав для просмотра этого раздела.</div></main>
       ) : screen === "onboarding" ? (
-        <OnboardingScreen onResearch={() => setScreen("wizard")} />
+        <OnboardingScreen onResearch={() => navigate("wizard")} onOrganization={() => navigate("organization")} />
       ) : screen === "report" && report ? (
-        <Report result={report} onHome={() => setScreen("home")} />
+        <Report result={report} onHome={() => navigate("home")} />
       ) : loading ? (
         <DashboardSkeleton />
       ) : (
         <Dashboard
           report={report}
-          onStart={() => setScreen("wizard")}
-          onOpen={() => setScreen("report")}
+          onStart={() => navigate("wizard")}
+          onOpen={(researchId) => {
+            if (researchId && researchId !== report?.research.id) {
+              api.listResearch().then((items) => { const target = items.find((item) => item.id === researchId); return target ? loadReport(target) : undefined; }).then(() => navigate("report")).catch(() => undefined);
+            } else navigate("report");
+          }}
+          onNavigate={navigate}
         />
       ),
-    [screen, report, loading, user],
+    [screen, report, loading, user, isAdmin, navigate, loadReport],
   );
+  if (!authReady) return <DashboardSkeleton />;
   if (!user)
     return (
       <Login
-        onReady={(name) => {
+        onReady={(profile) => {
           setLoading(true);
-          setUser(name);
+          setUser(profile.display_name);
+          setRoles(profile.roles);
+          navigate(pathScreens[window.location.pathname] ?? "home", true);
         }}
       />
     );
   return (
     <Shell
       user={user}
+      roles={roles}
       active={screen}
-      onHome={() => setScreen("home")}
-      onProviders={() => setScreen("providers")}
-      onAnalytics={() => setScreen("analytics")}
-      onNotifications={() => setScreen("notifications")}
-      onOrganization={() => setScreen("organization")}
-      onSettings={() => setScreen("settings")}
-      onAdmin={() => setScreen("admin")}
-      onOnboarding={() => setScreen("onboarding")}
+      onNavigate={navigate}
       onLogout={() => {
         setUser("");
+        setRoles([]);
         setReport(undefined);
+        navigate("home", true);
       }}
     >
       {content}
-      <Assistant open={assistant} onToggle={() => setAssistant(!assistant)} />
     </Shell>
   );
 }

@@ -8,6 +8,8 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.database import Base, get_db
 from backend.app.main import app
+from execution_engine import service as execution_service
+from execution_engine.worker_manager import WorkerManager
 from product.models import PromptDefinition, ResearchTemplateDefinition
 from product.service import PIPELINE
 
@@ -144,3 +146,32 @@ def test_wizard_rejects_unknown_model(client: TestClient) -> None:
         },
     )
     assert response.status_code == 422
+
+
+def test_wizard_does_not_generate_report_when_research_execution_fails(
+    client: TestClient,
+) -> None:
+    agent = client.post("/agents", json={"name": "Busy product agent"}).json()
+    task = client.post(
+        "/tasks",
+        json={"title": "Already running", "status": "READY", "priority": "HIGH"},
+    ).json()
+    with TestingSession() as db:
+        execution_service.schedule_execution(db, WorkerManager())
+
+    response = client.post(
+        "/research/wizard/run",
+        json={
+            "brand": "Skinjestique",
+            "models": [{"provider": "openai", "model": "gpt-4o-mini"}],
+            "languages": ["en"],
+            "regions": ["GLOBAL"],
+            "prompt_code": "ai-visibility",
+            "research_template_code": "ai-visibility",
+        },
+    )
+
+    assert agent["id"] > 0
+    assert task["id"] > 0
+    assert response.status_code == 409
+    assert "no report was generated" in response.json()["detail"]

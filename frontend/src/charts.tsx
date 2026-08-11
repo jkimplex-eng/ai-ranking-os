@@ -7,29 +7,31 @@ import {
 } from "d3-force";
 import { useMemo, useState } from "react";
 
-export function AreaLineChart({ values }: { values: number[] }) {
-  const [range, setRange] = useState<"3M" | "6M" | "1Y">("3M");
+type ChartPoint = { value: number; label: string; researchId?: number };
+
+export function AreaLineChart({ points: values, onSelect }: { points: ChartPoint[]; onSelect?: (researchId: number) => void }) {
+  const [range, setRange] = useState<"3" | "6" | "ALL">("3");
   const [hover, setHover] = useState<number>();
   const shown =
-    range === "3M"
+    range === "3"
       ? values.slice(-3)
-      : range === "6M"
+      : range === "6"
         ? values.slice(-6)
         : values;
   const step = 520 / Math.max(shown.length - 1, 1);
-  const points = shown
-    .map((value, index) => `${20 + index * step},${185 - value * 1.45}`)
+  const polyline = shown
+    .map((point, index) => `${20 + index * step},${185 - point.value * 1.45}`)
     .join(" ");
   return (
     <div className="interactive-chart">
       <div className="chart-controls">
-        {(["3M", "6M", "1Y"] as const).map((item) => (
+        {(["3", "6", "ALL"] as const).map((item) => (
           <button
             className={range === item ? "active" : ""}
             onClick={() => setRange(item)}
             key={item}
           >
-            {item}
+            {item === "ALL" ? "Все" : `${item} точки`}
           </button>
         ))}
       </div>
@@ -40,15 +42,15 @@ export function AreaLineChart({ values }: { values: number[] }) {
             <stop offset="1" stopColor="#3b82f6" stopOpacity="0" />
           </linearGradient>
         </defs>
-        <polygon points={`20,195 ${points} 540,195`} fill="url(#trend-fill)" />
+        <polygon points={`20,195 ${polyline} 540,195`} fill="url(#trend-fill)" />
         <polyline
-          points={points}
+          points={polyline}
           fill="none"
           stroke="#6da2ff"
           strokeWidth="4"
           strokeLinecap="round"
         />
-        {shown.map((value, index) => (
+        {shown.map((point, index) => (
           <g
             key={index}
             onMouseEnter={() => setHover(index)}
@@ -56,37 +58,40 @@ export function AreaLineChart({ values }: { values: number[] }) {
           >
             <circle
               cx={20 + index * step}
-              cy={185 - value * 1.45}
+              cy={185 - point.value * 1.45}
               r="12"
               fill="transparent"
             />
             <circle
               cx={20 + index * step}
-              cy={185 - value * 1.45}
+              cy={185 - point.value * 1.45}
               r={hover === index ? 6 : 4}
               fill="#0d1625"
               stroke="#8fb4ff"
               strokeWidth="3"
+                onClick={() => point.researchId != null && onSelect?.(point.researchId)}
+              className={onSelect ? "chart-point-link" : undefined}
             />
             {hover === index && (
               <g>
                 <rect
                   x={Math.min(470, Math.max(5, 20 + index * step - 35))}
-                  y={135 - value * 0.9}
-                  width="70"
-                  height="30"
+                  y={128 - point.value * 0.9}
+                  width="116"
+                  height="42"
                   rx="8"
                   fill="#263854"
                 />
                 <text
-                  x={Math.min(505, Math.max(40, 20 + index * step))}
-                  y={155 - value * 0.9}
+                  x={Math.min(505, Math.max(58, 20 + index * step + 22))}
+                  y={145 - point.value * 0.9}
                   fill="white"
                   textAnchor="middle"
                   fontSize="12"
                 >
-                  {value.toFixed(1)}
+                  {point.value.toFixed(1)}{point.researchId != null ? ` · #${point.researchId}` : ""}
                 </text>
+                <text x={Math.min(505, Math.max(58, 20 + index * step + 22))} y={160 - point.value * 0.9} fill="#b8c7dc" textAnchor="middle" fontSize="9">{point.label}</text>
               </g>
             )}
           </g>

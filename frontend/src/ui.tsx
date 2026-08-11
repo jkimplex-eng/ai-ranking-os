@@ -138,7 +138,7 @@ export function KpiCard({
   icon: string;
   title: string;
   value: number;
-  delta: number;
+  delta?: number | null;
   points: number[];
   onClick: () => void;
 }) {
@@ -154,9 +154,8 @@ export function KpiCard({
     >
       <div className="kpi-top">
         <span className="kpi-icon">{icon}</span>
-        <span className={delta >= 0 ? "good" : "critical"}>
-          {delta >= 0 ? "+" : ""}
-          {delta.toFixed(1)}%
+        <span className={delta == null ? "neutral" : delta >= 0 ? "good" : "critical"}>
+          {delta == null ? "Нет сравнения" : `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}%`}
         </span>
       </div>
       <span>{title}</span>

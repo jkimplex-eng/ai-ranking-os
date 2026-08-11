@@ -129,6 +129,9 @@ jobs:
           sed -i 's/replace-with-strong-password/ci-admin-password-123/g' .env
           sed -i 's/replace-with-git-sha/${{ github.sha }}/g' .env
           sed -i 's/replace-with-immutable-tag/ci/g' .env
+          # The isolated CI stack has no external provider credentials. This override is
+          # deliberately CI-only; production defaults and examples keep mock mode disabled.
+          sed -i 's/^PROVIDER_MOCK_MODE=false/PROVIDER_MOCK_MODE=true/' .env
       - name: Validate and start production stack
         working-directory: deployment/production
         run: |

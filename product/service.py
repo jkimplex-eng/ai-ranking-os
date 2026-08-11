@@ -39,7 +39,7 @@ from provider_recommendation.research_adapter import SqlAlchemyResearchUsageSour
 from provider_recommendation.service import SmartProviderRecommendationService
 from recommendation.engine import RecommendationEngine
 from recommendation.research_adapter import SqlAlchemyResearchScoreAdapter
-from research.models import ExtractedEntity, Research, ResearchTask, Response
+from research.models import ExtractedEntity, Research, ResearchStatus, ResearchTask, Response
 from research.reporting import ReportingService
 from research.repositories import ResearchRepository
 from research.schemas import ResearchCreate, ResearchRunRequest
@@ -200,7 +200,7 @@ class ProductPipeline:
                 self.db,
                 AgentCreate(name=f"product-research-runner-{len(agents) + 1}"),
             )
-        run_research(
+        research = run_research(
             self.db,
             research.id,
             ResearchRunRequest(
@@ -209,7 +209,16 @@ class ProductPipeline:
                 query=review.prompt,
             ),
         )
-        self._complete_product_pipeline(research)
+        if research.status == ResearchStatus.COMPLETED:
+            self._complete_product_pipeline(research)
+        elif self.notifications is not None:
+            self.notifications.emit(
+                "RESEARCH_FAILED",
+                "Ошибка исследования",
+                f"Исследование {research.title} завершилось с ошибкой",
+                resource_type="research",
+                resource_id=str(research.id),
+            )
         self.db.refresh(research)
         return research
 

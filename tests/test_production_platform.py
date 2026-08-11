@@ -152,6 +152,25 @@ def test_router_history_status_policy_update_and_openapi(client: TestClient) -> 
         assert path in paths
 
 
+def test_local_execution_plan_uses_configured_ollama_timeout(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OLLAMA_TIMEOUT_SECONDS", "180")
+
+    response = client.post(
+        "/router/plan",
+        json={
+            "query": "Private local research",
+            "profile": "PRIVATE",
+            "allowed_models": ["local-llama"],
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["steps"][0]["timeout_seconds"] == 180
+
+
 def test_router_automatically_downgrades_when_budget_is_exhausted(
     client: TestClient,
 ) -> None:
