@@ -24,10 +24,7 @@ import {
 } from "./api";
 import {
   AreaLineChart,
-  Heatmap,
-  NetworkGraph,
   RadarChart,
-  Treemap,
 } from "./charts";
 import {
   Badge,
@@ -91,6 +88,7 @@ type ReportShape = {
     explanation?: string;
     priority?: string;
     metric?: string;
+    expected_effect?: string;
   }>;
   provider_statistics?: Record<string, unknown>;
   detected_entities?: unknown[];
@@ -758,14 +756,13 @@ function Dashboard({
                 detail: "План доступен в Action Center",
                 done: true,
               },
-              { title: "Следующая проверка", detail: "Через 30 дней" },
             ]}
           />
         </ChartContainer>
         <Benchmark brand={report.research.title.replace(/^AI Visibility:\s*/, "")} entry={data.benchmark?.entries?.[0]} />
         <Trend metric={visibilityTrend} />
       </section>
-      <ActionCenter citation={valueOf(score, "citation_score")} />
+      <ActionCenter recommendations={data.recommendations ?? []} />
       <Drawer
         open={Boolean(detail)}
         title={detail ?? "Метрика"}
@@ -915,116 +912,29 @@ function Trend({ metric }: { metric?: TrendMetric }) {
   );
 }
 
-function ActionCenter({ citation }: { citation: number }) {
-  const [sort, setSort] = useState<"impact" | "time">("impact");
-  const [done, setDone] = useState<number[]>([]);
-  const [open, setOpen] = useState<number>();
-  const actions = [
-    {
-      title: "Добавить публикации в отраслевых СМИ",
-      impact: 11,
-      days: 15,
-      difficulty: "Средняя",
-    },
-    {
-      title: "Усилить страницы с экспертными доказательствами",
-      impact: 7,
-      days: 7,
-      difficulty: "Низкая",
-    },
-    {
-      title: "Разместить бренд в независимых каталогах",
-      impact: 5,
-      days: 10,
-      difficulty: "Средняя",
-    },
-  ].sort((a, b) => (sort === "impact" ? b.impact - a.impact : a.days - b.days));
+function ActionCenter({ recommendations }: { recommendations: NonNullable<ReportShape["recommendations"]> }) {
   return (
     <section className="action-center">
       <div className="section-head">
         <div>
           <span className="eyebrow">ACTION CENTER</span>
           <h2>Что делать дальше</h2>
-          <p>
-            Три действия способны поднять Visibility до{" "}
-            {Math.min(99, Math.round(89 + (60 - citation) * 0.14))}.
-          </p>
+          <p>Рекомендации, рассчитанные для последнего исследования.</p>
         </div>
-        <label className="sort-control">
-          Сортировка
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as "impact" | "time")}
-          >
-            <option value="impact">По эффекту</option>
-            <option value="time">По сроку</option>
-          </select>
-        </label>
       </div>
       <div className="action-list">
-        {actions.map((action, index) => (
-          <article
-            className={`action-item ${done.includes(index) ? "completed" : ""}`}
-            key={action.title}
-          >
-            <button
-              className="complete-action"
-              aria-label={`Отметить «${action.title}» выполненным`}
-              onClick={() =>
-                setDone((items) =>
-                  items.includes(index)
-                    ? items.filter((x) => x !== index)
-                    : [...items, index],
-                )
-              }
-            >
-              {done.includes(index) ? "✓" : ""}
-            </button>
+        {recommendations.length ? recommendations.map((action, index) => (
+          <article className="action-item" key={`${action.explanation}-${index}`}>
             <div>
-              <span className="priority">Приоритет</span>
-              <h3>{action.title}</h3>
+              <span className="priority">{action.priority ?? "Приоритет не указан"}</span>
+              <h3>{action.explanation ?? "Рекомендация"}</h3>
               <div className="action-facts">
-                <b className="good">+{action.impact} Visibility</b>
-                <span>{action.days} дней</span>
-                <span>{action.difficulty} сложность</span>
+                <b>{action.metric ?? "Метрика не указана"}</b>
+                <span>{action.expected_effect ?? "Эффект не рассчитан"}</span>
               </div>
-              {open === index && (
-                <p>
-                  Соберите список релевантных площадок, подготовьте материал с
-                  проверяемыми данными и обеспечьте корректную ссылку на
-                  официальный ресурс бренда.
-                </p>
-              )}
             </div>
-            <button
-              className="expand-action"
-              onClick={() => setOpen(open === index ? undefined : index)}
-            >
-              {open === index ? "Свернуть" : "Раскрыть"} ↓
-            </button>
           </article>
-        ))}
-      </div>
-      <div className="roadmap">
-        <div>
-          <span>Сегодня</span>
-          <b>План утверждён</b>
-        </div>
-        <i>→</i>
-        <div>
-          <span>Через неделю</span>
-          <b>Первые публикации</b>
-        </div>
-        <i>→</i>
-        <div>
-          <span>Через месяц</span>
-          <b>Visibility 94</b>
-        </div>
-        <i>→</i>
-        <div>
-          <span>Через квартал</span>
-          <b>Устойчивый рост</b>
-        </div>
+        )) : <div className="empty-state">Рекомендации не сформированы.</div>}
       </div>
     </section>
   );
@@ -1224,35 +1134,20 @@ function Wizard({
   );
 }
 
-function RecommendationCard({ citation }: { citation: number }) {
+function RecommendationCard({ recommendation }: { recommendation: NonNullable<ReportShape["recommendations"]>[number] }) {
   return (
     <article className="action-card">
       <div className="action-top">
-        <span className="priority">Высокий приоритет</span>
-        <span>Источник роста</span>
+        <span className="priority">{recommendation.priority ?? "Приоритет не указан"}</span>
+        <span>{recommendation.metric ?? "Метрика"}</span>
       </div>
-      <h3>Опубликовать экспертные материалы в отраслевых СМИ</h3>
-      <p>
-        Добавьте независимо проверяемые публикации и ссылки на бренд в
-        авторитетных источниках.
-      </p>
+      <h3>{recommendation.explanation ?? "Рекомендация"}</h3>
       <div className="action-meta">
         <div>
           <span>Ожидаемый эффект</span>
-          <b className="good">
-            +{Math.max(8, Math.round((60 - citation) * 0.68))} Citation
-          </b>
-        </div>
-        <div>
-          <span>Сложность</span>
-          <b>Средняя</b>
-        </div>
-        <div>
-          <span>Срок</span>
-          <b>2 недели</b>
+          <b className="good">{recommendation.expected_effect ?? "Не рассчитан"}</b>
         </div>
       </div>
-      <button className="secondary">Добавить в план</button>
     </article>
   );
 }
@@ -1267,7 +1162,9 @@ function Report({
   const report = result.report as ReportShape;
   const score = report.score ?? {};
   const visibility = valueOf(score, "visibility_score");
-  const citation = valueOf(score, "citation_score");
+  const weakest = metricMeta.map(([label, key]) => ({ label, value: valueOf(score, key) })).sort((a, b) => a.value - b.value)[0];
+  const visibilityMetric = report.trend?.metrics?.find((item) => item.metric === "visibility");
+  const latestDelta = visibilityMetric?.points.at(-1)?.percentage_change;
   const strengths = metricMeta
     .filter(([, key]) => valueOf(score, key) >= 80)
     .map(([label]) => label);
@@ -1282,16 +1179,12 @@ function Report({
             EXECUTIVE REPORT · #{result.research.id}
           </span>
           <h1>{result.research.title}</h1>
-          <p>
-            За последний период AI Visibility выросла. Бренд уверенно
-            присутствует в рекомендациях моделей; главное ограничение —
-            недостаток авторитетных цитирований.
-          </p>
+          <p>{report.executive_summary ?? "Executive Summary не сформирован."}</p>
         </div>
         <div className="report-score">
           <span>AI Visibility</span>
           <strong>{visibility.toFixed(1)}</strong>
-          <em className="good">↑ 8%</em>
+          <em className={latestDelta == null ? "" : latestDelta >= 0 ? "good" : "critical"}>{latestDelta == null ? "Нет сравнения" : `${latestDelta >= 0 ? "↑" : "↓"} ${Math.abs(latestDelta).toFixed(1)}%`}</em>
         </div>
       </section>
       <section className="score-strip">
@@ -1319,53 +1212,24 @@ function Report({
         </article>
         <article className="panel weakness">
           <span className="section-label">ГЛАВНОЕ ОГРАНИЧЕНИЕ</span>
-          <h2>Citation</h2>
-          <strong>{citation.toFixed(1)}</strong>
-          <p>
-            AI знает и рекомендует бренд, но недостаточно часто подтверждает
-            ответы независимыми источниками.
-          </p>
+          <h2>{weakest.label}</h2>
+          <strong>{weakest.value.toFixed(1)}</strong>
+          <p>Минимальное значение среди метрик текущего исследования.</p>
           <div className="track">
-            <span className="watch" style={{ width: `${citation}%` }} />
+            <span className={tone(weakest.value)} style={{ width: `${weakest.value}%` }} />
           </div>
         </article>
         <article className="panel narrative">
           <span className="section-label">ЧТО ХОРОШО</span>
           <h2>Ключевые выводы</h2>
-          <ul>
-            <li>AI рекомендует бренд в целевых запросах</li>
-            <li>Высокая узнаваемость названия</li>
-            <li>Хорошее покрытие выбранных моделей</li>
-            <li>Высокая уверенность в результатах</li>
-          </ul>
+          {report.insights?.length ? <ul>{report.insights.map((insight, index) => <li key={`${insight.title}-${index}`}>{insight.title ?? insight.explanation ?? "Аналитический вывод"}</li>)}</ul> : <p className="empty-state">Insights не сформированы.</p>}
         </article>
         <article className="panel sources">
           <span className="section-label">KNOWLEDGE SOURCES</span>
           <h2>Источники знаний</h2>
           <div className="source-number">{report.sources?.length ?? 0}</div>
           <p>источника обнаружено и связано с ответами моделей</p>
-          <button className="text-action">Изучить источники →</button>
         </article>
-      </section>
-      <section className="visualization-grid">
-        <ChartContainer title="Присутствие по моделям" caption="HEATMAP">
-          <Heatmap
-            values={[
-              visibility,
-              citation,
-              valueOf(score, "coverage_score"),
-              valueOf(score, "recommendation_score"),
-            ]}
-          />
-        </ChartContainer>
-        <ChartContainer title="Структура источников" caption="TREEMAP">
-          <Treemap sources={report.sources?.length ?? 0} />
-        </ChartContainer>
-        <ChartContainer title="Knowledge Graph" caption="ENTITY NETWORK">
-          <NetworkGraph
-            brand={result.research.title.replace(/^AI Visibility:\s*/, "")}
-          />
-        </ChartContainer>
       </section>
       <section className="plan-section">
         <div className="section-head">
@@ -1373,33 +1237,8 @@ function Report({
             <span className="eyebrow">ПЛАН ДЕЙСТВИЙ</span>
             <h2>Как улучшить результат</h2>
           </div>
-          <span>Горизонт · 3 недели</span>
         </div>
-        <RecommendationCard citation={citation} />
-        <div className="weeks">
-          {[
-            [
-              "Неделя 1",
-              "Подготовить экспертную тему и список отраслевых площадок",
-            ],
-            [
-              "Неделя 2",
-              "Опубликовать материал и обеспечить корректные ссылки",
-            ],
-            [
-              "Неделя 3",
-              "Повторить исследование и измерить изменение Citation",
-            ],
-          ].map(([week, text], i) => (
-            <div key={week}>
-              <span>{i + 1}</span>
-              <div>
-                <b>{week}</b>
-                <p>{text}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+        {report.recommendations?.length ? report.recommendations.map((recommendation, index) => <RecommendationCard recommendation={recommendation} key={`${recommendation.explanation}-${index}`} />) : <div className="empty-state">Рекомендации не сформированы.</div>}
       </section>
       <section className="report-footer panel">
         <div>
@@ -1427,62 +1266,12 @@ function Report({
   );
 }
 
-function Assistant({
-  open,
-  onToggle,
-}: {
-  open: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <aside className={`assistant ${open ? "open" : ""}`}>
-      <button
-        className="assistant-toggle"
-        onClick={onToggle}
-        aria-label="AI-помощник"
-      >
-        ✦
-      </button>
-      {open && (
-        <div className="assistant-body">
-          <div className="assistant-head">
-            <span className="logo-mark small">AI</span>
-            <div>
-              <b>Помощник</b>
-              <small>Онлайн</small>
-            </div>
-            <button className="icon-button" onClick={onToggle}>
-              ×
-            </button>
-          </div>
-          <div className="assistant-message">
-            <span>AI</span>
-            <p>
-              <b>Что означает Citation?</b>
-              <br />
-              Это показатель того, насколько часто ответы AI подтверждаются
-              независимыми и авторитетными источниками. Чем он выше, тем больше
-              доверия к упоминаниям бренда.
-            </p>
-          </div>
-          <button className="assistant-action">Исправить автоматически</button>
-          <div className="assistant-input">
-            <input placeholder="Задайте вопрос об отчёте…" />
-            <button>↑</button>
-          </div>
-        </div>
-      )}
-    </aside>
-  );
-}
-
 function App() {
   const [user, setUser] = useState("");
   const [screen, setScreen] = useState<Screen>(
     () => pathScreens[window.location.pathname] ?? "home",
   );
   const [report, setReport] = useState<ReportResult>();
-  const [assistant, setAssistant] = useState(false);
   const [loading, setLoading] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const navigate = useCallback((next: Screen, replace = false) => {
@@ -1596,7 +1385,6 @@ function App() {
       }}
     >
       {content}
-      <Assistant open={assistant} onToggle={() => setAssistant(!assistant)} />
     </Shell>
   );
 }
