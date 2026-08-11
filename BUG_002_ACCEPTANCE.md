@@ -38,11 +38,11 @@
 - Frontend production build: PASS.
 - Playwright Chromium: 3 PASS.
 - OpenAPI: PASS в полном Pytest suite.
-- Docker/Alembic/PostgreSQL runtime: локально не повторялись — Docker CLI отсутствует на рабочей станции; миграции и production runtime должны быть подтверждены CI/VPS до deployment sign-off.
+- Docker Build, Production Compose Smoke и PostgreSQL Alembic upgrade/downgrade: PASS в GitHub Actions run `31497229732` (локальный Docker CLI на рабочей станции отсутствует).
 
 ## Ограничения
 
 - Исторические исследования, созданные до сохранения отдельных stage timestamps, не могут показать несуществующие времена Normalization/Extraction; UI сообщает об отсутствии записи.
 - Estimated time/cost показываются только если backend review их рассчитал; нулевое/отсутствующее значение не заменяется прогнозом frontend.
 - Benchmark намеренно не показывается для выборки из одного объекта.
-- Этот документ не заявляет production browser smoke до развёртывания ветки. Production verification фиксируется после успешных CI, migration и VPS runtime checks.
+- Этот документ не заявляет production browser smoke до merge и развёртывания ветки; по условиям feature freeze PR оставлен на ручную и архитектурную приёмку. CI migration/runtime checks подтверждены.
