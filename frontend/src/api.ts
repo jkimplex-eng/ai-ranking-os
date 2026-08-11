@@ -69,9 +69,18 @@ export type AdminFeedback = { id: number; title: string; feedback_type: string; 
 export type AdminAudit = { id: number; actor_id: string; action: string; category: string; resource: string; created_at: string };
 
 export class ApiClient {
-  private token?: string;
+  private token = sessionStorage.getItem("access_token") ?? undefined;
 
-  setToken(token: string) { this.token = token; }
+  setToken(token: string) {
+    this.token = token;
+    sessionStorage.setItem("access_token", token);
+  }
+
+  private saveTokens(tokens: TokenPair) {
+    this.setToken(tokens.access_token);
+    sessionStorage.setItem("refresh_token", tokens.refresh_token);
+    return tokens;
+  }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await fetch(`/api${path}`, {
@@ -93,7 +102,15 @@ export class ApiClient {
     return this.request<TokenPair>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
-    });
+    }).then((tokens) => this.saveTokens(tokens));
+  }
+  restoreSession() {
+    const refreshToken = sessionStorage.getItem("refresh_token");
+    if (!refreshToken) return Promise.reject(new Error("No active session"));
+    return this.request<TokenPair>("/auth/refresh", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    }).then((tokens) => this.saveTokens(tokens));
   }
   me() { return this.request<{ display_name: string; email: string }>("/auth/me"); }
   workspace() { return this.request<WorkspaceSettings>("/workspace"); }
@@ -162,6 +179,7 @@ export class ApiClient {
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
     this.token = undefined;
+    sessionStorage.removeItem("access_token");
     sessionStorage.removeItem("refresh_token");
   }
 }

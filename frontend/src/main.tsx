@@ -32,6 +32,21 @@ import {
 import "./styles.css";
 
 const api = new ApiClient();
+const screenPaths: Record<Screen, string> = {
+  home: "/",
+  onboarding: "/getting-started",
+  wizard: "/research",
+  report: "/reports/latest",
+  providers: "/providers",
+  analytics: "/product-analytics",
+  notifications: "/notifications",
+  organization: "/organizations",
+  settings: "/settings",
+  admin: "/admin",
+};
+const pathScreens = Object.fromEntries(
+  Object.entries(screenPaths).map(([screen, path]) => [path, screen]),
+) as Record<string, Screen>;
 const routingProfiles = [
   ["FAST", "Fast", "Минимальная задержка для быстрых проверок", "⚡"],
   ["BALANCED", "Balanced", "Баланс качества, скорости и цены", "◐"],
@@ -94,9 +109,7 @@ function Login({ onReady }: { onReady: (name: string) => void }) {
     setError("");
     setBusy(true);
     try {
-      const tokens = await api.login(email, password);
-      api.setToken(tokens.access_token);
-      sessionStorage.setItem("refresh_token", tokens.refresh_token);
+      await api.login(email, password);
       onReady((await api.me()).display_name);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Ошибка входа");
@@ -1444,10 +1457,30 @@ function Assistant({
 
 function App() {
   const [user, setUser] = useState("");
-  const [screen, setScreen] = useState<Screen>("home");
+  const [screen, setScreen] = useState<Screen>(
+    () => pathScreens[window.location.pathname] ?? "home",
+  );
   const [report, setReport] = useState<ReportResult>();
   const [assistant, setAssistant] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const navigate = useCallback((next: Screen, replace = false) => {
+    const path = screenPaths[next];
+    window.history[replace ? "replaceState" : "pushState"]({ screen: next }, "", path);
+    setScreen(next);
+  }, []);
+  useEffect(() => {
+    const onPopState = () => setScreen(pathScreens[window.location.pathname] ?? "home");
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+  useEffect(() => {
+    api.restoreSession()
+      .then(() => api.me())
+      .then((profile) => { setUser(profile.display_name); setLoading(true); })
+      .catch(() => undefined)
+      .finally(() => setAuthReady(true));
+  }, []);
   useEffect(() => {
     if (!user || report) return;
     api
@@ -1469,10 +1502,10 @@ function App() {
     () =>
       screen === "wizard" ? (
         <Wizard
-          onCancel={() => setScreen("home")}
+          onCancel={() => navigate("home")}
           onComplete={(value) => {
             setReport(value);
-            setScreen("report");
+            navigate("report");
           }}
         />
       ) : screen === "providers" ? (
@@ -1488,26 +1521,28 @@ function App() {
       ) : screen === "admin" ? (
         <AdminConsoleScreen />
       ) : screen === "onboarding" ? (
-        <OnboardingScreen onResearch={() => setScreen("wizard")} />
+        <OnboardingScreen onResearch={() => navigate("wizard")} />
       ) : screen === "report" && report ? (
-        <Report result={report} onHome={() => setScreen("home")} />
+        <Report result={report} onHome={() => navigate("home")} />
       ) : loading ? (
         <DashboardSkeleton />
       ) : (
         <Dashboard
           report={report}
-          onStart={() => setScreen("wizard")}
-          onOpen={() => setScreen("report")}
+          onStart={() => navigate("wizard")}
+          onOpen={() => navigate("report")}
         />
       ),
-    [screen, report, loading, user],
+    [screen, report, loading, user, navigate],
   );
+  if (!authReady) return <DashboardSkeleton />;
   if (!user)
     return (
       <Login
         onReady={(name) => {
           setLoading(true);
           setUser(name);
+          navigate(pathScreens[window.location.pathname] ?? "home", true);
         }}
       />
     );
@@ -1515,17 +1550,18 @@ function App() {
     <Shell
       user={user}
       active={screen}
-      onHome={() => setScreen("home")}
-      onProviders={() => setScreen("providers")}
-      onAnalytics={() => setScreen("analytics")}
-      onNotifications={() => setScreen("notifications")}
-      onOrganization={() => setScreen("organization")}
-      onSettings={() => setScreen("settings")}
-      onAdmin={() => setScreen("admin")}
-      onOnboarding={() => setScreen("onboarding")}
+      onHome={() => navigate("home")}
+      onProviders={() => navigate("providers")}
+      onAnalytics={() => navigate("analytics")}
+      onNotifications={() => navigate("notifications")}
+      onOrganization={() => navigate("organization")}
+      onSettings={() => navigate("settings")}
+      onAdmin={() => navigate("admin")}
+      onOnboarding={() => navigate("onboarding")}
       onLogout={() => {
         setUser("");
         setReport(undefined);
+        navigate("home", true);
       }}
     >
       {content}
