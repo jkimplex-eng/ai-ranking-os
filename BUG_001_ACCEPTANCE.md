@@ -64,13 +64,13 @@ Production runtime:
 - Demo organizations: 0; demo users: 0; перед очисткой создан backup `ai-ranking-20260811T113522Z.dump`.
 - Test/demo utilities остаются только в исходниках для development/CI и исключены из production backend image.
 
-Подтверждённый research `#28`:
+Финальный подтверждённый research `#29`:
 
 - Research `COMPLETED`, 1/1 tasks, 0 failures, progress 100%.
-- Execution `#36` `COMPLETED`, 1 attempt, 19,196 ms.
+- Execution `COMPLETED`, 1 attempt, 67,040 ms.
 - Provider/model: `ollama` / `qwen2.5:3b`.
 - Response `PROCESSED`, raw и normalized payload сохранены, error отсутствует.
-- Usage: 59 input + 168 output = 227 tokens; cost 0.
+- Usage: 571 total tokens; cost 0.
 - Score v1.0 сохранён; recommendations и immutable graph snapshot созданы.
 - Entity/citation extraction для этого конкретного ответа вернул 0; UI честно показывает Empty State, sample graph не создаётся.
 
@@ -102,7 +102,7 @@ Production runtime:
 
 ## Ограничения
 
-- В исследовании `#28` локальная модель не вернула извлекаемые entity/citation элементы; это реальный результат модели, не дефект сохранения. Graph snapshot поэтому пуст.
+- Локальная модель может вернуть ответ без извлекаемых entity/citation элементов; в этом случае сохраняется реальный пустой Graph snapshot и отображается Empty State.
 - Исторические FAILED QA-запуски сохранены как execution history и не удалялись: это реальные ошибки, необходимые для аудита, а не demo-метрики.
 - Внешние провайдеры без API keys намеренно остаются `NOT_CONFIGURED`; их live-вызовы не имитируются.
 - Alembic downgrade проверяется только в изолированной PostgreSQL 16 среде CI, не на production базе.
