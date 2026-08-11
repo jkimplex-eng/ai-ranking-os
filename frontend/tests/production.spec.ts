@@ -46,6 +46,13 @@ test("all production navigation routes use the real backend", async ({ page }) =
     await page.getByRole("navigation").getByRole("button").filter({ hasText: link }).click();
     await expect(page).toHaveURL(new RegExp(`${path.replace("/", "\\/")}$`));
     await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
+    await expect(page.getByText(/Coming Soon|Скоро/i)).toHaveCount(0);
+    await page.reload();
+    await expect(page).toHaveURL(new RegExp(`${path.replace("/", "\\/")}$`));
+    await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
+    await page.goBack();
+    await page.goForward();
+    await expect(page).toHaveURL(new RegExp(`${path.replace("/", "\\/")}$`));
   }
   expect(failedRequests, `Failed API requests: ${failedRequests.join(", ")}`).toEqual([]);
   expect(browserErrors, `Browser errors: ${browserErrors.join(" | ")}`).toEqual([]);
