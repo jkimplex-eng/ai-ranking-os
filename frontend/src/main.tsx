@@ -285,15 +285,17 @@ function SettingsScreen({ user }: { user: string }) {
   const [providers, setProviders] = useState<ProviderItem[]>([]);
   const [keys, setKeys] = useState<Array<{ id: number; name: string; prefix: string }>>([]);
   const [saved, setSaved] = useState(false);
-  useEffect(() => { Promise.all([api.workspace(), api.listProviders(), api.apiKeys()]).then(([workspace, providerItems, apiKeyItems]) => { setSettings((current) => ({ ...current, ...workspace.settings })); setProviders(providerItems); setKeys(apiKeyItems); }).catch(() => undefined); }, []);
+  const [error, setError] = useState("");
+  useEffect(() => { Promise.all([api.workspace(), api.listProviders(), api.apiKeys()]).then(([workspace, providerItems, apiKeyItems]) => { setSettings((current) => ({ ...current, ...workspace.settings })); setProviders(providerItems); setKeys(apiKeyItems); }).catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки настроек")); }, []);
   const tabs = [["profile", "Профиль"], ["security", "Безопасность"], ["api", "API Keys"], ["providers", "LLM Providers"], ["preferences", "Язык и регион"], ["notifications", "Уведомления"], ["theme", "Тема"], ["organization", "Организация"]];
   const set = (key: string, value: unknown) => { setSaved(false); setSettings((current) => ({ ...current, [key]: value })); };
   return <main className="analytics-page settings-page"><header className="analytics-hero"><div><span className="eyebrow">PREFERENCES</span><h1>Настройки</h1><p>Единый центр персональных и системных настроек.</p></div><button className="primary-action" onClick={() => api.updateWorkspace(settings).then(() => setSaved(true))}>{saved ? "Сохранено ✓" : "Сохранить"}</button></header>
+    {error && <div className="error" role="alert">{error}</div>}
     <div className="settings-layout"><nav className="settings-nav">{tabs.map(([key, label]) => <button className={tab === key ? "active" : ""} onClick={() => setTab(key)} key={key}>{label}</button>)}</nav><section className="analytics-card settings-panel">
       {tab === "profile" && <><h2>Профиль</h2><label>Имя<input value={user} disabled /></label><p className="empty-state">Контактные данные управляются Authentication.</p></>}
       {tab === "security" && <><h2>Безопасность</h2><div className="setting-row"><span>JWT-сессии и refresh rotation</span><b>Активно</b></div><div className="setting-row"><span>Отзыв токенов при выходе</span><b>Активно</b></div></>}
-      {tab === "api" && <><h2>API Keys</h2>{keys.map((key) => <div className="setting-row" key={key.id}><span>{key.name}</span><code>{key.prefix}••••</code></div>)}</>}
-      {tab === "providers" && <><h2>LLM Providers</h2>{providers.map((provider) => <div className="setting-row" key={provider.id}><span>{provider.display_name}</span><b>{provider.availability}</b></div>)}</>}
+      {tab === "api" && <><h2>API Keys</h2>{keys.length ? keys.map((key) => <div className="setting-row" key={key.id}><span>{key.name}</span><code>{key.prefix}••••</code></div>) : <p className="empty-state">API-ключи ещё не созданы.</p>}</>}
+      {tab === "providers" && <><h2>LLM Providers</h2>{providers.length ? providers.map((provider) => <div className="setting-row" key={provider.id}><span>{provider.display_name}</span><b>{provider.availability}</b></div>) : <p className="empty-state">Провайдеры недоступны.</p>}</>}
       {tab === "preferences" && <><h2>Язык и регион</h2><label>Язык<select value={String(settings.language)} onChange={(event) => set("language", event.target.value)}><option value="ru">Русский</option><option value="en">English</option></select></label><label>Регион<select value={String(settings.region)} onChange={(event) => set("region", event.target.value)}><option>GLOBAL</option><option>RU</option><option>EU</option><option>US</option></select></label></>}
       {tab === "notifications" && <><h2>Уведомления</h2><label className="toggle-row"><input type="checkbox" checked={Boolean((settings.notifications as Record<string, boolean>)?.in_app)} onChange={(event) => set("notifications", { ...(settings.notifications as object), in_app: event.target.checked })}/>In-app</label><label className="toggle-row"><input type="checkbox" checked={Boolean((settings.notifications as Record<string, boolean>)?.email)} onChange={(event) => set("notifications", { ...(settings.notifications as object), email: event.target.checked })}/>Email</label></>}
       {tab === "theme" && <><h2>Тема</h2><div className="theme-options">{["dark", "light", "system"].map((theme) => <button className={settings.theme === theme ? "active" : ""} onClick={() => set("theme", theme)} key={theme}>{theme}</button>)}</div></>}
@@ -405,13 +407,19 @@ function OrganizationScreen() {
   const [members, setMembers] = useState<Array<{ id: number; user_id: number; role: string }>>([]);
   const [activity, setActivity] = useState<Array<{ id: number; action: string; actor_id: number; created_at: string }>>([]);
   const [email, setEmail] = useState("");
+  const [newName, setNewName] = useState("");
+  const [error, setError] = useState("");
   const load = useCallback(() => api.organizations().then((items) => { setOrganizations(items); setSelected((current) => current ?? items.find((item) => item.is_default)?.id ?? items[0]?.id); }), []);
-  useEffect(() => { load().catch(() => undefined); }, [load]);
-  useEffect(() => { if (!selected) return; Promise.all([api.organizationMembers(selected), api.organizationActivity(selected)]).then(([memberItems, actions]) => { setMembers(memberItems); setActivity(actions); }).catch(() => undefined); }, [selected]);
+  useEffect(() => { load().catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки организаций")); }, [load]);
+  useEffect(() => { if (!selected) return; Promise.all([api.organizationMembers(selected), api.organizationActivity(selected)]).then(([memberItems, actions]) => { setMembers(memberItems); setActivity(actions); }).catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки организации")); }, [selected]);
   const current = organizations.find((item) => item.id === selected);
   return <main className="analytics-page organization-page"><header className="analytics-hero"><div><span className="eyebrow">TEAM WORKSPACE</span><h1>{current?.name ?? "Организация"}</h1><p>Участники, проекты, лимиты и журнал активности команды.</p></div><select value={selected ?? ""} onChange={(event) => { const id = Number(event.target.value); api.switchOrganization(id).then(() => { setSelected(id); load(); }); }}>{organizations.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.role}</option>)}</select></header>
+    {error && <div className="error" role="alert">{error}</div>}
+    {!organizations.length && <section className="analytics-card empty-state"><h2>Организаций пока нет</h2><p>Создайте рабочее пространство для проектов и исследований.</p><form className="invite-form" onSubmit={(event) => { event.preventDefault(); const slug = newName.trim().toLowerCase().replace(/[^a-z0-9а-яё]+/gi, "-").replace(/^-|-$/g, ""); api.createOrganization({ name: newName.trim(), slug }).then(() => { setNewName(""); load(); }).catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка создания")); }}><input value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Название организации" required/><button>Создать организацию</button></form></section>}
+    {current && <>
     <section className="analytics-kpis"><article className="analytics-card metric"><span>Участники</span><strong>{members.length}</strong><small>из {current?.limits.members ?? "—"}</small></article><article className="analytics-card metric"><span>Проекты</span><strong>{current?.limits.projects ?? "—"}</strong><small>доступный лимит</small></article><article className="analytics-card metric"><span>Часовой пояс</span><strong className="small-value">{current?.timezone ?? "UTC"}</strong><small>{current?.country ?? "GLOBAL"}</small></article></section>
     <section className="analytics-grid"><article className="analytics-card"><h3>Команда</h3>{members.map((member) => <div className="rank-row" key={member.id}><span>User {member.user_id}</span><b>{member.role}</b></div>)}<form className="invite-form" onSubmit={(event) => { event.preventDefault(); if (selected) api.inviteOrganizationMember(selected, email).then(() => setEmail("")); }}><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="email нового участника" required/><button>Пригласить</button></form></article><article className="analytics-card"><h3>Журнал активности</h3>{activity.slice(0, 8).map((item) => <div className="activity-row" key={item.id}><span>{item.action.replaceAll("_", " ")}</span><small>{new Date(item.created_at).toLocaleString("ru-RU")}</small></div>)}</article></section>
+    </>}
   </main>;
 }
 
@@ -419,15 +427,17 @@ function NotificationsScreen() {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [category, setCategory] = useState("");
   const [summary, setSummary] = useState({ unread: 0, total: 0, archived: 0 });
+  const [error, setError] = useState("");
   const load = useCallback(
     () => Promise.all([api.notifications(category), api.notificationSummary()])
       .then(([notifications, counts]) => { setItems(notifications); setSummary(counts); }),
     [category],
   );
-  useEffect(() => { load().catch(() => undefined); }, [load]);
+  useEffect(() => { load().catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки уведомлений")); }, [load]);
   return <main className="analytics-page notifications-page">
     <header className="analytics-hero"><div><span className="eyebrow">INBOX</span><h1>Уведомления</h1><p>Важные изменения проектов, исследований и вашей организации.</p></div>
       <div className="notification-summary"><b>{summary.unread}</b><span>непрочитанных</span></div></header>
+    {error && <div className="error" role="alert">{error}</div>}
     <div className="notification-filters" role="group" aria-label="Категории уведомлений">
       {["", "RESEARCH", "REPORT", "ORGANIZATION", "FEEDBACK", "SYSTEM"].map((value) => <button key={value || "ALL"} className={category === value ? "active" : ""} onClick={() => setCategory(value)}>{value || "Все"}</button>)}
     </div>
