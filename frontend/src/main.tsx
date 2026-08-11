@@ -82,8 +82,8 @@ type Screen = "home" | "research" | "wizard" | "reports" | "report" | "recommend
 type ReportShape = {
   executive_summary?: string;
   score?: Record<string, number | string>;
-  trend?: { points?: Array<Record<string, unknown>> };
-  benchmark?: Record<string, unknown>;
+  trend?: { metrics?: TrendMetric[] };
+  benchmark?: { entries?: BenchmarkEntry[] };
   insights?: Array<{ title?: string; explanation?: string }>;
   recommendations?: Array<{
     explanation?: string;
@@ -96,6 +96,10 @@ type ReportShape = {
   token_usage?: number;
   cost?: number;
 };
+type TrendPoint = { observed_at: string; value: number; percentage_change?: number | null; direction: string };
+type TrendMetric = { metric: string; direction: string; points: TrendPoint[] };
+type BenchmarkMetric = { value: number; population_average: number; leader_value: number };
+type BenchmarkEntry = { metrics: Record<string, BenchmarkMetric> };
 
 function valueOf(score: Record<string, number | string>, key: string) {
   const value = Number(score[key] ?? 0);
@@ -202,6 +206,8 @@ function Shell({
   active: Screen;
   onLogout: () => void;
 }) {
+  const [systemReady, setSystemReady] = useState<boolean>();
+  useEffect(() => { api.systemHealth().then((health) => setSystemReady(health.status === "healthy" || health.status === "ready")).catch(() => setSystemReady(false)); }, []);
   const nav = [
     ["⌂", "Dashboard", "home"], ["→", "Getting Started", "onboarding"],
     ["◉", "Research", "research"], ["▤", "Reports", "reports"],
@@ -255,8 +261,8 @@ function Shell({
             <span className="mobile-brand">AI Ranking OS</span>
           </div>
           <div className="top-actions">
-            <Badge tone="success">● Система работает</Badge>
-            <button className="icon-button" aria-label="Уведомления">
+            <Badge tone={systemReady === true ? "success" : systemReady === false ? "danger" : "neutral"}>● {systemReady === true ? "Система работает" : systemReady === false ? "Система недоступна" : "Проверка системы"}</Badge>
+            <button className="icon-button" aria-label="Уведомления" onClick={() => onNavigate("notifications")}>
               ♢
             </button>
           </div>
@@ -551,10 +557,12 @@ function Dashboard({
   report,
   onStart,
   onOpen,
+  onNavigate,
 }: {
   report?: ReportResult;
   onStart: () => void;
   onOpen: () => void;
+  onNavigate: (screen: Screen) => void;
 }) {
   const [detail, setDetail] = useState<string>();
   if (!report)
@@ -574,23 +582,23 @@ function Dashboard({
               <small>Узнать видимость в ответах AI</small>
               <i>Начать →</i>
             </button>
-            <button className="choice">
+            <button className="choice" onClick={() => onNavigate("competitors")}>
               <span className="choice-icon">◇</span>
               <b>Исследовать конкурента</b>
               <small>Сравнить позиции и рекомендации</small>
-              <i>Скоро</i>
+              <i>Открыть →</i>
             </button>
-            <button className="choice">
+            <button className="choice" onClick={() => onNavigate("history")}>
               <span className="choice-icon">↗</span>
               <b>Посмотреть историю</b>
               <small>Следить за динамикой показателей</small>
-              <i>Скоро</i>
+              <i>Открыть →</i>
             </button>
-            <button className="choice">
+            <button className="choice" onClick={() => onNavigate("recommendations")}>
               <span className="choice-icon">✓</span>
               <b>Открыть рекомендации</b>
               <small>Перейти к плану улучшений</small>
-              <i>Скоро</i>
+              <i>Открыть →</i>
             </button>
           </div>
         </section>
@@ -599,15 +607,20 @@ function Dashboard({
   const data = report.report as ReportShape;
   const score = data.score ?? {};
   const visibility = valueOf(score, "visibility_score");
+  const trends = data.trend?.metrics ?? [];
+  const trendFor = (metric: string) => trends.find((item) => item.metric === metric);
+  const visibilityTrend = trendFor("visibility");
+  const visibilityPoints = visibilityTrend?.points.slice(-6) ?? [];
+  const visibilityDelta = visibilityPoints.at(-1)?.percentage_change;
   const weakest = metricMeta
     .map(([label, key]) => ({ label, value: valueOf(score, key) }))
     .sort((a, b) => a.value - b.value)[0];
   const kpis = [
-    ["✦", "Recommendation", "recommendation_score", 3.1],
-    ["◎", "Coverage", "coverage_score", 1.8],
-    ["↗", "Citation", "citation_score", -2.4],
-    ["◆", "Authority", "confidence_score", 2.2],
-    ["⌁", "Trend", "visibility_score", 4.2],
+    ["✦", "Recommendation", "recommendation_score", "recommendation"],
+    ["◎", "Coverage", "coverage_score", "coverage"],
+    ["↗", "Citation", "citation_score", "citation"],
+    ["◆", "Confidence", "confidence_score", "confidence"],
+    ["⌁", "Visibility", "visibility_score", "visibility"],
   ] as const;
   const activeValue = detail
     ? valueOf(
@@ -634,12 +647,9 @@ function Dashboard({
               ● {healthLabel(visibility)}
             </span>
           </div>
-          <div className="rating" aria-label="Пять звёзд">
-            ★★★★★
-          </div>
-          <div className="delta good">
-            ↑ 4.2 <span>за последний месяц</span>
-          </div>
+          {visibilityDelta == null ? <div className="delta"><span>Недостаточно данных для сравнения</span></div> : <div className={`delta ${visibilityDelta >= 0 ? "good" : "critical"}`}>
+            {visibilityDelta >= 0 ? "↑" : "↓"} {Math.abs(visibilityDelta).toFixed(1)}% <span>к предыдущему исследованию</span>
+          </div>}
           <button className="text-action" onClick={onOpen}>
             Открыть полный отчёт →
           </button>
@@ -669,31 +679,28 @@ function Dashboard({
         </article>
       </section>
       <section className="kpi-grid">
-        {kpis.map(([icon, title, key, delta], index) => (
+        {kpis.map(([icon, title, key, trendKey]) => {
+          const metricTrend = trendFor(trendKey);
+          const metricPoints = metricTrend?.points.slice(-5) ?? [];
+          return (
           <KpiCard
             key={title}
             icon={icon}
             title={title}
             value={valueOf(score, key)}
-            delta={delta}
-            points={[
-              56 + index * 2,
-              64 + index,
-              61 + index * 3,
-              74 + index * 2,
-              valueOf(score, key),
-            ]}
+            delta={metricPoints.at(-1)?.percentage_change ?? 0}
+            points={metricPoints.length ? metricPoints.map((point) => point.value) : [valueOf(score, key)]}
             onClick={() => setDetail(title)}
           />
-        ))}
+        )})}
       </section>
       <section className="analytics-grid">
         <ChartContainer
           title="Динамика AI Visibility"
           caption="TREND"
-          action={<Badge tone="success">↑ 8% за период</Badge>}
+          action={visibilityDelta == null ? <Badge tone="neutral">Нет сравнения</Badge> : <Badge tone={visibilityDelta >= 0 ? "success" : "danger"}>{visibilityDelta >= 0 ? "↑" : "↓"} {Math.abs(visibilityDelta).toFixed(1)}%</Badge>}
         >
-          <AreaLineChart values={[68, 72, 71, 78, 82, visibility]} />
+          {visibilityPoints.length > 1 ? <AreaLineChart values={visibilityPoints.map((point) => point.value)} /> : <p className="empty-state">Тренд появится после повторного исследования.</p>}
         </ChartContainer>
         <ChartContainer title="Баланс AI-сигналов" caption="RADAR">
           <RadarChart
@@ -742,8 +749,8 @@ function Dashboard({
             ]}
           />
         </ChartContainer>
-        <Benchmark visibility={visibility} />
-        <Trend visibility={visibility} />
+        <Benchmark brand={report.research.title.replace(/^AI Visibility:\s*/, "")} entry={data.benchmark?.entries?.[0]} />
+        <Trend metric={visibilityTrend} />
       </section>
       <ActionCenter citation={valueOf(score, "citation_score")} />
       <Drawer
@@ -807,7 +814,8 @@ function DashboardSkeleton() {
   );
 }
 
-function Benchmark({ visibility }: { visibility: number }) {
+function Benchmark({ brand, entry }: { brand: string; entry?: BenchmarkEntry }) {
+  const metric = entry?.metrics.visibility;
   return (
     <article className="benchmark panel">
       <div className="section-head">
@@ -815,12 +823,12 @@ function Benchmark({ visibility }: { visibility: number }) {
           <span className="section-label">Benchmark</span>
           <h2>Позиция относительно рынка</h2>
         </div>
-        <span className="badge neutral">Предварительно</span>
+        <span className="badge neutral">{metric ? "По данным платформы" : "Нет данных"}</span>
       </div>
-      {[
-        ["Skinjestique", visibility],
-        ["Среднее рынка", 61],
-        ["Лидеры категории", 95],
+      {metric ? [
+        [brand, metric.value],
+        ["Среднее выборки", metric.population_average],
+        ["Лидер выборки", metric.leader_value],
       ].map(([name, value]) => (
         <div className="benchmark-row" key={String(name)}>
           <span>{name}</span>
@@ -829,17 +837,15 @@ function Benchmark({ visibility }: { visibility: number }) {
           </div>
           <strong>{Number(value).toFixed(0)}</strong>
         </div>
-      ))}
+      )) : <p className="empty-state">Benchmark появится, когда будет достаточно объектов для сравнения.</p>}
     </article>
   );
 }
 
-function Trend({ visibility }: { visibility: number }) {
-  const points = [
-    Math.max(0, visibility - 12),
-    Math.max(0, visibility - 6),
-    visibility,
-  ];
+function Trend({ metric }: { metric?: TrendMetric }) {
+  const source = metric?.points.slice(-3) ?? [];
+  const points = source.map((point) => point.value);
+  if (points.length < 2) return <article className="trend panel"><div className="section-head"><div><span className="section-label">Динамика</span><h2>AI Visibility</h2></div></div><p className="empty-state">Тренд появится после повторного исследования.</p></article>;
   const coords = points
     .map((value, i) => `${18 + i * 132},${150 - value}`)
     .join(" ");
@@ -848,9 +854,9 @@ function Trend({ visibility }: { visibility: number }) {
       <div className="section-head">
         <div>
           <span className="section-label">Динамика</span>
-          <h2>AI Visibility растёт</h2>
+          <h2>AI Visibility · {metric?.direction ?? "STABLE"}</h2>
         </div>
-        <span className="delta good">↑ 8%</span>
+        {source.at(-1)?.percentage_change != null && <span className={`delta ${(source.at(-1)?.percentage_change ?? 0) >= 0 ? "good" : "critical"}`}>{(source.at(-1)?.percentage_change ?? 0) >= 0 ? "↑" : "↓"} {Math.abs(source.at(-1)?.percentage_change ?? 0).toFixed(1)}%</span>}
       </div>
       <svg
         viewBox="0 0 300 170"
@@ -885,9 +891,9 @@ function Trend({ visibility }: { visibility: number }) {
         ))}
       </svg>
       <div className="timeline">
-        {["Июнь", "Июль", "Август"].map((month, i) => (
-          <div key={month}>
-            <span>{month}</span>
+        {source.map((point, i) => (
+          <div key={point.observed_at}>
+            <span>{new Date(point.observed_at).toLocaleDateString("ru-RU", { day: "2-digit", month: "short" })}</span>
             <strong>{points[i].toFixed(0)}</strong>
           </div>
         ))}
@@ -1549,6 +1555,7 @@ function App() {
           report={report}
           onStart={() => navigate("wizard")}
           onOpen={() => navigate("report")}
+          onNavigate={navigate}
         />
       ),
     [screen, report, loading, user, navigate],
