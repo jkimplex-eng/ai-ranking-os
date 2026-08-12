@@ -41,9 +41,11 @@ def main() -> None:
     )
     assert status == 200
     token = tokens["access_token"]
+    provider = os.environ.get("SMOKE_PROVIDER", "openai")
+    model = os.environ.get("SMOKE_MODEL", "gpt-4o-mini")
     payload = {
         "brand": "Skinjestique",
-        "models": [{"provider": "openai", "model": "gpt-4o-mini"}],
+        "models": [{"provider": provider, "model": model}],
         "languages": ["en"],
         "regions": ["GLOBAL"],
         "prompt_code": "ai-visibility",
