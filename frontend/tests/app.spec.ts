@@ -37,6 +37,8 @@ test("wizard transparently refreshes an expired access token", async ({ page }) 
       }
     } else if (path.endsWith("/router/models")) {
       json = { items: [{ id: "qwen-test", provider: "ollama", display_name: "Qwen", version: "2.5", status: "ACTIVE", tier: "FREE", capabilities: ["chat"], availability: 1, pricing: { input_per_million: 0, output_per_million: 0 } }], total: 1 };
+    } else if (path.endsWith("/system/providers")) {
+      json = { providers: [{ model_id: "qwen-test", provider: "ollama", latency_ms: 20, circuit_state: "CLOSED", interface: { available: true, mock: false, models: 2 } }] };
     } else if (path.endsWith("/research") || path.endsWith("/providers")) {
       json = [];
     } else if (path.endsWith("/system/health")) {

@@ -71,7 +71,7 @@ export type ProviderItem = {
   availability: string; free_tier: boolean; priority: number;
   streaming: boolean; reasoning: boolean; vision: boolean;
 };
-export type SystemProviderItem = { model_id: string; provider: string; latency_ms: number; circuit_state: string; interface: { available?: boolean; mock?: boolean; checked_at?: string; models?: number | string[] } };
+export type SystemProviderItem = { model_id: string; provider: string; latency_ms: number; circuit_state: string; interface: { available?: boolean; mock?: boolean; checked_at?: string; models?: number | string[]; error?: string } };
 export type RouterHistoryItem = { id: number; selected_models: string[]; latency_ms: number; estimated_cost_usd: number; error?: string | null; created_at: string };
 export type ProductAnalyticsDashboard = {
   period: "HOURLY" | "DAILY" | "WEEKLY" | "MONTHLY";

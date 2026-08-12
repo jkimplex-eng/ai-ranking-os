@@ -85,6 +85,16 @@
 @media (max-width: 760px) { .lab-timeline li { grid-template-columns: 1fr; gap: 4px; } }
 .wizard-inline-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .wizard-inline-actions button { width: auto; padding: 9px 13px; }
+.wizard-inline-actions button { color: #dce7f8; background: #142136; border: 1px solid #344763; border-radius: 9px; }
+.wizard-inline-actions button:hover { color: #fff; border-color: #6594ed; background: #1b2d49; }
+.wizard-page .model { color: #eaf0fb; text-align: left; }
+.wizard-page .model b { color: #f5f8ff; }
+.wizard-page .model small { color: #9fb0c8; }
+.wizard-page .model i { font-size: 11px; }
+.wizard-page .model .provider-ready { color: var(--green); }
+.wizard-page .model .provider-offline { color: #a9b5c7; }
+.wizard-page .model:disabled { cursor: not-allowed; opacity: .68; }
+.wizard-page .model:disabled b { color: #bcc7d8; }
 .simulator-list { display: grid; gap: 10px; }
 .simulator-list label { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 13px; border: 1px solid var(--border); border-radius: 12px; }
 .simulator-list input { width: 18px; height: 18px; }

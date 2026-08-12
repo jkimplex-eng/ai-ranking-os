@@ -142,12 +142,17 @@ class ProductPipeline:
                 model = models.get(item.model)
             except RegistryNotFoundError as error:
                 raise WizardValidationError(
-                    f"Unsupported provider/model: {item.provider}/{item.model}"
+                    f"Модель {item.provider}/{item.model} не поддерживается"
                 ) from error
             if model.provider != item.provider or "chat" not in model.capabilities:
-                raise WizardValidationError(f"Model {item.model} does not support chat")
+                raise WizardValidationError(
+                    f"Модель {item.model} не поддерживает текстовые запросы"
+                )
             if RuntimeProviderReadiness(self.db).state(item.provider) != ProviderState.READY:
-                raise WizardValidationError(f"Provider {item.provider} is unavailable")
+                raise WizardValidationError(
+                    f"Провайдер {item.provider} сейчас не подключён. "
+                    "Выберите модель со статусом «Подключена»."
+                )
             selected.append(f"{item.provider}/{item.model}")
             prompt_tokens = max(1, len(prompt) // 4)
             estimated_cost += (

@@ -1001,19 +1001,32 @@ function Wizard({
   const [scope, setScope] = useState<NonNullable<WizardPayload["research_scope"]>>(saved.scope ?? "SELECTED");
   const [researchProfile, setResearchProfile] = useState<NonNullable<WizardPayload["research_profile"]>>(saved.researchProfile ?? "UNIVERSAL");
   const [models, setModels] = useState<RouterModel[]>([]);
+  const [runtimeProviders, setRuntimeProviders] = useState<SystemProviderItem[]>([]);
   const [selectedModels, setSelectedModels] = useState<string[]>(saved.selectedModels ?? []);
   const [review, setReview] = useState<WizardReview>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  useEffect(() => { api.routerModels().then((data) => setModels(data.items)).catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить модели")); }, []);
+  useEffect(() => {
+    Promise.all([api.routerModels(), api.systemProviders()])
+      .then(([registry, runtime]) => {
+        setModels(registry.items);
+        setRuntimeProviders(runtime.providers);
+      })
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось проверить подключение моделей"));
+  }, []);
   useEffect(() => { sessionStorage.setItem("research-wizard", JSON.stringify({ step, brand, region, language, profile, scope, researchProfile, selectedModels })); }, [step, brand, region, language, profile, scope, researchProfile, selectedModels]);
   const scopedModels = () => {
-    if (scope === "ALL") return models;
-    if (scope === "RUSSIAN") return models.filter((item) => ["yandex", "yandexgpt", "gigachat", "sber"].includes(item.provider.toLowerCase()));
-    if (scope === "FREE") return models.filter((item) => item.tier === "FREE" || (item.pricing.input_per_million === 0 && item.pricing.output_per_million === 0));
-    if (scope === "COMMERCIAL") return models.filter((item) => item.tier !== "FREE" && (item.pricing.input_per_million > 0 || item.pricing.output_per_million > 0));
-    return models.filter((item) => selectedModels.includes(item.id));
+    const ready = models.filter((item) => modelIsReady(item));
+    if (scope === "ALL") return ready;
+    if (scope === "RUSSIAN") return ready.filter((item) => ["yandex", "yandexgpt", "gigachat", "sber"].includes(item.provider.toLowerCase()));
+    if (scope === "FREE") return ready.filter((item) => item.tier === "FREE" || item.tier === "LOCAL" || (item.pricing.input_per_million === 0 && item.pricing.output_per_million === 0));
+    if (scope === "COMMERCIAL") return ready.filter((item) => item.tier !== "FREE" && item.tier !== "LOCAL" && (item.pricing.input_per_million > 0 || item.pricing.output_per_million > 0));
+    return ready.filter((item) => selectedModels.includes(item.id));
   };
+  const runtimeFor = (model: RouterModel) => runtimeProviders.find((item) => item.model_id === model.id)
+    ?? runtimeProviders.find((item) => item.provider === model.provider);
+  const modelIsReady = (model: RouterModel) => runtimeFor(model)?.interface.available === true;
+  const modelTitle = (model: RouterModel) => model.provider === "ollama" ? "Ollama · Qwen 2.5 3B" : model.display_name;
   const payload = (): WizardPayload => ({
     brand,
     routing_profile: profile,
@@ -1139,8 +1152,8 @@ function Wizard({
           </div>
         )}
         {step === 4 && (
-          <div><div className="wizard-inline-actions"><button type="button" onClick={() => setSelectedModels(models.map((item) => item.id))}>Выбрать все</button><button type="button" onClick={() => setSelectedModels([])}>Очистить</button><button type="button" onClick={() => localStorage.setItem("research-model-preset", JSON.stringify(selectedModels))}>Сохранить пресет</button><button type="button" onClick={() => { try { setSelectedModels(JSON.parse(localStorage.getItem("research-model-preset") ?? "[]") as string[]); } catch { setSelectedModels([]); } }}>Загрузить пресет</button></div><div className="model-grid">
-            {models.length ? models.map((model) => <button type="button" className={`model ${selectedModels.includes(model.id) ? "active" : ""}`} key={model.id} onClick={() => setSelectedModels((current) => current.includes(model.id) ? current.filter((id) => id !== model.id) : [...current, model.id])}><span className="provider-icon">{selectedModels.includes(model.id) ? "✓" : "○"}</span><b>{model.display_name}</b><small>{model.provider} · {model.version}</small><i>{model.availability > 0 ? `доступность ${Math.round(model.availability * 100)}%` : "доступность не подтверждена"}</i></button>) : <p className="empty-state">Активные модели не найдены в реестре. Проверьте настройки провайдеров.</p>}
+          <div><div className="wizard-inline-actions"><button type="button" onClick={() => setSelectedModels(models.filter(modelIsReady).map((item) => item.id))}>Выбрать подключённые</button><button type="button" onClick={() => setSelectedModels([])}>Очистить</button><button type="button" onClick={() => localStorage.setItem("research-model-preset", JSON.stringify(selectedModels))}>Сохранить набор</button><button type="button" onClick={() => { try { const savedPreset = JSON.parse(localStorage.getItem("research-model-preset") ?? "[]") as string[]; setSelectedModels(savedPreset.filter((id) => models.some((model) => model.id === id && modelIsReady(model)))); } catch { setSelectedModels([]); } }}>Загрузить набор</button></div><div className="model-grid">
+            {models.length ? models.map((model) => { const ready = modelIsReady(model); const runtime = runtimeFor(model); return <button type="button" disabled={!ready} aria-disabled={!ready} className={`model ${selectedModels.includes(model.id) ? "active" : ""} ${ready ? "ready" : "not-ready"}`} key={model.id} onClick={() => setSelectedModels((current) => current.includes(model.id) ? current.filter((id) => id !== model.id) : [...current, model.id])}><span className="provider-icon">{selectedModels.includes(model.id) ? "✓" : ready ? "○" : "×"}</span><b>{modelTitle(model)}</b><small>{model.provider === "ollama" ? "Локальная бесплатная модель" : `${model.provider} · ${model.version}`}</small><i className={ready ? "provider-ready" : "provider-offline"}>{ready ? "Подключена" : runtime?.interface.error ? "Ошибка подключения" : "Не подключена"}</i></button>; }) : <p className="empty-state">Активные модели не найдены в реестре. Проверьте настройки провайдеров.</p>}
           </div></div>
         )}
         {step === 5 && (
