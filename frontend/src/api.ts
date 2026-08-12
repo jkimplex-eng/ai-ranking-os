@@ -30,6 +30,21 @@ export type ReportResult = {
   executions?: ExecutionItem[];
   actionPlan?: ActionPlan;
   simulation?: SimulationResult;
+  laboratory?: ResearchLaboratory;
+};
+export type ResearchLaboratory = {
+  models: Array<Record<string, unknown> & {
+    response_id: number; provider: string; model: string; prompt: string;
+    content: string; language?: string | string[]; region?: string | string[];
+    tokens: number; cost: number; latency_ms?: number; finished_at: string;
+    signals: { mentioned: boolean; recommended: boolean; citation_count: number; visibility_score: null; visibility_status: string };
+    entities: Array<Record<string, unknown>>; citations: Array<Record<string, unknown>>;
+  }>;
+  sources: Array<{ identity: string; url?: string; domain?: string; title?: string; citation_count: number; providers: string[]; models: string[]; citation_score_points_before_cap: number; authority: null; authority_status: string }>;
+  entities: Array<{ canonical_name: string; type: string; aliases: string[]; occurrences: Array<{ response_id: number; provider: string; model: string; confidence: number }>; source_ids: number[]; knowledge_graph_ids: string[] }>;
+  graph: { status: string; reason?: string; snapshot_id?: number; version?: string; nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown> & { id: number; source?: string; target?: string; type: string; confidence: number; evidence_status: string }> };
+  timeline: Array<{ type: string; at: string; id: number; label: string }>;
+  publications: Array<{ id: number; title: string; url: string; published_at: string; observations: Array<{ id: number; provider: string; model: string; first_observed_at: string; evidence_excerpt: string }> }>;
 };
 export type ActionPlanItem = { recommendation: RecommendationItem; template?: { title: string; description: string; steps: string[]; expected_result: string; estimated_time: string; version: string }; steps: string[]; expected_effect: string; estimated_time?: string };
 export type ActionPlan = { research_id: number; engine_version: string; generated_at: string; items: ActionPlanItem[] };
@@ -200,6 +215,7 @@ export class ApiClient {
   }
   listResearch() { return this.request<ResearchItem[]>("/research"); }
   researchTasks(researchId: number) { return this.request<ResearchTaskItem[]>(`/research-tasks?research_id=${researchId}`); }
+  researchLaboratory(researchId: number) { return this.request<ResearchLaboratory>(`/research/${researchId}/laboratory`); }
   execution(id: number) { return this.request<ExecutionItem>(`/execution/${id}`); }
   reports() { return this.request<{ items: ReportCatalogItem[]; total: number }>("/reports?limit=100"); }
   recommendations(researchId: number) { return this.request<{ recommendations: RecommendationItem[] }>(`/research/${researchId}/recommendations`); }

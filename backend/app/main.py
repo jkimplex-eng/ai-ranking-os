@@ -65,6 +65,7 @@ from relationship_discovery.router import router as relationship_discovery_route
 from report_center.router import router as report_center_router
 from report_sharing.router import router as report_sharing_router
 from research.router import router as research_router
+from research_lab.router import router as research_lab_router
 from scheduler.router import router as scheduler_router
 from segmentation.router import router as segmentation_router
 from trend.router import router as trend_router
@@ -120,6 +121,7 @@ app.include_router(query_intent_router)
 app.include_router(product_router)
 app.include_router(product_analytics_router)
 app.include_router(project_monitoring_router)
+app.include_router(research_lab_router)
 app.include_router(research_router)
 app.include_router(recommendation_router)
 app.include_router(recommendation_simulation_router)
