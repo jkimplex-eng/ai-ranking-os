@@ -27,6 +27,19 @@ def test_query_map_covers_demand_intents() -> None:
     assert len({item.id for item in catalog}) == len(catalog)
 
 
+def test_query_map_localizes_default_context_to_english() -> None:
+    catalog = QueryMapBuilder().build(
+        brand="Skinjestique",
+        language="en",
+        region="GLOBAL",
+        profile="GEO",
+        variables={},
+    )
+
+    assert all("продукт" not in item.text and "покупател" not in item.text for item in catalog)
+    assert any("products and services" in item.text for item in catalog)
+
+
 def test_patterns_and_opportunities_are_evidence_backed() -> None:
     query = {
         "id": "q1",

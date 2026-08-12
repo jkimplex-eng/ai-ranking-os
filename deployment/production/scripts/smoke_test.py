@@ -19,7 +19,9 @@ def call(path: str, *, method: str = "GET", payload=None, token: str | None = No
         headers["Authorization"] = f"Bearer {token}"
     try:
         request = Request(f"{BASE_URL}{path}", data=data, headers=headers, method=method)
-        with urlopen(request, timeout=180) as response:
+        # Local providers execute the full query matrix synchronously in v1.1.
+        # Keep the release smoke above the production proxy budget.
+        with urlopen(request, timeout=900) as response:
             return response.status, json.load(response)
     except HTTPError as error:
         raise RuntimeError(f"{path}: HTTP {error.code}: {error.read().decode()}") from error

@@ -37,10 +37,13 @@ class QueryMapBuilder:
         profile: str,
         variables: dict[str, str],
     ) -> list[QueryScenario]:
-        category = variables.get("category") or self._category(profile)
-        audience = variables.get("audience") or "покупателя"
-        product = variables.get("product") or "продукты бренда"
-        if language.casefold().startswith("en"):
+        is_english = language.casefold().startswith("en")
+        category = variables.get("category") or self._category(profile, english=is_english)
+        audience = variables.get("audience") or ("customer" if is_english else "покупателя")
+        product = variables.get("product") or (
+            "the brand's products" if is_english else "продукты бренда"
+        )
+        if is_english:
             templates = [
                 ("brand", "awareness", f"What is {brand} and what is it known for?"),
                 ("category", "discovery", f"Which {category} brands are worth considering?"),
@@ -113,7 +116,15 @@ class QueryMapBuilder:
         ]
 
     @staticmethod
-    def _category(profile: str) -> str:
+    def _category(profile: str, *, english: bool = False) -> str:
+        if english:
+            return {
+                "BEAUTY": "beauty and skincare",
+                "ECOMMERCE": "e-commerce products",
+                "MEDICAL": "medical products and services",
+                "GEO": "products and services",
+                "ENTERPRISE": "enterprise solutions",
+            }.get(profile, "products and services")
         return {
             "BEAUTY": "косметика и уход",
             "ECOMMERCE": "товары для электронной коммерции",
