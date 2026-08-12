@@ -67,6 +67,50 @@ test("wizard transparently refreshes an expired access token", async ({ page }) 
   expect(reviewAttempts).toBe(2);
 });
 
+test("wizard recovers a completed research after the run connection is lost", async ({ page }) => {
+  let researchPolls = 0;
+  let runAttempted = false;
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/research/wizard/run")) {
+      runAttempted = true;
+      return route.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ detail: "Failed to fetch" }) });
+    }
+    let json: unknown = {};
+    if (path.endsWith("/auth/login")) json = { access_token: "access", refresh_token: "refresh-token-with-valid-length" };
+    else if (path.endsWith("/auth/me")) json = { id: 1, display_name: "Analyst", email: "analyst@example.com", roles: ["analyst"] };
+    else if (path.endsWith("/router/models")) json = { items: [{ id: "local-llama", provider: "ollama", display_name: "Qwen", version: "2.5", status: "ACTIVE", tier: "FREE", capabilities: ["chat"], availability: 1, pricing: { input_per_million: 0, output_per_million: 0 } }], total: 1 };
+    else if (path.endsWith("/system/providers")) json = { providers: [{ model_id: "local-llama", provider: "ollama", latency_ms: 20, circuit_state: "CLOSED", interface: { available: true, mock: false, models: 2 } }] };
+    else if (path.endsWith("/research/wizard/review")) json = { valid: true, title: "AI Visibility: Acme", prompt: "Analyze Acme", provider_models: ["ollama/local-llama"], selected_models: ["ollama/local-llama"], languages: ["ru"], regions: ["RU"], pipeline: [], estimated_cost_usd: 0, estimated_time_ms: 2400, query_catalog: [], task_count: 8 };
+    else if (path.endsWith("/research")) {
+      researchPolls += 1;
+      json = runAttempted ? [{ id: 77, title: "AI Visibility: Acme", status: "COMPLETED" }] : [];
+    } else if (path.endsWith("/research/77/final-report")) json = { research: { id: 77, title: "AI Visibility: Acme", status: "COMPLETED" }, score: { visibility_score: 52, mention_score: 50, recommendation_score: 50, citation_score: 0, coverage_score: 100, confidence_score: 70, version: "1.1" }, responses: [], recommendations: [], sources: [], detected_entities: [], explainability: { metrics: {}, prompts: [], responses: [], citations: [], sample_scope: { query_count: 8, response_count: 8, successful_response_count: 8 } } };
+    else if (path.endsWith("/research/77/action-plan")) json = { research_id: 77, engine_version: "1.0", generated_at: "2026-08-12T00:00:00Z", items: [] };
+    else if (path.endsWith("/research/77/simulation")) json = { research_id: 77, model_version: "1.0", simulated_at: "2026-08-12T00:00:00Z", simulations: [] };
+    else if (path.endsWith("/research/77/laboratory")) json = { provenance: {}, models: [], sources: [], entities: [], graph: { status: "EMPTY", nodes: [], edges: [] }, timeline: [], publications: [] };
+    else if (path.endsWith("/research-tasks")) json = [];
+    else if (path.endsWith("/system/health")) json = { status: "healthy" };
+    else if (path.endsWith("/providers")) json = [];
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(json) });
+  });
+
+  await page.goto("/");
+  await page.getByLabel("Email").fill("analyst@example.com");
+  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByRole("button", { name: "Войти" }).click();
+  await page.getByRole("button", { name: "Проверить бренд" }).click();
+  await page.getByLabel("Название бренда").fill("Acme");
+  for (let step = 1; step <= 3; step += 1) await page.getByRole("button", { name: /Продолжить/ }).click();
+  await page.getByRole("button", { name: /Qwen/ }).click();
+  for (let step = 1; step <= 4; step += 1) await page.getByRole("button", { name: /Продолжить|Проверить/ }).click();
+  await page.getByRole("button", { name: "Запустить исследование" }).click();
+
+  await expect(page).toHaveURL(/\/reports\/latest$/);
+  await expect(page.getByRole("heading", { name: "Acme" })).toBeVisible();
+  expect(researchPolls).toBeGreaterThan(1);
+});
+
 test("authenticated routes survive refresh and browser history", async ({ page }) => {
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;

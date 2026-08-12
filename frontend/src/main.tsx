@@ -1067,7 +1067,17 @@ function Wizard({
     setBusy(true);
     setError("");
     try {
-      const result = await api.run(payload());
+      const knownResearchIds = new Set((await api.listResearch()).map((item) => item.id));
+      let result: ReportResult;
+      try {
+        result = await api.run(payload());
+      } catch (reason) {
+        const message = reason instanceof Error ? reason.message : String(reason);
+        const connectionLost = reason instanceof TypeError
+          || /failed to fetch|network|connection|load failed/i.test(message);
+        if (!connectionLost) throw reason;
+        result = await recoverResearchResult(knownResearchIds, brand);
+      }
       if (result.research.status !== "COMPLETED") throw new Error("Исследование завершилось с ошибкой. Подробности доступны в разделе Research.");
       sessionStorage.removeItem("research-wizard");
       onComplete(result);
@@ -1078,6 +1088,27 @@ function Wizard({
     } finally {
       setBusy(false);
     }
+  }
+  async function recoverResearchResult(knownIds: Set<number>, expectedBrand: string): Promise<ReportResult> {
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+      const researches = await api.listResearch();
+      const candidate = researches
+        .filter((item) => !knownIds.has(item.id))
+        .filter((item) => item.title.toLocaleLowerCase().includes(expectedBrand.trim().toLocaleLowerCase()))
+        .sort((left, right) => right.id - left.id)[0];
+      if (candidate?.status === "COMPLETED") {
+        return {
+          research: { id: candidate.id, title: candidate.title, status: candidate.status },
+          report_url: `/research/${candidate.id}/final-report`,
+          report: await api.finalReport(candidate.id),
+        };
+      }
+      if (candidate?.status === "FAILED") {
+        throw new Error("Исследование завершилось с ошибкой. Подробности доступны в разделе «Исследования».");
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 3000));
+    }
+    throw new Error("Исследование продолжает выполняться. Его статус доступен в разделе «Исследования».");
   }
   const titles = [
     "Как называется бренд?",
