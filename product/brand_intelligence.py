@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 import socket
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
@@ -157,9 +158,22 @@ class BrandIntelligenceEngine:
                 link.split("#", 1)[0]
                 for link in parser.page.links
                 if urlparse(link).hostname == root_host
-                and any(hint in link.casefold() for hint in self.PRODUCT_HINTS)
+                and (
+                    any(hint in link.casefold() for hint in self.PRODUCT_HINTS)
+                    or ("/catalog/" in link.casefold() and link.casefold().endswith(".html"))
+                )
             ]
-            queue.extend(link for link in candidates if link not in visited and link not in queue)
+            product_pages = [link for link in candidates if link.casefold().endswith(".html")]
+            category_pages = [link for link in candidates if link not in product_pages]
+            additions = [
+                link
+                for link in [*product_pages, *category_pages]
+                if link not in visited and link not in queue
+            ]
+            queue = [*product_pages, *queue, *category_pages]
+            queue = list(
+                dict.fromkeys(link for link in queue if link in additions or link not in visited)
+            )
 
         products = self._products(pages)
         categories = self._categories(pages, products)
@@ -213,21 +227,23 @@ class BrandIntelligenceEngine:
                     "url": str(node.get("url") or page.url),
                     "evidence_url": page.url,
                 }
-            if any(hint in page.url.casefold() for hint in cls.PRODUCT_HINTS):
-                for heading in page.headings[:3]:
-                    if 2 <= len(heading.split()) <= 12:
-                        found.setdefault(
-                            heading.casefold(),
-                            {
-                                "name": heading,
-                                "category": "",
-                                "description": page.description[:500],
-                                "price": None,
-                                "currency": None,
-                                "url": page.url,
-                                "evidence_url": page.url,
-                            },
-                        )
+            if page.url.casefold().endswith(".html") and page.headings:
+                heading = page.headings[0]
+                visible = " ".join(page.text)
+                price_match = re.search(r"(\d[\d\s]{2,8})\s*(?:₽|руб)", visible, re.I)
+                price = price_match.group(1).replace(" ", "") if price_match else None
+                found.setdefault(
+                    heading.casefold(),
+                    {
+                        "name": heading,
+                        "category": "",
+                        "description": page.description[:500],
+                        "price": price,
+                        "currency": "RUB" if price else None,
+                        "url": page.url,
+                        "evidence_url": page.url,
+                    },
+                )
         return list(found.values())
 
     @staticmethod
