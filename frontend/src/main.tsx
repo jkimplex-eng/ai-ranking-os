@@ -17,6 +17,7 @@ import {
   type RecommendationItem,
   type ReportCatalogItem,
   type ReportResult,
+  type BrandProfile,
   type ResearchItem,
   type RouterHistoryItem,
   type RouterModel,
@@ -1002,9 +1003,11 @@ function Wizard({
   onComplete: (result: ReportResult) => void;
   onCancel: () => void;
 }) {
-  const saved = useMemo(() => { try { return JSON.parse(sessionStorage.getItem("research-wizard") ?? "{}") as Partial<{ step: number; brand: string; region: string; language: string; profile: WizardPayload["routing_profile"]; scope: WizardPayload["research_scope"]; researchProfile: WizardPayload["research_profile"]; selectedModels: string[] }>; } catch { return {}; } }, []);
+  const saved = useMemo(() => { try { return JSON.parse(sessionStorage.getItem("research-wizard") ?? "{}") as Partial<{ step: number; brand: string; websiteUrl: string; brandProfile: BrandProfile; region: string; language: string; profile: WizardPayload["routing_profile"]; scope: WizardPayload["research_scope"]; researchProfile: WizardPayload["research_profile"]; selectedModels: string[] }>; } catch { return {}; } }, []);
   const [step, setStep] = useState(saved.step && saved.step >= 1 && saved.step <= 8 ? saved.step : 1);
   const [brand, setBrand] = useState(saved.brand ?? "");
+  const [websiteUrl, setWebsiteUrl] = useState(saved.websiteUrl ?? "");
+  const [brandProfile, setBrandProfile] = useState<BrandProfile | undefined>(saved.brandProfile);
   const [region, setRegion] = useState(saved.region ?? "GLOBAL");
   const [language, setLanguage] = useState(saved.language ?? "ru");
   const [profile, setProfile] = useState<WizardPayload["routing_profile"]>(saved.profile ?? "BALANCED");
@@ -1024,7 +1027,7 @@ function Wizard({
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось проверить подключение моделей"));
   }, []);
-  useEffect(() => { sessionStorage.setItem("research-wizard", JSON.stringify({ step, brand, region, language, profile, scope, researchProfile, selectedModels })); }, [step, brand, region, language, profile, scope, researchProfile, selectedModels]);
+  useEffect(() => { sessionStorage.setItem("research-wizard", JSON.stringify({ step, brand, websiteUrl, brandProfile, region, language, profile, scope, researchProfile, selectedModels })); }, [step, brand, websiteUrl, brandProfile, region, language, profile, scope, researchProfile, selectedModels]);
   const scopedModels = () => {
     const ready = models.filter((item) => modelIsReady(item));
     if (scope === "ALL") return ready;
@@ -1039,6 +1042,8 @@ function Wizard({
   const modelTitle = (model: RouterModel) => model.provider === "ollama" ? "Ollama · Qwen 2.5 3B" : model.display_name;
   const payload = (): WizardPayload => ({
     brand,
+    website_url: websiteUrl,
+    brand_profile: brandProfile,
     routing_profile: profile,
     models: scopedModels().map((model) => ({ provider: model.provider, model: model.id })),
     research_scope: scope,
@@ -1049,6 +1054,23 @@ function Wizard({
     research_template_code: "ai-visibility",
   });
   async function next() {
+    if (step === 1) {
+      if (!brand.trim() || !websiteUrl.trim()) {
+        setError("Укажите название бренда и официальный сайт.");
+        return;
+      }
+      setBusy(true);
+      setError("");
+      try {
+        setBrandProfile(await api.brandProfile(brand, websiteUrl));
+        setStep(2);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Не удалось изучить сайт бренда");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (step < 7) return setStep(step + 1);
     setBusy(true);
     setError("");
@@ -1140,12 +1162,13 @@ function Wizard({
         <h1>{titles[step - 1]}</h1>
         <p>
           {step === 1
-            ? "Введите название так, как его видят ваши клиенты."
+            ? "Укажите официальный сайт — сначала мы изучим категории, товары и характеристики бренда."
             : step === 4
               ? "Выберите конкретные модели из активного реестра платформы."
               : "Это поможет сделать исследование точнее."}
         </p>
         {step === 1 && (
+          <>
           <label className="hero-field">
             Название бренда
             <input
@@ -1155,6 +1178,25 @@ function Wizard({
               placeholder="Например, Skinjestique"
             />
           </label>
+          <label className="hero-field">
+            Официальный сайт
+            <input
+              value={websiteUrl}
+              onChange={(e) => { setWebsiteUrl(e.target.value); setBrandProfile(undefined); }}
+              placeholder="https://brand.example"
+              inputMode="url"
+            />
+          </label>
+          </>
+        )}
+        {step === 2 && brandProfile && (
+          <div className="panel brand-profile-preview">
+            <span className="section-label">ПРОФИЛЬ БРЕНДА ПО ОФИЦИАЛЬНОМУ САЙТУ</span>
+            <p>Изучено страниц: <b>{brandProfile.pages_analyzed}</b> · уверенность профиля: <b>{Math.round(brandProfile.confidence * 100)}%</b></p>
+            <p><b>Категории:</b> {brandProfile.categories.join(", ") || "не извлечены"}</p>
+            <p><b>Товары:</b> {brandProfile.products.slice(0, 8).map((item) => item.name).join(", ") || "не извлечены"}</p>
+            <p><b>Характеристики:</b> {brandProfile.attributes.join(", ") || "не извлечены"}</p>
+          </div>
         )}
         {step === 2 && (
           <div className="option-list">

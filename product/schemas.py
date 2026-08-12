@@ -121,6 +121,7 @@ class ResearchTemplateUpdate(BaseModel):
 
 class WizardRequest(BaseModel):
     brand: str = Field(min_length=1, max_length=300)
+    website_url: str = Field(min_length=4, max_length=2000)
     entity_id: UUID | None = None
     models: list[ResearchModelSelection] = Field(default_factory=list, max_length=20)
     routing_profile: RoutingProfile = RoutingProfile.BALANCED
@@ -137,6 +138,26 @@ class WizardRequest(BaseModel):
         pattern=r"^(GEO|ECOMMERCE|MEDICAL|BEAUTY|ENTERPRISE|UNIVERSAL)$",
     )
     variables: dict[str, str] = Field(default_factory=dict)
+    brand_profile: dict[str, Any] | None = None
+
+
+class BrandProfileRequest(BaseModel):
+    brand: str = Field(min_length=1, max_length=300)
+    website_url: str = Field(min_length=4, max_length=2000)
+
+
+class BrandProfileRead(BaseModel):
+    version: str
+    brand: str
+    website_url: str
+    pages_analyzed: int
+    evidence_urls: list[str]
+    description: str
+    categories: list[str]
+    products: list[dict[str, Any]]
+    attributes: list[str]
+    confidence: float
+    limitations: list[str]
 
 
 class WizardReview(BaseModel):
@@ -152,6 +173,7 @@ class WizardReview(BaseModel):
     selected_models: list[str] = Field(default_factory=list)
     query_catalog: list[dict[str, str]] = Field(default_factory=list)
     task_count: int = 0
+    brand_profile: BrandProfileRead
 
 
 class WizardRunResult(BaseModel):

@@ -45,6 +45,7 @@ def main() -> None:
     model = os.environ.get("SMOKE_MODEL", "gpt-4o-mini")
     payload = {
         "brand": "Skinjestique",
+        "website_url": os.environ.get("SMOKE_WEBSITE_URL", "https://skinjestique.ru"),
         "models": [{"provider": provider, "model": model}],
         "languages": ["en"],
         "regions": ["GLOBAL"],

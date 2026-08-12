@@ -36,6 +36,7 @@ class QueryMapBuilder:
         region: str,
         profile: str,
         variables: dict[str, str],
+        brand_profile: dict[str, Any] | None = None,
     ) -> list[QueryScenario]:
         is_english = language.casefold().startswith("en")
         category = variables.get("category") or self._category(profile, english=is_english)
@@ -105,6 +106,32 @@ class QueryMapBuilder:
                     f"Какие независимые публикации или исследования упоминают {brand}?",
                 ),
             ]
+        if brand_profile:
+            categories = [str(item) for item in brand_profile.get("categories", []) if item][:3]
+            products = [item for item in brand_profile.get("products", []) if item.get("name")][:4]
+            attributes = [str(item) for item in brand_profile.get("attributes", []) if item][:3]
+            for item in categories:
+                text = (
+                    f"Which {item} brands would you recommend?"
+                    if is_english
+                    else f"Какие бренды категории «{item}» вы рекомендуете?"
+                )
+                templates.append(("category_specific", "recommendation", text))
+            for item in products:
+                name = str(item["name"])
+                text = (
+                    f"Which alternative to {name} is best by price and features?"
+                    if is_english
+                    else f"Какой аналог продукта «{name}» стоит выбрать по цене и характеристикам?"
+                )
+                templates.append(("product_specific", "comparison", text))
+            for item in attributes:
+                text = (
+                    f"What would you recommend to a customer looking for {item}?"
+                    if is_english
+                    else f"Что вы рекомендуете покупателю, которому важно: {item}?"
+                )
+                templates.append(("need_specific", "solution", text))
         return [
             QueryScenario(
                 id=str(uuid5(NAMESPACE_URL, f"ai-ranking-query:{brand}:{region}:{cluster}:{text}")),

@@ -35,6 +35,8 @@ test("wizard transparently refreshes an expired access token", async ({ page }) 
           estimated_cost_usd: 0, estimated_time_ms: 20000,
         };
       }
+    } else if (path.endsWith("/research/wizard/brand-profile")) {
+      json = { version: "1.0", brand: "Acme", website_url: "https://acme.example", pages_analyzed: 2, evidence_urls: ["https://acme.example"], description: "Acme", categories: ["Сыворотки"], products: [{ name: "Hydra Serum" }], attributes: ["увлажняющий"], confidence: .7, limitations: [] };
     } else if (path.endsWith("/router/models")) {
       json = { items: [{ id: "qwen-test", provider: "ollama", display_name: "Qwen", version: "2.5", status: "ACTIVE", tier: "FREE", capabilities: ["chat"], availability: 1, pricing: { input_per_million: 0, output_per_million: 0 } }], total: 1 };
     } else if (path.endsWith("/system/providers")) {
@@ -53,6 +55,7 @@ test("wizard transparently refreshes an expired access token", async ({ page }) 
   await page.getByRole("button", { name: "Войти" }).click();
   await page.getByRole("button", { name: "Проверить бренд" }).click();
   await page.getByLabel("Название бренда").fill("Acme");
+  await page.getByLabel("Официальный сайт").fill("https://acme.example");
   await page.getByRole("button", { name: /Продолжить/ }).click();
   await page.getByRole("button", { name: /Продолжить/ }).click();
   await page.getByRole("button", { name: /Продолжить/ }).click();
@@ -82,6 +85,7 @@ test("wizard recovers a completed research after the run connection is lost", as
     else if (path.endsWith("/router/models")) json = { items: [{ id: "local-llama", provider: "ollama", display_name: "Qwen", version: "2.5", status: "ACTIVE", tier: "FREE", capabilities: ["chat"], availability: 1, pricing: { input_per_million: 0, output_per_million: 0 } }], total: 1 };
     else if (path.endsWith("/system/providers")) json = { providers: [{ model_id: "local-llama", provider: "ollama", latency_ms: 20, circuit_state: "CLOSED", interface: { available: true, mock: false, models: 2 } }] };
     else if (path.endsWith("/research/wizard/review")) json = { valid: true, title: "AI Visibility: Acme", prompt: "Analyze Acme", provider_models: ["ollama/local-llama"], selected_models: ["ollama/local-llama"], languages: ["ru"], regions: ["RU"], pipeline: [], estimated_cost_usd: 0, estimated_time_ms: 2400, query_catalog: [], task_count: 8 };
+    else if (path.endsWith("/research/wizard/brand-profile")) json = { version: "1.0", brand: "Acme", website_url: "https://acme.example", pages_analyzed: 2, evidence_urls: ["https://acme.example"], description: "Acme", categories: ["Сыворотки"], products: [{ name: "Hydra Serum" }], attributes: ["увлажняющий"], confidence: .7, limitations: [] };
     else if (path.endsWith("/research")) {
       researchPolls += 1;
       json = runAttempted ? [{ id: 77, title: "AI Visibility: Acme", status: "COMPLETED" }] : [];
@@ -101,6 +105,7 @@ test("wizard recovers a completed research after the run connection is lost", as
   await page.getByRole("button", { name: "Войти" }).click();
   await page.getByRole("button", { name: "Проверить бренд" }).click();
   await page.getByLabel("Название бренда").fill("Acme");
+  await page.getByLabel("Официальный сайт").fill("https://acme.example");
   for (let step = 1; step <= 3; step += 1) await page.getByRole("button", { name: /Продолжить/ }).click();
   await page.getByRole("button", { name: /Qwen/ }).click();
   for (let step = 1; step <= 4; step += 1) await page.getByRole("button", { name: /Продолжить|Проверить/ }).click();

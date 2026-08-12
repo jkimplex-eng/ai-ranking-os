@@ -3,6 +3,8 @@ export type AuthProfile = { id: number; display_name: string; email: string; rol
 export type ModelSelection = { provider: string; model: string };
 export type WizardPayload = {
   brand: string;
+  website_url: string;
+  brand_profile?: BrandProfile;
   models?: ModelSelection[];
   routing_profile: "FAST" | "BALANCED" | "HIGH_QUALITY" | "FREE" | "PRIVATE" | "ENTERPRISE";
   languages: string[];
@@ -12,6 +14,7 @@ export type WizardPayload = {
   research_scope?: "ALL" | "SELECTED" | "RUSSIAN" | "COMMERCIAL" | "FREE" | "CONSENSUS" | "COMPARE";
   research_profile?: "GEO" | "ECOMMERCE" | "MEDICAL" | "BEAUTY" | "ENTERPRISE" | "UNIVERSAL";
 };
+export type BrandProfile = { version: string; brand: string; website_url: string; pages_analyzed: number; evidence_urls: string[]; description: string; categories: string[]; products: Array<{ name: string; category?: string; description?: string; price?: string | number; currency?: string; url?: string; evidence_url?: string }>; attributes: string[]; confidence: number; limitations: string[] };
 export type RouterModel = { id: string; provider: string; display_name: string; version: string; status: string; tier: string; capabilities: string[]; availability: number; pricing: { input_per_million: number; output_per_million: number } };
 export type WizardReview = {
   valid: boolean;
@@ -26,6 +29,7 @@ export type WizardReview = {
   selected_models: string[];
   query_catalog: Array<{ id: string; cluster: string; intent: string; text: string }>;
   task_count: number;
+  brand_profile: BrandProfile;
 };
 export type ReportResult = {
   research: { id: number; title: string; status: string };
@@ -276,5 +280,10 @@ export class ApiClient {
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
     this.clearTokens();
+  }
+  brandProfile(brand: string, websiteUrl: string) {
+    return this.request<BrandProfile>("/research/wizard/brand-profile", {
+      method: "POST", body: JSON.stringify({ brand, website_url: websiteUrl }),
+    });
   }
 }

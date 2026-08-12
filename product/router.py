@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from backend.app.database import get_db
 from change_detection.dependencies import build_change_detection
 from notification_center.dependencies import build_notification_service
+from product.brand_intelligence import BrandDiscoveryError, BrandIntelligenceEngine
 from product.repository import (
     ProductConflictError,
     ProductNotFoundError,
@@ -13,6 +14,8 @@ from product.repository import (
     ResearchTemplateRepository,
 )
 from product.schemas import (
+    BrandProfileRead,
+    BrandProfileRequest,
     PromptCreate,
     PromptRead,
     PromptUpdate,
@@ -29,6 +32,18 @@ from research.schemas import ResearchRead
 
 router = APIRouter(tags=["product"])
 DbSession = Annotated[Session, Depends(get_db)]
+
+
+@router.post("/research/wizard/brand-profile", response_model=BrandProfileRead)
+def build_brand_profile(payload: BrandProfileRequest) -> BrandProfileRead:
+    try:
+        return BrandProfileRead.model_validate(
+            BrandIntelligenceEngine().analyze(brand=payload.brand, website_url=payload.website_url)
+        )
+    except BrandDiscoveryError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
+        ) from error
 
 
 @router.get("/prompts", response_model=list[PromptRead])

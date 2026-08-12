@@ -34,6 +34,7 @@ from insights.repository import SqlAlchemyInsightRepository
 from insights.schemas import InsightRequest
 from insights.service import InsightService
 from notification_center.ports import NotificationPort
+from product.brand_intelligence import BrandIntelligenceEngine
 from product.repository import ProductNotFoundError, PromptRepository, ResearchTemplateRepository
 from product.research_intelligence import (
     GeoOpportunityPlanner,
@@ -132,6 +133,9 @@ class ProductPipeline:
         self.notifications = notifications
 
     def review(self, payload: WizardRequest) -> WizardReview:
+        brand_profile = payload.brand_profile or BrandIntelligenceEngine().analyze(
+            brand=payload.brand, website_url=payload.website_url
+        )
         template = self.templates.get(payload.research_template_code)
         values = self._values(payload)
         prompt = self.prompts.render(
@@ -167,7 +171,7 @@ class ProductPipeline:
             estimated_time = max(estimated_time, model.latency_ms)
         if not selected:
             selected = [payload.routing_profile]
-        query_catalog = self._query_catalog(payload)
+        query_catalog = self._query_catalog(payload, brand_profile)
         estimated_cost *= len(query_catalog)
         estimated_time *= len(query_catalog)
         return WizardReview(
@@ -183,6 +187,7 @@ class ProductPipeline:
             selected_models=selected,
             query_catalog=query_catalog,
             task_count=len(query_catalog) * max(len(payload.models), 1),
+            brand_profile=brand_profile,
         )
 
     def run(self, payload: WizardRequest) -> Research:
@@ -197,6 +202,8 @@ class ProductPipeline:
                 objective=review.prompt,
                 metadata={
                     "brand": payload.brand,
+                    "website_url": payload.website_url,
+                    "brand_profile": review.brand_profile.model_dump(mode="json"),
                     "target_entity": payload.brand,
                     "languages": payload.languages,
                     "regions": payload.regions,
@@ -319,7 +326,9 @@ class ProductPipeline:
         }
 
     @staticmethod
-    def _query_catalog(payload: WizardRequest) -> list[dict[str, str]]:
+    def _query_catalog(
+        payload: WizardRequest, brand_profile: dict[str, Any] | None = None
+    ) -> list[dict[str, str]]:
         return [
             item.as_dict()
             for item in QueryMapBuilder().build(
@@ -328,6 +337,7 @@ class ProductPipeline:
                 region=payload.regions[0],
                 profile=payload.research_profile,
                 variables=payload.variables,
+                brand_profile=brand_profile or payload.brand_profile,
             )
         ]
 
