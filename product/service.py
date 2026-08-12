@@ -35,6 +35,11 @@ from insights.schemas import InsightRequest
 from insights.service import InsightService
 from notification_center.ports import NotificationPort
 from product.repository import ProductNotFoundError, PromptRepository, ResearchTemplateRepository
+from product.research_intelligence import (
+    GeoOpportunityPlanner,
+    QueryMapBuilder,
+    ResearchPatternAnalyzer,
+)
 from product.schemas import WizardRequest, WizardReview
 from provider_recommendation.research_adapter import SqlAlchemyResearchUsageSource
 from provider_recommendation.service import SmartProviderRecommendationService
@@ -162,6 +167,9 @@ class ProductPipeline:
             estimated_time = max(estimated_time, model.latency_ms)
         if not selected:
             selected = [payload.routing_profile]
+        query_catalog = self._query_catalog(payload)
+        estimated_cost *= len(query_catalog)
+        estimated_time *= len(query_catalog)
         return WizardReview(
             valid=True,
             title=f"{template.title}: {payload.brand}",
@@ -173,6 +181,8 @@ class ProductPipeline:
             estimated_cost_usd=round(estimated_cost, 8),
             estimated_time_ms=estimated_time,
             selected_models=selected,
+            query_catalog=query_catalog,
+            task_count=len(query_catalog) * max(len(payload.models), 1),
         )
 
     def run(self, payload: WizardRequest) -> Research:
@@ -197,6 +207,8 @@ class ProductPipeline:
                     "routing_profile": payload.routing_profile,
                     "selected_models": [item.model_dump() for item in payload.models],
                     "pipeline": review.pipeline,
+                    "query_catalog": review.query_catalog,
+                    "query_map_version": QueryMapBuilder.VERSION,
                 },
             )
         )
@@ -218,6 +230,7 @@ class ProductPipeline:
                 models=payload.models,
                 routing_profile=payload.routing_profile,
                 query=review.prompt,
+                queries=review.query_catalog,
             ),
         )
         if research.status == ResearchStatus.COMPLETED:
@@ -305,6 +318,19 @@ class ProductPipeline:
             **payload.variables,
         }
 
+    @staticmethod
+    def _query_catalog(payload: WizardRequest) -> list[dict[str, str]]:
+        return [
+            item.as_dict()
+            for item in QueryMapBuilder().build(
+                brand=payload.brand,
+                language=payload.languages[0],
+                region=payload.regions[0],
+                profile=payload.research_profile,
+                variables=payload.variables,
+            )
+        ]
+
 
 class FinalReportService:
     """Read-only composition over persisted outputs from existing engines."""
@@ -330,6 +356,15 @@ class FinalReportService:
             stats["cost"] = round(float(stats["cost"]) + response.cost, 8)
         score = base.score.model_dump(mode="json") if base.score else None
         explainability = self._explainability(research, base, score)
+        query_catalog = research.metadata_payload.get("query_catalog", [])
+        patterns = ResearchPatternAnalyzer().analyze(
+            brand=str(research.metadata_payload.get("brand", research.title)),
+            responses=[item.model_dump(mode="json") for item in responses],
+            entities=[item.model_dump(mode="json") for item in base.entities],
+            citations=[item.model_dump(mode="json") for item in base.citations],
+            query_catalog=query_catalog,
+        )
+        opportunities = GeoOpportunityPlanner().build(patterns)
         return {
             "executive_summary": self._summary(research, score),
             "research": base.research.model_dump(mode="json"),
@@ -349,6 +384,9 @@ class FinalReportService:
             "cost": round(sum(item.cost for item in responses), 8),
             "execution_time_ms": sum(item.latency_ms or 0 for item in responses),
             "explainability": explainability,
+            "query_catalog": query_catalog,
+            "research_patterns": patterns,
+            "geo_opportunities": opportunities,
         }
 
     @staticmethod
@@ -424,20 +462,24 @@ class FinalReportService:
                 "weight": SCORING_WEIGHTS["citation"],
             },
             "coverage_score": {
-                "formula": "unique_processed_provider_models / expected_tasks * 100",
+                "formula": "processed_responses / expected_query_model_tasks * 100",
                 "inputs": {
-                    "unique_processed_provider_models": unique_models,
+                    "processed_responses": processed,
                     "expected_tasks": expected,
                 },
                 "normalization": "bounded 0..100",
                 "weight": SCORING_WEIGHTS["coverage"],
             },
             "confidence_score": {
-                "formula": "processing_success * 70% + mean_entity_confidence * 30%",
+                "formula": (
+                    "processing_success * 50% + mean_entity_confidence * 30% + "
+                    "sample_sufficiency(min(processed/8, 1)) * 20%"
+                ),
                 "inputs": {
                     "processed_responses": processed,
                     "total_responses": len(responses),
                     "entity_confidences": [entity.confidence for entity in base.entities],
+                    "minimum_reliable_sample_v1_1": 8,
                 },
                 "normalization": "bounded 0..100",
                 "weight": SCORING_WEIGHTS["confidence"],
@@ -550,6 +592,19 @@ class FinalReportService:
             "responses": response_evidence,
             "citations": citation_evidence,
             "unsupported_metrics": ["authority", "knowledge_graph_score"],
+            "sample_scope": {
+                "query_count": len(research.metadata_payload.get("query_catalog", [])),
+                "response_count": len(responses),
+                "successful_response_count": processed,
+                "failed_response_count": len(responses) - processed,
+                "provider_model_count": unique_models,
+                "languages": research.metadata_payload.get("languages", []),
+                "regions": research.metadata_payload.get("regions", []),
+                "limitation": (
+                    "Результат описывает только сохранённую выборку запросов, моделей, "
+                    "языков, регионов и времени; он не означает видимость во всех ИИ."
+                ),
+            },
         }
 
     @staticmethod
@@ -557,6 +612,7 @@ class FinalReportService:
         if not score:
             return f"Research {research.title} completed without a visibility score."
         return (
-            f"{research.title} achieved AI Visibility {score['visibility_score']}/100 "
-            f"using scoring algorithm {score['version']}."
+            f"AI-видимость «{research.metadata_payload.get('brand', research.title)}» — "
+            f"{score['visibility_score']}/100 в рамках сохранённой выборки. "
+            "Это не означает видимость во всех ИИ."
         )

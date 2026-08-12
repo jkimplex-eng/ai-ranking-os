@@ -101,6 +101,8 @@ def test_skinjestique_end_to_end_wizard(client: TestClient) -> None:
     review = client.post("/research/wizard/review", json=payload)
     assert review.status_code == 200
     assert review.json()["valid"] is True
+    assert len(review.json()["query_catalog"]) == 8
+    assert review.json()["task_count"] == 8
 
     completed = client.post("/research/wizard/run", json=payload)
     assert completed.status_code == 201, completed.text
@@ -118,10 +120,10 @@ def test_skinjestique_end_to_end_wizard(client: TestClient) -> None:
     assert report["detected_entities"]
     assert report["sources"]
     assert report["knowledge_graph_summary"]["node_count"] >= 1
-    assert report["provider_statistics"]["openai"]["responses"] == 1
+    assert report["provider_statistics"]["openai"]["responses"] == 8
     assert report["token_usage"] > 0
     explanation = report["explainability"]
-    assert explanation["methodology_version"] == "1.0"
+    assert explanation["methodology_version"] == "1.1"
     assert explanation["metrics"]["visibility_score"]["formula"]
     assert (
         explanation["metrics"]["visibility_score"]["inputs"]["research_id"]
@@ -131,6 +133,9 @@ def test_skinjestique_end_to_end_wizard(client: TestClient) -> None:
     assert explanation["responses"][0]["raw_response"] == report["responses"][0]["raw_response"]
     assert explanation["unsupported_metrics"] == ["authority", "knowledge_graph_score"]
     assert explanation["citations"][0]["response_id"] == report["responses"][0]["id"]
+    assert explanation["sample_scope"]["query_count"] == 8
+    assert report["research_patterns"]["sample"]["responses"] == 8
+    assert report["geo_opportunities"]
 
     persisted = client.get(body["report_url"])
     assert persisted.status_code == 200

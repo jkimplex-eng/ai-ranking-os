@@ -13,7 +13,7 @@ from research.models import (
 )
 from research.repositories import EntityNotFoundError
 
-SCORING_VERSION = "1.0"
+SCORING_VERSION = "1.1"
 SCORING_WEIGHTS = {
     "mention": 0.35,
     "recommendation": 0.20,
@@ -37,16 +37,12 @@ class ScoringService:
             raise EntityNotFoundError(f"Research {research_id} not found")
         responses = self._responses(research_id)
         if not responses:
-            raise ScoringNotReadyError(
-                f"Research {research_id} has no responses to score"
-            )
+            raise ScoringNotReadyError(f"Research {research_id} has no responses to score")
         if any(
             response.processing_status == ResponseProcessingStatus.NORMALIZED
             for response in responses
         ):
-            raise ScoringNotReadyError(
-                f"Research {research_id} still has unprocessed responses"
-            )
+            raise ScoringNotReadyError(f"Research {research_id} still has unprocessed responses")
 
         processed = [
             response
@@ -67,28 +63,17 @@ class ScoringService:
             len(responses) * 3,
         )
         expected = max(research.total_tasks, len(research.tasks), 1)
-        coverage_score = _ratio(
-            len(
-                {
-                    (response.provider.casefold(), response.model.casefold())
-                    for response in processed
-                }
-            ),
-            expected,
-        )
+        coverage_score = _ratio(len(processed), expected)
         entity_confidences = [
-            entity.confidence
-            for response in processed
-            for entity in response.extracted_entities
+            entity.confidence for response in processed for entity in response.extracted_entities
         ]
         entity_confidence = (
-            statistics.fmean(entity_confidences) * 100
-            if entity_confidences
-            else 50.0
+            statistics.fmean(entity_confidences) * 100 if entity_confidences else 50.0
         )
         processing_success = _ratio(len(processed), len(responses))
+        sample_factor = min(1.0, len(processed) / 8)
         confidence_score = _bounded(
-            processing_success * 0.7 + entity_confidence * 0.3
+            processing_success * 0.5 + entity_confidence * 0.3 + sample_factor * 100 * 0.2
         )
         visibility_score = _bounded(
             mention_score * SCORING_WEIGHTS["mention"]
@@ -130,9 +115,7 @@ class ScoringService:
             .order_by(ResearchScore.calculated_at.desc())
         )
         if score is None:
-            raise EntityNotFoundError(
-                f"Score for Research {research_id} not found"
-            )
+            raise EntityNotFoundError(f"Score for Research {research_id} not found")
         return score
 
     def calculate_if_ready(self, research_id: int) -> ResearchScore | None:

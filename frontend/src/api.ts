@@ -24,6 +24,8 @@ export type WizardReview = {
   estimated_cost_usd: number;
   estimated_time_ms: number;
   selected_models: string[];
+  query_catalog: Array<{ id: string; cluster: string; intent: string; text: string }>;
+  task_count: number;
 };
 export type ReportResult = {
   research: { id: number; title: string; status: string };

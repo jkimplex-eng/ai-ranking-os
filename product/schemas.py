@@ -150,6 +150,8 @@ class WizardReview(BaseModel):
     estimated_cost_usd: float = 0
     estimated_time_ms: float = 0
     selected_models: list[str] = Field(default_factory=list)
+    query_catalog: list[dict[str, str]] = Field(default_factory=list)
+    task_count: int = 0
 
 
 class WizardRunResult(BaseModel):

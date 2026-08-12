@@ -117,9 +117,7 @@ def test_score_is_calculated_automatically_after_all_responses(
             "provider": "test",
             "model": "model-b",
             "content": "A different provider is discussed.",
-            "normalized_response": _normalized(
-                "A different provider is discussed."
-            ),
+            "normalized_response": _normalized("A different provider is discussed."),
         },
     )
     assert second.status_code == 201
@@ -131,9 +129,9 @@ def test_score_is_calculated_automatically_after_all_responses(
     assert score["recommendation_score"] == 50.0
     assert score["citation_score"] == 50.0
     assert score["coverage_score"] == 100.0
-    assert score["confidence_score"] == 94.0
-    assert score["visibility_score"] == 64.4
-    assert score["version"] == "1.0"
+    assert score["confidence_score"] == 79.0
+    assert score["visibility_score"] == 62.9
+    assert score["version"] == "1.1"
 
 
 def test_score_api_recalculates_same_version_without_duplicates(
@@ -161,14 +159,10 @@ def test_score_api_recalculates_same_version_without_duplicates(
     assert first.status_code == 200
     assert second.status_code == 200
     assert first.json()["id"] == second.json()["id"]
-    assert first.json()["version"] == "1.0"
+    assert first.json()["version"] == "1.1"
     with TestingSession() as db:
         scores = list(
-            db.scalars(
-                select(ResearchScore).where(
-                    ResearchScore.research_id == research_id
-                )
-            )
+            db.scalars(select(ResearchScore).where(ResearchScore.research_id == research_id))
         )
         assert len(scores) == 1
 

@@ -103,7 +103,7 @@ def test_report_aggregates_all_research_results(client: TestClient) -> None:
         "recommendations",
     }
     assert report["research"]["id"] == research_id
-    assert report["score"]["version"] == "1.0"
+    assert report["score"]["version"] == "1.1"
     assert report["responses"][0]["id"] == response.json()["id"]
     assert {item["name"] for item in report["entities"]} == {"Acme"}
     assert report["citations"][0]["url"] == "https://example.com/acme"
