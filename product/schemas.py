@@ -139,6 +139,7 @@ class WizardRequest(BaseModel):
     )
     variables: dict[str, str] = Field(default_factory=dict)
     brand_profile: dict[str, Any] | None = None
+    competitors: list[dict[str, str]] = Field(default_factory=list, max_length=20)
 
 
 class BrandProfileRequest(BaseModel):
@@ -174,6 +175,7 @@ class WizardReview(BaseModel):
     query_catalog: list[dict[str, str]] = Field(default_factory=list)
     task_count: int = 0
     brand_profile: BrandProfileRead
+    competitor_profiles: list[BrandProfileRead] = Field(default_factory=list)
 
 
 class WizardRunResult(BaseModel):

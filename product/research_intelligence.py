@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Any
@@ -172,6 +173,7 @@ class ResearchPatternAnalyzer:
         entities: list[dict[str, Any]],
         citations: list[dict[str, Any]],
         query_catalog: list[dict[str, Any]],
+        manual_competitors: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         target = brand.casefold().strip()
         entities_by_response: defaultdict[int, list[dict[str, Any]]] = defaultdict(list)
@@ -235,15 +237,132 @@ class ResearchPatternAnalyzer:
             },
             "query_matrix": matrix,
             "deficit_queries": deficits,
-            "competitors": [
-                {"name": name, "response_count": count}
-                for name, count in competitor_counts.most_common(10)
-            ],
+            "competitors": self._competitors(competitor_counts, manual_competitors or []),
             "source_patterns": [
                 {"resource": name, "response_count": count}
                 for name, count in source_counts.most_common(15)
             ],
         }
+
+    @staticmethod
+    def _competitors(observed: Counter[str], manual: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        merged: dict[str, dict[str, Any]] = {}
+        for item in manual:
+            name = str(item.get("name") or "").strip()
+            if name:
+                merged[name.casefold()] = {
+                    "name": name,
+                    "response_count": observed.get(name, 0),
+                    "origin": "MANUAL",
+                    "website_url": item.get("website_url"),
+                }
+        for name, count in observed.most_common(10):
+            key = name.casefold()
+            if key in merged:
+                merged[key]["response_count"] = count
+                merged[key]["origin"] = "MANUAL_AND_OBSERVED"
+            else:
+                merged[key] = {
+                    "name": name,
+                    "response_count": count,
+                    "origin": "OBSERVED",
+                    "website_url": None,
+                }
+        return sorted(
+            merged.values(), key=lambda item: (-item["response_count"], item["name"].casefold())
+        )
+
+
+class CompetitiveInfluenceEngine:
+    """Compare like-for-like products and observed publication evidence."""
+
+    VERSION = "1.0"
+
+    def compare(
+        self,
+        *,
+        target_profile: dict[str, Any],
+        competitor_profiles: list[dict[str, Any]],
+        patterns: dict[str, Any],
+    ) -> dict[str, Any]:
+        comparisons = []
+        for competitor in competitor_profiles:
+            matches = self._product_matches(target_profile, competitor)
+            observed = next(
+                (
+                    item
+                    for item in patterns["competitors"]
+                    if item["name"].casefold() == competitor["brand"].casefold()
+                ),
+                None,
+            )
+            comparisons.append(
+                {
+                    "competitor": competitor["brand"],
+                    "website_url": competitor["website_url"],
+                    "response_count": observed["response_count"] if observed else 0,
+                    "matched_products": matches,
+                    "evidence_urls": competitor.get("evidence_urls", []),
+                    "profile_confidence": competitor.get("confidence", 0),
+                }
+            )
+        source_influence = [
+            {
+                **source,
+                "relationship": "OBSERVED_ASSOCIATION",
+                "explanation": (
+                    "Домен присутствует в ответах исследуемой выборки. Это корреляция, "
+                    "а не доказанная причина более высокой видимости."
+                ),
+            }
+            for source in patterns["source_patterns"]
+        ]
+        return {
+            "version": self.VERSION,
+            "competitors": comparisons,
+            "source_influence": source_influence,
+            "causality_status": "NOT_ESTABLISHED",
+            "verification": (
+                "Для проверки влияния нужна публикация, контрольная группа запросов и "
+                "повторное исследование с неизменной матрицей."
+            ),
+        }
+
+    @staticmethod
+    def _product_matches(
+        target: dict[str, Any], competitor: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        matches = []
+        for own in target.get("products", []):
+            own_terms = CompetitiveInfluenceEngine._terms(own)
+            best: tuple[float, dict[str, Any]] | None = None
+            for rival in competitor.get("products", []):
+                rival_terms = CompetitiveInfluenceEngine._terms(rival)
+                union = own_terms | rival_terms
+                similarity = len(own_terms & rival_terms) / len(union) if union else 0.0
+                if best is None or similarity > best[0]:
+                    best = (similarity, rival)
+            if best and best[0] > 0:
+                matches.append(
+                    {
+                        "target_product": own["name"],
+                        "competitor_product": best[1]["name"],
+                        "feature_similarity": round(best[0], 3),
+                        "target_price": own.get("price"),
+                        "competitor_price": best[1].get("price"),
+                        "currency": own.get("currency") or best[1].get("currency"),
+                        "target_evidence_url": own.get("evidence_url"),
+                        "competitor_evidence_url": best[1].get("evidence_url"),
+                    }
+                )
+        return matches
+
+    @staticmethod
+    def _terms(product: dict[str, Any]) -> set[str]:
+        value = " ".join(
+            str(product.get(key) or "") for key in ("name", "category", "description")
+        ).casefold()
+        return {token for token in re.findall(r"[\w-]{4,}", value) if token}
 
 
 class GeoOpportunityPlanner:

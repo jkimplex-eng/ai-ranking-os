@@ -37,6 +37,7 @@ from notification_center.ports import NotificationPort
 from product.brand_intelligence import BrandIntelligenceEngine
 from product.repository import ProductNotFoundError, PromptRepository, ResearchTemplateRepository
 from product.research_intelligence import (
+    CompetitiveInfluenceEngine,
     GeoOpportunityPlanner,
     QueryMapBuilder,
     ResearchPatternAnalyzer,
@@ -136,6 +137,11 @@ class ProductPipeline:
         brand_profile = payload.brand_profile or BrandIntelligenceEngine().analyze(
             brand=payload.brand, website_url=payload.website_url
         )
+        competitor_profiles = [
+            BrandIntelligenceEngine().analyze(brand=item["name"], website_url=item["website_url"])
+            for item in payload.competitors
+            if item.get("name") and item.get("website_url")
+        ]
         template = self.templates.get(payload.research_template_code)
         values = self._values(payload)
         prompt = self.prompts.render(
@@ -188,6 +194,7 @@ class ProductPipeline:
             query_catalog=query_catalog,
             task_count=len(query_catalog) * max(len(payload.models), 1),
             brand_profile=brand_profile,
+            competitor_profiles=competitor_profiles,
         )
 
     def run(self, payload: WizardRequest) -> Research:
@@ -204,6 +211,10 @@ class ProductPipeline:
                     "brand": payload.brand,
                     "website_url": payload.website_url,
                     "brand_profile": review.brand_profile.model_dump(mode="json"),
+                    "manual_competitors": payload.competitors,
+                    "competitor_profiles": [
+                        item.model_dump(mode="json") for item in review.competitor_profiles
+                    ],
                     "target_entity": payload.brand,
                     "languages": payload.languages,
                     "regions": payload.regions,
@@ -373,8 +384,14 @@ class FinalReportService:
             entities=[item.model_dump(mode="json") for item in base.entities],
             citations=[item.model_dump(mode="json") for item in base.citations],
             query_catalog=query_catalog,
+            manual_competitors=research.metadata_payload.get("manual_competitors", []),
         )
         opportunities = GeoOpportunityPlanner().build(patterns)
+        competitive_influence = CompetitiveInfluenceEngine().compare(
+            target_profile=research.metadata_payload.get("brand_profile", {}),
+            competitor_profiles=research.metadata_payload.get("competitor_profiles", []),
+            patterns=patterns,
+        )
         return {
             "executive_summary": self._summary(research, score),
             "research": base.research.model_dump(mode="json"),
@@ -397,6 +414,7 @@ class FinalReportService:
             "query_catalog": query_catalog,
             "research_patterns": patterns,
             "geo_opportunities": opportunities,
+            "competitive_influence": competitive_influence,
         }
 
     @staticmethod

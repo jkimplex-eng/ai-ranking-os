@@ -1,5 +1,6 @@
 from product.brand_intelligence import BrandIntelligenceEngine
 from product.research_intelligence import (
+    CompetitiveInfluenceEngine,
     GeoOpportunityPlanner,
     QueryMapBuilder,
     ResearchPatternAnalyzer,
@@ -46,6 +47,50 @@ def test_query_map_uses_brand_products_for_narrow_queries() -> None:
         "Hydra Serum" in item.text and "цене и характеристикам" in item.text for item in catalog
     )
     assert any("увлажняющий" in item.text for item in catalog)
+
+
+def test_competitive_influence_matches_price_features_and_marks_correlation() -> None:
+    result = CompetitiveInfluenceEngine().compare(
+        target_profile={
+            "products": [
+                {
+                    "name": "Hydra Serum",
+                    "category": "serum",
+                    "description": "hydrating hyaluronic",
+                    "price": 1900,
+                    "currency": "RUB",
+                    "evidence_url": "https://target/p",
+                }
+            ]
+        },
+        competitor_profiles=[
+            {
+                "brand": "Rival",
+                "website_url": "https://rival",
+                "products": [
+                    {
+                        "name": "Aqua Serum",
+                        "category": "serum",
+                        "description": "hydrating hyaluronic",
+                        "price": 2200,
+                        "currency": "RUB",
+                        "evidence_url": "https://rival/p",
+                    }
+                ],
+                "evidence_urls": ["https://rival/p"],
+                "confidence": 0.8,
+            }
+        ],
+        patterns={
+            "competitors": [{"name": "Rival", "response_count": 3}],
+            "source_patterns": [{"resource": "media.example", "response_count": 2}],
+        },
+    )
+    match = result["competitors"][0]["matched_products"][0]
+    assert match["target_price"] == 1900
+    assert match["competitor_price"] == 2200
+    assert result["source_influence"][0]["relationship"] == "OBSERVED_ASSOCIATION"
+    assert result["causality_status"] == "NOT_ESTABLISHED"
 
 
 def test_query_map_covers_demand_intents() -> None:

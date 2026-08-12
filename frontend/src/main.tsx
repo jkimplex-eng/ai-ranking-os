@@ -131,6 +131,7 @@ type ReportShape = {
     source_patterns: Array<{ resource: string; response_count: number }>;
   };
   geo_opportunities?: Array<{ id: string; channel: string; resource: string; reason: string; deliverable: string; affected_metric: string; expected_effect_range: number[]; confidence: number; effort: string; estimated_days: number; verification: string; causality_notice: string }>;
+  competitive_influence?: { version: string; causality_status: string; verification: string; competitors: Array<{ competitor: string; website_url: string; response_count: number; profile_confidence: number; evidence_urls: string[]; matched_products: Array<{ target_product: string; competitor_product: string; feature_similarity: number; target_price?: string | number; competitor_price?: string | number; currency?: string; target_evidence_url?: string; competitor_evidence_url?: string }> }>; source_influence: Array<{ resource: string; response_count: number; relationship: string; explanation: string }> };
 };
 type TrendPoint = { research_id: number; observed_at: string; value: number; moving_average: number; percentage_change?: number | null; direction: string };
 type TrendMetric = { metric: string; direction: string; points: TrendPoint[] };
@@ -1008,6 +1009,9 @@ function Wizard({
   const [brand, setBrand] = useState(saved.brand ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(saved.websiteUrl ?? "");
   const [brandProfile, setBrandProfile] = useState<BrandProfile | undefined>(saved.brandProfile);
+  const [competitorName, setCompetitorName] = useState("");
+  const [competitorWebsite, setCompetitorWebsite] = useState("");
+  const [competitors, setCompetitors] = useState<Array<{ name: string; website_url?: string }>>([]);
   const [region, setRegion] = useState(saved.region ?? "GLOBAL");
   const [language, setLanguage] = useState(saved.language ?? "ru");
   const [profile, setProfile] = useState<WizardPayload["routing_profile"]>(saved.profile ?? "BALANCED");
@@ -1044,6 +1048,7 @@ function Wizard({
     brand,
     website_url: websiteUrl,
     brand_profile: brandProfile,
+    competitors,
     routing_profile: profile,
     models: scopedModels().map((model) => ({ provider: model.provider, model: model.id })),
     research_scope: scope,
@@ -1196,6 +1201,12 @@ function Wizard({
             <p><b>Категории:</b> {brandProfile.categories.join(", ") || "не извлечены"}</p>
             <p><b>Товары:</b> {brandProfile.products.slice(0, 8).map((item) => item.name).join(", ") || "не извлечены"}</p>
             <p><b>Характеристики:</b> {brandProfile.attributes.join(", ") || "не извлечены"}</p>
+            <h3>Известные конкуренты</h3>
+            <p className="muted">Добавьте известных конкурентов. Других система найдёт в ответах ИИ автоматически.</p>
+            <input value={competitorName} onChange={(event) => setCompetitorName(event.target.value)} placeholder="Название конкурента" />
+            <input value={competitorWebsite} onChange={(event) => setCompetitorWebsite(event.target.value)} placeholder="Официальный сайт конкурента" />
+            <button type="button" onClick={() => { if (!competitorName.trim()) return; setCompetitors((items) => [...items, { name: competitorName.trim(), website_url: competitorWebsite.trim() || undefined }]); setCompetitorName(""); setCompetitorWebsite(""); }}>Добавить конкурента</button>
+            {competitors.map((item) => <p key={item.name}>{item.name} · {item.website_url || "сайт не указан"}</p>)}
           </div>
         )}
         {step === 2 && (
@@ -1399,6 +1410,7 @@ function Report({
       <section id="summary" className="panel report-proof"><div><span>Как сформирована оценка</span><strong>{visibility.toFixed(1)}</strong></div><dl><div><dt>Запросов</dt><dd>{report.explainability?.sample_scope?.query_count ?? report.query_catalog?.length ?? 0}</dd></div><div><dt>Моделей</dt><dd>{models.length}</dd></div><div><dt>Ответов</dt><dd>{responses.length}</dd></div><div><dt>Успешных</dt><dd>{report.explainability?.sample_scope?.successful_response_count ?? responses.length}</dd></div><div><dt>Исследование</dt><dd>#{result.research.id}</dd></div><div><dt>Алгоритм</dt><dd>{String(score.version ?? "не указан")}</dd></div></dl><p className="method-note">{report.explainability?.sample_scope?.limitation ?? "Результат относится только к исследованной выборке и не означает видимость во всех ИИ."}</p><details><summary>Показать расчёт</summary>{visibilityEvidence.lines.map((line) => <p key={line}>{line}</p>)}<code>{visibilityEvidence.formula}</code></details></section>
       <section id="demand-map" className="panel research-lab-section"><span className="section-label">КАРТА СПРОСА</span><h2>По каким запросам проверялся бренд</h2>{report.query_catalog?.length ? report.query_catalog.map((item) => <details className="evidence-details" key={item.id}><summary>{item.cluster} · {item.intent}</summary><p>{item.text}</p></details>) : <p className="empty-state">Для старого исследования карта смежных запросов не сохранена.</p>}</section>
       <section id="patterns" className="panel research-lab-section"><span className="section-label">НАБЛЮДАЕМЫЕ ЗАКОНОМЕРНОСТИ</span><h2>Где бренд уступает конкурентам</h2><p>Бренд не обнаружен в {report.research_patterns?.deficit_queries.length ?? 0} ответах из {report.research_patterns?.sample.responses ?? responses.length}.</p>{report.research_patterns?.deficit_queries.slice(0, 12).map((item) => <details className="evidence-details" key={item.response_id}><summary>{item.cluster} · {item.provider}/{item.model}</summary><p><b>Запрос:</b> {item.query}</p><p><b>Названы вместо бренда:</b> {item.competitors.join(", ") || "конкуренты не извлечены"}</p><p><b>Источники ответа:</b> {item.sources.join(", ") || "не указаны"}</p></details>)}<h3>Чаще встречающиеся конкуренты</h3>{report.research_patterns?.competitors.length ? report.research_patterns.competitors.map((item) => <p key={item.name}>{item.name} — {item.response_count} ответов</p>) : <p className="empty-state">Повторяющиеся конкуренты не извлечены.</p>}</section>
+      <section className="panel research-lab-section"><span className="section-label">КОНКУРЕНТНОЕ ВЛИЯНИЕ</span><h2>Почему конкуренты могут быть заметнее</h2><p>{report.competitive_influence?.verification ?? "Для вывода нужны профили конкурентов и повторное измерение."}</p>{report.competitive_influence?.competitors.map((item) => <details className="evidence-details" key={item.competitor}><summary>{item.competitor} · назван в {item.response_count} ответах</summary>{item.matched_products.length ? item.matched_products.map((match) => <p key={`${match.target_product}-${match.competitor_product}`}><b>{match.target_product}</b> ↔ {match.competitor_product}; сходство характеристик {Math.round(match.feature_similarity * 100)}%; цена {String(match.target_price ?? "нет данных")} / {String(match.competitor_price ?? "нет данных")} {match.currency ?? ""}</p>) : <p>Сопоставимые товары не подтверждены.</p>}</details>)}{report.competitive_influence?.source_influence.map((item) => <p key={item.resource}><b>{item.resource}</b> — встречается в {item.response_count} ответах. {item.explanation}</p>)}</section>
       <section className="panel research-lab-section"><span className="section-label">ПОЧЕМУ ПОЛУЧИЛИСЬ ТАКИЕ ОЦЕНКИ</span><h2>Наблюдаемые причины по каждой метрике</h2>{laboratory?.provenance?.metric_explanations ? Object.entries(laboratory.provenance.metric_explanations).map(([key, explanation]) => <details className="evidence-details" key={key}><summary>{metricNames[key] ?? key} · {valueOf(score, key).toFixed(1)}</summary><p>{explanation.observed}</p><p><b>Подтверждают:</b> {explanation.positive_models.length ? explanation.positive_models.join(", ") : "ни одна модель"}</p><p><b>Дефицит сигнала:</b> {explanation.deficit_models.length ? explanation.deficit_models.join(", ") : "не обнаружен"}</p>{explanation.unknown_causes ? <p className="method-note">{explanation.unknown_causes}</p> : null}</details>) : <p className="empty-state">Детализация появится после обработки ответов исследования.</p>}</section>
       <section className="explainability-stack" aria-label="Первичные доказательства">
         <article className="panel"><span className="section-label">МЕТОДОЛОГИЯ · v{report.explainability?.methodology_version ?? score.version ?? "—"}</span><h2>Расчёт каждой метрики</h2>{report.explainability ? Object.entries(report.explainability.metrics).map(([key, metric]) => <details className="evidence-details" key={key}><summary>{metricNames[key] ?? key} · {metric.status ? "не рассчитывается" : valueOf(score, key).toFixed(1)}</summary>{metric.status ? <p>Эта метрика не входит в production Scoring v1.0 и не влияет на AI-видимость.</p> : <><p><b>Формула:</b> {metric.formula}</p><p><b>Нормализация:</b> {metric.normalization}</p><p><b>Вес:</b> {metric.weight == null ? "не применяется" : `${metric.weight * 100}%`}</p><pre>{JSON.stringify(metric.inputs, null, 2)}</pre></>}</details>) : <p className="empty-state">Для старого исследования методология не сохранена в report payload.</p>}</article>

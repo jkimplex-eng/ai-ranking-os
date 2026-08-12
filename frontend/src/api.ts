@@ -5,6 +5,7 @@ export type WizardPayload = {
   brand: string;
   website_url: string;
   brand_profile?: BrandProfile;
+  competitors?: Array<{ name: string; website_url?: string }>;
   models?: ModelSelection[];
   routing_profile: "FAST" | "BALANCED" | "HIGH_QUALITY" | "FREE" | "PRIVATE" | "ENTERPRISE";
   languages: string[];
@@ -30,6 +31,7 @@ export type WizardReview = {
   query_catalog: Array<{ id: string; cluster: string; intent: string; text: string }>;
   task_count: number;
   brand_profile: BrandProfile;
+  competitor_profiles: BrandProfile[];
 };
 export type ReportResult = {
   research: { id: number; title: string; status: string };
