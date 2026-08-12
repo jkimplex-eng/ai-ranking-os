@@ -35,6 +35,8 @@ test("wizard transparently refreshes an expired access token", async ({ page }) 
           estimated_cost_usd: 0, estimated_time_ms: 20000,
         };
       }
+    } else if (path.endsWith("/router/models")) {
+      json = { items: [{ id: "qwen-test", provider: "ollama", display_name: "Qwen", version: "2.5", status: "ACTIVE", tier: "FREE", capabilities: ["chat"], availability: 1, pricing: { input_per_million: 0, output_per_million: 0 } }], total: 1 };
     } else if (path.endsWith("/research") || path.endsWith("/providers")) {
       json = [];
     } else if (path.endsWith("/system/health")) {
@@ -49,6 +51,10 @@ test("wizard transparently refreshes an expired access token", async ({ page }) 
   await page.getByRole("button", { name: "Войти" }).click();
   await page.getByRole("button", { name: "Проверить бренд" }).click();
   await page.getByLabel("Название бренда").fill("Acme");
+  await page.getByRole("button", { name: /Продолжить/ }).click();
+  await page.getByRole("button", { name: /Продолжить/ }).click();
+  await page.getByRole("button", { name: /Продолжить/ }).click();
+  await page.getByRole("button", { name: /Qwen/ }).click();
   await page.getByRole("button", { name: /Продолжить/ }).click();
   await page.getByRole("button", { name: /Продолжить/ }).click();
   await page.getByRole("button", { name: /Продолжить/ }).click();
@@ -91,13 +97,13 @@ test("authenticated routes survive refresh and browser history", async ({ page }
   await page.getByLabel("Email").fill("admin@example.com");
   await page.getByLabel("Пароль").fill("strong-password");
   await page.getByRole("button", { name: "Войти" }).click();
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Настройки" }).click();
   await expect(page).toHaveURL(/\/settings$/);
   await expect(page.getByRole("heading", { name: "Настройки" })).toBeVisible();
   await page.reload();
   await expect(page).toHaveURL(/\/settings$/);
   await expect(page.getByRole("heading", { name: "Настройки" })).toBeVisible();
-  await page.getByRole("button", { name: "Dashboard" }).click();
+  await page.getByRole("button", { name: "Обзор" }).click();
   await expect(page).toHaveURL(/\/$/);
   await page.goBack();
   await expect(page).toHaveURL(/\/settings$/);
@@ -105,21 +111,21 @@ test("authenticated routes survive refresh and browser history", async ({ page }
   await expect(page).toHaveURL(/\/$/);
 
   const routes = [
-    ["Getting Started", "/getting-started", "Начните с первого результата"],
-    ["Research", "/research", "Исследования"],
-    ["Reports", "/reports", "Отчёты"],
-    ["Recommendations", "/recommendations", "Рекомендации"],
-    ["Knowledge Graph", "/knowledge-graph", "Knowledge Graph"],
-    ["Competitors", "/competitors", "Конкуренты"],
-    ["History", "/history", "История"],
-    ["AI Providers", "/providers", "AI Providers"],
-    ["Product Analytics", "/product-analytics", "Product Analytics"],
-    ["Notifications", "/notifications", "Уведомления"],
-    ["Organizations", "/organizations", "Организация"],
-    ["Feedback", "/feedback", "Feedback"],
-    ["User Profile", "/profile", "Профиль"],
-    ["Settings", "/settings", "Настройки"],
-    ["Admin Console", "/admin", "Admin Console"],
+    ["Начало работы", "/getting-started", "Начните с первого результата"],
+    ["Исследования", "/research", "Исследования"],
+    ["Отчёты", "/reports", "Отчёты"],
+    ["Рекомендации", "/recommendations", "Рекомендации"],
+    ["Граф знаний", "/knowledge-graph", "Граф знаний"],
+    ["Конкуренты", "/competitors", "Конкуренты"],
+    ["История", "/history", "История"],
+    ["Провайдеры ИИ", "/providers", "AI Providers"],
+    ["Аналитика продукта", "/product-analytics", "Product Analytics"],
+    ["Уведомления", "/notifications", "Уведомления"],
+    ["Организации", "/organizations", "Организация"],
+    ["Обратная связь", "/feedback", "Обратная связь"],
+    ["Профиль", "/profile", "Профиль"],
+    ["Настройки", "/settings", "Настройки"],
+    ["Администрирование", "/admin", "Admin Console"],
   ] as const;
   for (const [link, path, heading] of routes) {
     await page.getByRole("navigation").getByRole("button").filter({ hasText: link }).click();

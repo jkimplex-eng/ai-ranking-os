@@ -19,6 +19,7 @@ import {
   type ReportResult,
   type ResearchItem,
   type RouterHistoryItem,
+  type RouterModel,
   type SimulationItem,
   type SystemProviderItem,
   type WorkspaceProjectItem,
@@ -236,14 +237,14 @@ function Shell({
   useEffect(() => { api.systemHealth().then((health) => setSystemReady(health.status === "healthy" || health.status === "ready")).catch(() => setSystemReady(false)); }, []);
   const isAdmin = roles.some((role) => ["superadmin", "admin", "organization_admin", "SUPERADMIN", "ADMIN", "ORGANIZATION_ADMIN"].includes(role));
   const navSource = [
-    ["⌂", "Dashboard", "home"], ["→", "Getting Started", "onboarding"],
-    ["◉", "Research", "research"], ["▤", "Reports", "reports"],
-    ["✓", "Recommendations", "recommendations"], ["⌘", "Knowledge Graph", "graph"],
-    ["◇", "Competitors", "competitors"], ["↗", "History", "history"],
-    ["✦", "AI Providers", "providers"], ["◫", "Product Analytics", "analytics"],
-    ["♢", "Notifications", "notifications"], ["◎", "Organizations", "organization"],
-    ["◌", "Feedback", "feedback"], ["♙", "User Profile", "profile"],
-    ["⚙", "Settings", "settings"], ["▦", "Admin Console", "admin"],
+    ["⌂", "Обзор", "home"], ["→", "Начало работы", "onboarding"],
+    ["◉", "Исследования", "research"], ["▤", "Отчёты", "reports"],
+    ["✓", "Рекомендации", "recommendations"], ["⌘", "Граф знаний", "graph"],
+    ["◇", "Конкуренты", "competitors"], ["↗", "История", "history"],
+    ["✦", "Провайдеры ИИ", "providers"], ["◫", "Аналитика продукта", "analytics"],
+    ["♢", "Уведомления", "notifications"], ["◎", "Организации", "organization"],
+    ["◌", "Обратная связь", "feedback"], ["♙", "Профиль", "profile"],
+    ["⚙", "Настройки", "settings"], ["▦", "Администрирование", "admin"],
   ] as const;
   const nav = navSource.filter(([, , target]) => isAdmin || (target !== "admin" && target !== "analytics"));
   return (
@@ -365,9 +366,9 @@ function GraphScreen() {
   const positions = new Map(visible.map((node, index) => { const angle = index * Math.PI * 2 / Math.max(visible.length, 1) - Math.PI / 2; return [node.id, { x: 310 + Math.cos(angle) * 215, y: 230 + Math.sin(angle) * 165 }]; }));
   const selectedNode = graph.nodes.find((node) => node.id === selected);
   const connected = selected == null ? [] : graph.edges.filter((edge) => edge.source_node_id === selected || edge.target_node_id === selected);
-  return <main className="analytics-page graph-page"><header className="analytics-hero"><div><span className="eyebrow">SNAPSHOT #{graph.id} · v{graph.structure_version}</span><h1>Knowledge Graph</h1><p>{graph.node_count} сущностей · {graph.edge_count} связей · {new Date(graph.created_at).toLocaleString("ru-RU")}</p></div></header>
+  return <main className="analytics-page graph-page"><header className="analytics-hero"><div><span className="eyebrow">СНИМОК #{graph.id} · v{graph.structure_version}</span><h1>Граф знаний</h1><p>{graph.node_count} сущностей · {graph.edge_count} связей · {new Date(graph.created_at).toLocaleString("ru-RU")}</p></div></header>
     <section className="analytics-card graph-toolbar"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по имени или алиасу"/><select value={nodeType} onChange={(event) => setNodeType(event.target.value)}><option value="ALL">Все типы</option>{types.map((type) => <option key={type}>{type}</option>)}</select></section>
-    {!visible.length ? <div className="analytics-card empty-state">Сущности по выбранным условиям не найдены.</div> : <section className="graph-real-layout"><article className="analytics-card"><svg viewBox="0 0 620 460" className="network" aria-label="Реальный граф знаний"><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#607899"/></marker></defs>{edges.map((edge) => { const source = positions.get(edge.source_node_id); const target = positions.get(edge.target_node_id); if (!source || !target) return null; return <g key={edge.id}><line x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke="#607899" markerEnd="url(#arrow)"/><title>{edge.edge_type} · confidence {(edge.confidence * 100).toFixed(0)}%</title></g>; })}{visible.map((node) => { const point = positions.get(node.id)!; return <g key={node.id} className="graph-node" onClick={() => setSelected(node.id)}><circle cx={point.x} cy={point.y} r={selected === node.id ? 25 : 19} fill={selected === node.id ? "#3b82f6" : "#263d62"}/><text x={point.x} y={point.y + 34} textAnchor="middle" fill="#c8d4e6" fontSize="11">{node.name}</text><title>{node.node_type} · confidence {(node.confidence * 100).toFixed(0)}%</title></g>; })}</svg>{!edges.length && <p className="empty-state">Связи пока не обнаружены. Показаны только реальные узлы snapshot.</p>}</article><aside className="analytics-card graph-detail">{selectedNode ? <><span className="eyebrow">{selectedNode.node_type}</span><h2>{selectedNode.name}</h2><p>Confidence {(selectedNode.confidence * 100).toFixed(1)}%</p><p>Aliases: {selectedNode.aliases.join(", ") || "нет"}</p><h3>Связи ({connected.length})</h3>{connected.map((edge) => <div className="setting-row" key={edge.id}><span>{edge.edge_type}</span><b>{(edge.confidence * 100).toFixed(0)}%</b></div>)}</> : <p className="empty-state">Выберите узел, чтобы увидеть confidence, алиасы и связи.</p>}</aside></section>}
+    {!visible.length ? <div className="analytics-card empty-state">Сущности по выбранным условиям не найдены.</div> : <section className="graph-real-layout"><article className="analytics-card"><svg viewBox="0 0 620 460" className="network" aria-label="Реальный граф знаний"><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#607899"/></marker></defs>{edges.map((edge) => { const source = positions.get(edge.source_node_id); const target = positions.get(edge.target_node_id); if (!source || !target) return null; return <g key={edge.id}><line x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke="#607899" markerEnd="url(#arrow)"/><title>{edge.edge_type} · уверенность {(edge.confidence * 100).toFixed(0)}%</title></g>; })}{visible.map((node) => { const point = positions.get(node.id)!; return <g key={node.id} className="graph-node" onClick={() => setSelected(node.id)}><circle cx={point.x} cy={point.y} r={selected === node.id ? 25 : 19} fill={selected === node.id ? "#3b82f6" : "#263d62"}/><text x={point.x} y={point.y + 34} textAnchor="middle" fill="#c8d4e6" fontSize="11">{node.name}</text><title>{node.node_type} · уверенность {(node.confidence * 100).toFixed(0)}%</title></g>; })}</svg>{!edges.length && <p className="empty-state">Связи пока не обнаружены. Показаны только реальные узлы снимка.</p>}</article><aside className="analytics-card graph-detail">{selectedNode ? <><span className="eyebrow">{selectedNode.node_type}</span><h2>{selectedNode.name}</h2><p>Уверенность {(selectedNode.confidence * 100).toFixed(1)}%</p><p>Алиасы: {selectedNode.aliases.join(", ") || "нет"}</p><h3>Связи ({connected.length})</h3>{connected.map((edge) => <div className="graph-edge-detail" key={edge.id}><div className="setting-row"><span>{edge.edge_type}</span><b>{(edge.confidence * 100).toFixed(0)}%</b></div><small>{Object.keys(edge.properties ?? {}).length ? `Доказательства: ${JSON.stringify(edge.properties)}` : "Контекст и источник связи не были записаны при построении графа."}</small></div>)}</> : <p className="empty-state">Выберите узел, чтобы увидеть уверенность, алиасы и связи.</p>}</aside></section>}
   </main>;
 }
 
@@ -382,10 +383,10 @@ function RecordsScreen({ kind, onNewResearch }: { kind: RecordsKind; onNewResear
     research: ["Исследования", "Запуски, прогресс и состояние выполнения"],
     reports: ["Отчёты", "Сформированные результаты исследований"],
     recommendations: ["Рекомендации", "Приоритетные действия из последнего исследования"],
-    graph: ["Knowledge Graph", "Реальные сущности и связи последнего snapshot"],
+    graph: ["Граф знаний", "Реальные сущности и связи последнего снимка"],
     competitors: ["Конкуренты", "Конкуренты из проектов рабочего пространства"],
     history: ["История", "Хронология исследований от новых к старым"],
-    feedback: ["Feedback", "Ваши обращения и их текущий статус"],
+    feedback: ["Обратная связь", "Ваши обращения и их текущий статус"],
     profile: ["Профиль", "Данные текущей авторизованной учётной записи"],
   };
   useEffect(() => {
@@ -415,7 +416,7 @@ function RecordsScreen({ kind, onNewResearch }: { kind: RecordsKind; onNewResear
     };
     load().then(setRecords).catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки")).finally(() => setLoading(false));
   }, [kind]);
-  return <main className="analytics-page records-page"><header className="analytics-hero"><div><span className="eyebrow">REAL DATA</span><h1>{titles[kind][0]}</h1><p>{titles[kind][1]}</p></div>{kind === "research" && <button className="primary-action" onClick={onNewResearch}>Новое исследование</button>}</header>
+  return <main className="analytics-page records-page"><header className="analytics-hero"><div><span className="eyebrow">РЕАЛЬНЫЕ ДАННЫЕ</span><h1>{titles[kind][0]}</h1><p>{titles[kind][1]}</p></div>{kind === "research" && <button className="primary-action" onClick={onNewResearch}>Новое исследование</button>}</header>
     {error ? <div className="error" role="alert">{error}</div> : loading ? <DashboardSkeleton /> : <section className="records-list">{records.length ? records.map((item) => <article className="analytics-card record-card" key={item.id}><div><small>{item.meta}</small><h2>{item.title}</h2><p>{item.detail}</p></div><Badge tone={item.status === "COMPLETED" || item.status === "ACTIVE" ? "success" : item.status === "FAILED" || item.status === "CRITICAL" ? "danger" : "warning"}>{item.status}</Badge></article>) : <div className="analytics-card empty-state">Данных пока нет. Они появятся после первого действия в этом разделе.</div>}</section>}
   </main>;
 }
@@ -991,31 +992,46 @@ function Wizard({
   onComplete: (result: ReportResult) => void;
   onCancel: () => void;
 }) {
-  const saved = useMemo(() => { try { return JSON.parse(sessionStorage.getItem("research-wizard") ?? "{}") as Partial<{ step: number; brand: string; region: string; language: string; profile: WizardPayload["routing_profile"] }>; } catch { return {}; } }, []);
-  const [step, setStep] = useState(saved.step && saved.step >= 1 && saved.step <= 5 ? saved.step : 1);
+  const saved = useMemo(() => { try { return JSON.parse(sessionStorage.getItem("research-wizard") ?? "{}") as Partial<{ step: number; brand: string; region: string; language: string; profile: WizardPayload["routing_profile"]; scope: WizardPayload["research_scope"]; researchProfile: WizardPayload["research_profile"]; selectedModels: string[] }>; } catch { return {}; } }, []);
+  const [step, setStep] = useState(saved.step && saved.step >= 1 && saved.step <= 8 ? saved.step : 1);
   const [brand, setBrand] = useState(saved.brand ?? "");
   const [region, setRegion] = useState(saved.region ?? "GLOBAL");
   const [language, setLanguage] = useState(saved.language ?? "ru");
   const [profile, setProfile] = useState<WizardPayload["routing_profile"]>(saved.profile ?? "BALANCED");
+  const [scope, setScope] = useState<NonNullable<WizardPayload["research_scope"]>>(saved.scope ?? "SELECTED");
+  const [researchProfile, setResearchProfile] = useState<NonNullable<WizardPayload["research_profile"]>>(saved.researchProfile ?? "UNIVERSAL");
+  const [models, setModels] = useState<RouterModel[]>([]);
+  const [selectedModels, setSelectedModels] = useState<string[]>(saved.selectedModels ?? []);
   const [review, setReview] = useState<WizardReview>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  useEffect(() => { sessionStorage.setItem("research-wizard", JSON.stringify({ step, brand, region, language, profile })); }, [step, brand, region, language, profile]);
+  useEffect(() => { api.routerModels().then((data) => setModels(data.items)).catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить модели")); }, []);
+  useEffect(() => { sessionStorage.setItem("research-wizard", JSON.stringify({ step, brand, region, language, profile, scope, researchProfile, selectedModels })); }, [step, brand, region, language, profile, scope, researchProfile, selectedModels]);
+  const scopedModels = () => {
+    if (scope === "ALL") return models;
+    if (scope === "RUSSIAN") return models.filter((item) => ["yandex", "yandexgpt", "gigachat", "sber"].includes(item.provider.toLowerCase()));
+    if (scope === "FREE") return models.filter((item) => item.tier === "FREE" || (item.pricing.input_per_million === 0 && item.pricing.output_per_million === 0));
+    if (scope === "COMMERCIAL") return models.filter((item) => item.tier !== "FREE" && (item.pricing.input_per_million > 0 || item.pricing.output_per_million > 0));
+    return models.filter((item) => selectedModels.includes(item.id));
+  };
   const payload = (): WizardPayload => ({
     brand,
     routing_profile: profile,
+    models: scopedModels().map((model) => ({ provider: model.provider, model: model.id })),
+    research_scope: scope,
+    research_profile: researchProfile,
     languages: [language],
     regions: [region],
     prompt_code: "ai-visibility",
     research_template_code: "ai-visibility",
   });
   async function next() {
-    if (step < 4) return setStep(step + 1);
+    if (step < 7) return setStep(step + 1);
     setBusy(true);
     setError("");
     try {
       setReview(await api.review(payload()));
-      setStep(5);
+      setStep(8);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Не удалось проверить настройки",
@@ -1044,7 +1060,10 @@ function Wizard({
     "Как называется бренд?",
     "Где вы работаете?",
     "На каком языке искать?",
-    "Как провести исследование?",
+    "Какие ИИ проверить?",
+    "Как исследовать?",
+    "Какой профиль использовать?",
+    "Как выполнить исследование?",
     "Всё готово к исследованию",
   ];
   return (
@@ -1056,20 +1075,20 @@ function Wizard({
         ← {step === 1 ? "На главную" : "Назад"}
       </button>
       <div className="stepper">
-        {[1, 2, 3, 4, 5].map((n) => (
+        {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
           <span key={n} className={n <= step ? "active" : ""}>
             {n < step ? "✓" : n}
           </span>
         ))}
       </div>
       <section className="wizard-focus">
-        <span className="eyebrow">ШАГ {step} ИЗ 5</span>
+        <span className="eyebrow">ШАГ {step} ИЗ 8</span>
         <h1>{titles[step - 1]}</h1>
         <p>
           {step === 1
             ? "Введите название так, как его видят ваши клиенты."
             : step === 4
-              ? "Выберите режим — Router сам найдёт подходящие доступные модели."
+              ? "Выберите конкретные модели из активного реестра платформы."
               : "Это поможет сделать исследование точнее."}
         </p>
         {step === 1 && (
@@ -1120,8 +1139,20 @@ function Wizard({
           </div>
         )}
         {step === 4 && (
+          <div><div className="wizard-inline-actions"><button type="button" onClick={() => setSelectedModels(models.map((item) => item.id))}>Выбрать все</button><button type="button" onClick={() => setSelectedModels([])}>Очистить</button><button type="button" onClick={() => localStorage.setItem("research-model-preset", JSON.stringify(selectedModels))}>Сохранить пресет</button><button type="button" onClick={() => { try { setSelectedModels(JSON.parse(localStorage.getItem("research-model-preset") ?? "[]") as string[]); } catch { setSelectedModels([]); } }}>Загрузить пресет</button></div><div className="model-grid">
+            {models.length ? models.map((model) => <button type="button" className={`model ${selectedModels.includes(model.id) ? "active" : ""}`} key={model.id} onClick={() => setSelectedModels((current) => current.includes(model.id) ? current.filter((id) => id !== model.id) : [...current, model.id])}><span className="provider-icon">{selectedModels.includes(model.id) ? "✓" : "○"}</span><b>{model.display_name}</b><small>{model.provider} · {model.version}</small><i>{model.availability > 0 ? `доступность ${Math.round(model.availability * 100)}%` : "доступность не подтверждена"}</i></button>) : <p className="empty-state">Активные модели не найдены в реестре. Проверьте настройки провайдеров.</p>}
+          </div></div>
+        )}
+        {step === 5 && (
+          <div className="option-list">{[["ALL", "Все модели"], ["SELECTED", "Только выбранные"], ["RUSSIAN", "Только российские"], ["COMMERCIAL", "Только коммерческие"], ["FREE", "Только бесплатные"], ["CONSENSUS", "Консенсус"], ["COMPARE", "Сравнить модели"]].map(([value, label]) => <button type="button" className={scope === value ? "selected" : ""} onClick={() => setScope(value as typeof scope)} key={value}><span>{label}</span><small>{value}</small></button>)}</div>
+        )}
+        {step === 6 && (
+          <div className="option-list">{[["GEO", "GEO"], ["ECOMMERCE", "Электронная коммерция"], ["MEDICAL", "Медицина"], ["BEAUTY", "Красота"], ["ENTERPRISE", "Корпоративный"], ["UNIVERSAL", "Универсальный"]].map(([value, label]) => <button type="button" className={researchProfile === value ? "selected" : ""} onClick={() => setResearchProfile(value as typeof researchProfile)} key={value}><span>{label}</span><small>Профиль сохраняется в методологии</small></button>)}</div>
+        )}
+        {step === 7 && (
           <div className="model-grid routing-profile-grid">
             {routingProfiles.map(([value, title, description, icon]) => {
+              if (!["FAST", "BALANCED", "HIGH_QUALITY"].includes(value)) return null;
               return (
                 <button
                   type="button"
@@ -1138,7 +1169,7 @@ function Wizard({
             })}
           </div>
         )}
-        {step === 5 && (
+        {step === 8 && (
           <div className="review-card">
             <div>
               <span>Бренд</span>
@@ -1156,6 +1187,8 @@ function Wizard({
               <span>Режим</span>
               <b>{routingProfiles.find(([value]) => value === profile)?.[1]}</b>
             </div>
+            <div><span>Охват</span><b>{scope}</b></div>
+            <div><span>Профиль исследования</span><b>{researchProfile}</b></div>
             <p>{review?.prompt}</p>
             <div><span>Выбранные модели</span><b>{review?.selected_models?.join(", ") || review?.provider_models?.join(", ") || "Router не вернул план"}</b></div>
             <div><span>Оценка времени</span><b>{review?.estimated_time_ms ? `${review.estimated_time_ms} ms` : "Не рассчитана"}</b></div>
@@ -1168,12 +1201,12 @@ function Wizard({
           </div>
         )}
         <div className="wizard-actions">
-          {step < 5 ? (
+          {step < 8 ? (
             <button
               onClick={next}
-              disabled={busy || !brand}
+              disabled={busy || !brand || (step === 4 && selectedModels.length === 0) || (step === 7 && scopedModels().length === 0)}
             >
-              {busy ? "Проверяем…" : step === 4 ? "Проверить" : "Продолжить"} →
+              {busy ? "Проверяем…" : step === 7 ? "Проверить" : "Продолжить"} →
             </button>
           ) : (
             <button onClick={run} disabled={busy}>
@@ -1241,6 +1274,9 @@ function Report({
   const visibilityEvidence = metricEvidence("visibility_score", report, evidenceResearch);
   const planFor = (recommendation: NonNullable<ReportShape["recommendations"]>[number]) => result.actionPlan?.items.find((item) => item.recommendation.metric === recommendation.metric);
   const simulationFor = (recommendation: NonNullable<ReportShape["recommendations"]>[number]) => result.simulation?.simulations.find((item) => item.metric === recommendation.metric);
+  const [selectedActions, setSelectedActions] = useState<number[]>([]);
+  const selectedForecasts = result.simulation?.simulations.filter((item) => selectedActions.includes(item.recommendation_id)) ?? [];
+  const simulatedVisibility = Math.min(100, visibility + selectedForecasts.reduce((sum, item) => sum + item.predicted_delta, 0));
   return (
     <main className="page report-page">
       <button className="back-link" onClick={onHome}>
@@ -1262,6 +1298,7 @@ function Report({
       </section>
       <nav className="report-nav" aria-label="Разделы отчёта"><a href="#summary">Сводка</a><a href="#models">Модели</a><a href="#entities">Сущности</a><a href="#findings">Выводы</a><a href="#sources">Источники</a><a href="#graph">Граф</a><a href="#timeline">Хронология</a><a href="#actions">План действий</a></nav>
       <section id="summary" className="panel report-proof"><div><span>Как сформирована оценка</span><strong>{visibility.toFixed(1)}</strong></div><dl><div><dt>Моделей</dt><dd>{models.length}</dd></div><div><dt>Ответов</dt><dd>{responses.length}</dd></div><div><dt>Сущностей</dt><dd>{report.detected_entities?.length ?? 0}</dd></div><div><dt>Рекомендаций</dt><dd>{report.recommendations?.length ?? 0}</dd></div><div><dt>Исследование</dt><dd>#{result.research.id}</dd></div><div><dt>Алгоритм</dt><dd>{String(score.version ?? "не указан")}</dd></div></dl><details><summary>Показать расчёт</summary>{visibilityEvidence.lines.map((line) => <p key={line}>{line}</p>)}<code>{visibilityEvidence.formula}</code></details></section>
+      <section className="panel research-lab-section"><span className="section-label">ПОЧЕМУ ПОЛУЧИЛИСЬ ТАКИЕ ОЦЕНКИ</span><h2>Наблюдаемые причины по каждой метрике</h2>{laboratory?.provenance?.metric_explanations ? Object.entries(laboratory.provenance.metric_explanations).map(([key, explanation]) => <details className="evidence-details" key={key}><summary>{metricNames[key] ?? key} · {valueOf(score, key).toFixed(1)}</summary><p>{explanation.observed}</p><p><b>Подтверждают:</b> {explanation.positive_models.length ? explanation.positive_models.join(", ") : "ни одна модель"}</p><p><b>Дефицит сигнала:</b> {explanation.deficit_models.length ? explanation.deficit_models.join(", ") : "не обнаружен"}</p>{explanation.unknown_causes ? <p className="method-note">{explanation.unknown_causes}</p> : null}</details>) : <p className="empty-state">Детализация появится после обработки ответов исследования.</p>}</section>
       <section className="explainability-stack" aria-label="Первичные доказательства">
         <article className="panel"><span className="section-label">МЕТОДОЛОГИЯ · v{report.explainability?.methodology_version ?? score.version ?? "—"}</span><h2>Расчёт каждой метрики</h2>{report.explainability ? Object.entries(report.explainability.metrics).map(([key, metric]) => <details className="evidence-details" key={key}><summary>{metricNames[key] ?? key} · {metric.status ? "не рассчитывается" : valueOf(score, key).toFixed(1)}</summary>{metric.status ? <p>Эта метрика не входит в production Scoring v1.0 и не влияет на AI-видимость.</p> : <><p><b>Формула:</b> {metric.formula}</p><p><b>Нормализация:</b> {metric.normalization}</p><p><b>Вес:</b> {metric.weight == null ? "не применяется" : `${metric.weight * 100}%`}</p><pre>{JSON.stringify(metric.inputs, null, 2)}</pre></>}</details>) : <p className="empty-state">Для старого исследования методология не сохранена в report payload.</p>}</article>
         <article className="panel"><span className="section-label">КАТАЛОГ ЗАПРОСОВ</span><h2>На основании каких запросов рассчитан рейтинг</h2>{report.explainability?.prompts.length ? report.explainability.prompts.map((prompt) => <details className="evidence-details" key={prompt.uuid}><summary>{prompt.provider}/{prompt.model} · ответ #{prompt.response_id}</summary><p><b>UUID:</b> {prompt.uuid}</p><p><b>Язык:</b> {String(prompt.language ?? "не записан")} · <b>Страна:</b> {String(prompt.country ?? "не записана")}</p><pre className="raw-evidence">{prompt.text || "Текст запроса не был записан"}</pre></details>) : <p className="empty-state">Запросы не были записаны для этого исследования.</p>}</article>
@@ -1337,6 +1374,7 @@ function Report({
         </div>
         {report.recommendations?.length ? report.recommendations.map((recommendation, index) => <RecommendationCard recommendation={recommendation} plan={planFor(recommendation)} simulation={simulationFor(recommendation)} key={`${recommendation.explanation}-${index}`} />) : <div className="empty-state">Рекомендации не сформированы: все правила v1 пройдены либо недостаточно данных.</div>}
       </section>
+      <section className="panel research-lab-section"><span className="section-label">СИМУЛЯТОР ДЕЙСТВИЙ</span><h2>Прогноз при выполнении выбранных рекомендаций</h2><p>Детерминированный прогноз версии {result.simulation?.model_version ?? "не рассчитан"}. Это ожидаемый эффект, а не обещание результата.</p>{result.simulation?.simulations.length ? <><div className="simulator-list">{result.simulation.simulations.map((item) => { const recommendation = report.recommendations?.find((candidate) => candidate.id === item.recommendation_id); return <label key={item.recommendation_id}><input type="checkbox" checked={selectedActions.includes(item.recommendation_id)} onChange={() => setSelectedActions((current) => current.includes(item.recommendation_id) ? current.filter((id) => id !== item.recommendation_id) : [...current, item.recommendation_id])} /><span>{recommendation?.explanation ?? `Рекомендация #${item.recommendation_id}`}</span><b>прогноз +{item.predicted_delta.toFixed(1)}</b></label>; })}</div><div className="simulation-total"><span>AI-видимость</span><strong>{visibility.toFixed(1)} → {simulatedVisibility.toFixed(1)}</strong><small>Выбрано действий: {selectedActions.length}</small></div></> : <p className="empty-state">Прогнозы не рассчитаны. Сначала сформируйте рекомендации и симуляцию.</p>}</section>
       <section className="report-footer panel">
         <div>
           <span>Сущности</span>

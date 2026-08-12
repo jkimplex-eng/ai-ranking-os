@@ -99,6 +99,12 @@ def test_laboratory_exposes_exact_provenance_without_model_score(client: TestCli
     assert payload["sources"][0]["domain"] == "example.com"
     assert payload["sources"][0]["authority"] is None
     assert payload["graph"]["status"] == "NOT_LINKED"
+    explanations = payload["provenance"]["metric_explanations"]
+    assert explanations["mention_score"]["positive_models"] == ["openai/gpt-test"]
+    assert explanations["citation_score"]["source_count"] == 1
+    assert explanations["recommendation_score"]["cause_status"] == (
+        "OBSERVED_RESPONSE_SIGNAL"
+    )
     assert {event["type"] for event in payload["timeline"]} >= {
         "RESEARCH_CREATED",
         "TASK_CREATED",

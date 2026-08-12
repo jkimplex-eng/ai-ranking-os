@@ -76,6 +76,7 @@ class ResearchLaboratoryService:
             )
         sources = self._sources(source_rows, response_map, total)
         entities = self._entities(entity_rows, response_map, source_rows)
+        evidence["metric_explanations"] = self._metric_explanations(models, sources)
         graph = self._graph(research)
         timeline = self._timeline(research, responses, report, graph)
         publications = (
@@ -352,6 +353,53 @@ class ResearchLaboratoryService:
             payload["evidence_status"] = "OBSERVED_TRIGGER"
             result.append(payload)
         return result
+
+    @staticmethod
+    def _metric_explanations(
+        models: list[dict[str, Any]], sources: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        total = len(models)
+        mentioned = [item for item in models if item["signals"]["mentioned"]]
+        recommended = [item for item in models if item["signals"]["recommended"]]
+        cited = [item for item in models if item["signals"]["citation_count"]]
+
+        def names(items: list[dict[str, Any]]) -> list[str]:
+            return sorted(f"{item['provider']}/{item['model']}" for item in items)
+
+        return {
+            "mention_score": {
+                "observed": f"Бренд упомянут в {len(mentioned)} из {total} ответов.",
+                "positive_models": names(mentioned),
+                "deficit_models": names([item for item in models if item not in mentioned]),
+                "cause_status": "OBSERVED_RESPONSE_SIGNAL",
+            },
+            "recommendation_score": {
+                "observed": f"Рекомендация обнаружена в {len(recommended)} из {total} ответов.",
+                "positive_models": names(recommended),
+                "deficit_models": names([item for item in models if item not in recommended]),
+                "cause_status": "OBSERVED_RESPONSE_SIGNAL",
+                "unknown_causes": (
+                    "Причины отсутствия рекомендации нельзя утверждать без прямого "
+                    "обоснования в ответе модели."
+                ),
+            },
+            "citation_score": {
+                "observed": (
+                    f"Найдено {sum(item['signals']['citation_count'] for item in models)} "
+                    f"цитат в {len(cited)} из {total} ответов."
+                ),
+                "positive_models": names(cited),
+                "deficit_models": names([item for item in models if item not in cited]),
+                "source_count": len(sources),
+                "cause_status": "OBSERVED_RESPONSE_SIGNAL",
+            },
+            "coverage_score": {
+                "observed": f"Получены сохранённые ответы от {total} моделей/запусков.",
+                "positive_models": names(models),
+                "deficit_models": [],
+                "cause_status": "OBSERVED_EXECUTION_SIGNAL",
+            },
+        }
 
     @staticmethod
     def _timeline(

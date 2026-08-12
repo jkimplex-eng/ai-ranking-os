@@ -187,6 +187,10 @@ class ProductPipeline:
                     "regions": payload.regions,
                     "prompt_code": payload.prompt_code,
                     "research_template_code": payload.research_template_code,
+                    "research_scope": payload.research_scope,
+                    "research_profile": payload.research_profile,
+                    "routing_profile": payload.routing_profile,
+                    "selected_models": [item.model_dump() for item in payload.models],
                     "pipeline": review.pipeline,
                 },
             )
@@ -292,6 +296,7 @@ class ProductPipeline:
             "brand": payload.brand,
             "language": ", ".join(payload.languages),
             "region": ", ".join(payload.regions),
+            "research_profile": payload.research_profile,
             **payload.variables,
         }
 

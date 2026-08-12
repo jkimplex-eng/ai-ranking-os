@@ -128,6 +128,14 @@ class WizardRequest(BaseModel):
     regions: list[str] = Field(default_factory=lambda: ["GLOBAL"], min_length=1)
     prompt_code: str = "ai-visibility"
     research_template_code: str = "ai-visibility"
+    research_scope: str = Field(
+        default="SELECTED",
+        pattern=r"^(ALL|SELECTED|RUSSIAN|COMMERCIAL|FREE|CONSENSUS|COMPARE)$",
+    )
+    research_profile: str = Field(
+        default="UNIVERSAL",
+        pattern=r"^(GEO|ECOMMERCE|MEDICAL|BEAUTY|ENTERPRISE|UNIVERSAL)$",
+    )
     variables: dict[str, str] = Field(default_factory=dict)
 
 

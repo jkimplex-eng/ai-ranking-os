@@ -95,6 +95,8 @@ def test_skinjestique_end_to_end_wizard(client: TestClient) -> None:
         "regions": ["GLOBAL"],
         "prompt_code": "ai-visibility",
         "research_template_code": "ai-visibility",
+        "research_scope": "SELECTED",
+        "research_profile": "BEAUTY",
     }
     review = client.post("/research/wizard/review", json=payload)
     assert review.status_code == 200
@@ -105,6 +107,11 @@ def test_skinjestique_end_to_end_wizard(client: TestClient) -> None:
     body = completed.json()
     assert body["research"]["status"] == "COMPLETED", [
         item["error_message"] for item in body["report"]["responses"]
+    ]
+    assert body["research"]["metadata"]["research_scope"] == "SELECTED"
+    assert body["research"]["metadata"]["research_profile"] == "BEAUTY"
+    assert body["research"]["metadata"]["selected_models"] == [
+        {"provider": "openai", "model": "gpt-4o-mini"}
     ]
     report = body["report"]
     assert report["score"]["visibility_score"] >= 0

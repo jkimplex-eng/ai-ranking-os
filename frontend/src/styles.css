@@ -83,3 +83,10 @@
 .lab-timeline time, .lab-timeline span { color: var(--muted); }
 .method-note { padding: 14px; border-left: 3px solid #eab308; background: rgba(234, 179, 8, .08); }
 @media (max-width: 760px) { .lab-timeline li { grid-template-columns: 1fr; gap: 4px; } }
+.wizard-inline-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.wizard-inline-actions button { width: auto; padding: 9px 13px; }
+.simulator-list { display: grid; gap: 10px; }
+.simulator-list label { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 13px; border: 1px solid var(--border); border-radius: 12px; }
+.simulator-list input { width: 18px; height: 18px; }
+.simulation-total { display: flex; align-items: baseline; gap: 18px; margin-top: 18px; padding: 18px; background: var(--background); border-radius: 12px; }
+.simulation-total strong { font-size: 2rem; }

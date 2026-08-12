@@ -9,7 +9,10 @@ export type WizardPayload = {
   regions: string[];
   prompt_code: string;
   research_template_code: string;
+  research_scope?: "ALL" | "SELECTED" | "RUSSIAN" | "COMMERCIAL" | "FREE" | "CONSENSUS" | "COMPARE";
+  research_profile?: "GEO" | "ECOMMERCE" | "MEDICAL" | "BEAUTY" | "ENTERPRISE" | "UNIVERSAL";
 };
+export type RouterModel = { id: string; provider: string; display_name: string; version: string; status: string; tier: string; capabilities: string[]; availability: number; pricing: { input_per_million: number; output_per_million: number } };
 export type WizardReview = {
   valid: boolean;
   title: string;
@@ -33,6 +36,7 @@ export type ReportResult = {
   laboratory?: ResearchLaboratory;
 };
 export type ResearchLaboratory = {
+  provenance: { metric_explanations?: Record<string, { observed: string; positive_models: string[]; deficit_models: string[]; cause_status: string; unknown_causes?: string; source_count?: number }> } & Record<string, unknown>;
   models: Array<Record<string, unknown> & {
     response_id: number; provider: string; model: string; prompt: string;
     content: string; language?: string | string[]; region?: string | string[];
@@ -214,6 +218,7 @@ export class ApiClient {
     });
   }
   listResearch() { return this.request<ResearchItem[]>("/research"); }
+  routerModels() { return this.request<{ items: RouterModel[]; total: number }>("/router/models?page_size=100&status=ACTIVE&capability=chat"); }
   researchTasks(researchId: number) { return this.request<ResearchTaskItem[]>(`/research-tasks?research_id=${researchId}`); }
   researchLaboratory(researchId: number) { return this.request<ResearchLaboratory>(`/research/${researchId}/laboratory`); }
   execution(id: number) { return this.request<ExecutionItem>(`/execution/${id}`); }
