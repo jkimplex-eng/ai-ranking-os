@@ -259,6 +259,20 @@ class BrandIntelligenceEngine:
     @staticmethod
     def _categories(pages: list[ParsedPage], products: list[dict[str, Any]]) -> list[str]:
         values = {str(item["category"]).strip() for item in products if item.get("category")}
+        product_text = " ".join(str(item.get("name") or "") for item in products).casefold()
+        taxonomy = {
+            "Сыворотки": ("сыворот", "serum"),
+            "Кремы": ("крем", "cream"),
+            "Тонеры": ("тонер", "toner"),
+            "Маски": ("маск", "mask"),
+            "Средства очищения": ("очищ", "cleanser", "пудр", "пенк"),
+            "SPF-защита": ("spf", "sunscreen"),
+        }
+        values.update(
+            category
+            for category, markers in taxonomy.items()
+            if any(marker in product_text for marker in markers)
+        )
         for page in pages:
             if page.url.casefold().endswith(".html"):
                 continue

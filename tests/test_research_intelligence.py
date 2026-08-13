@@ -28,6 +28,7 @@ def test_brand_intelligence_extracts_product_price_and_attributes() -> None:
     assert profile["products"][0]["price"] == "1900"
     assert "Сыворотки" in profile["categories"]
     assert "гиалуроновая кислота" in profile["attributes"]
+    assert "Сыворотки" in profile["categories"]
 
 
 def test_query_map_uses_brand_products_for_narrow_queries() -> None:

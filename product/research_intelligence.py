@@ -42,9 +42,7 @@ class QueryMapBuilder:
         is_english = language.casefold().startswith("en")
         category = variables.get("category") or self._category(profile, english=is_english)
         audience = variables.get("audience") or ("customer" if is_english else "покупателя")
-        product = variables.get("product") or (
-            "the brand's products" if is_english else "продукты бренда"
-        )
+        product = variables.get("product") or ("products" if is_english else "товары")
         if is_english:
             templates = [
                 ("brand", "awareness", f"What is {brand} and what is it known for?"),
