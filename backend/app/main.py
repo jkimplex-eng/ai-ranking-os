@@ -51,6 +51,7 @@ from product_analytics.repository import ProductAnalyticsRepository
 from product_analytics.router import router as product_analytics_router
 from product_analytics.service import ProductAnalyticsService
 from project_monitoring.router import router as project_monitoring_router
+from provider_connections.router import router as provider_connections_router
 from provider_discovery.router import router as provider_discovery_router
 from provider_recommendation.router import router as provider_recommendation_router
 from provider_registry.router import router as provider_registry_router
@@ -129,6 +130,7 @@ app.include_router(recommendation_templates_router)
 app.include_router(query_executor_router)
 app.include_router(llm_router)
 app.include_router(providers_router)
+app.include_router(provider_connections_router)
 app.include_router(model_benchmark_router)
 app.include_router(model_evaluation_router)
 app.include_router(notification_center_router)

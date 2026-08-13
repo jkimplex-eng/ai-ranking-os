@@ -14,6 +14,7 @@ import {
   type NotificationItem,
   type OrganizationItem,
   type ProviderItem,
+  type ProviderConnection,
   type RecommendationItem,
   type ReportCatalogItem,
   type ReportResult,
@@ -595,11 +596,19 @@ function ProvidersDashboard() {
   const [history, setHistory] = useState<RouterHistoryItem[]>([]);
   const [providerStats, setProviderStats] = useState<Record<string, Record<string, number>>>({});
   const [costs, setCosts] = useState<Record<string, number>>({});
+  const [connections, setConnections] = useState<ProviderConnection[]>([]);
+  const [apiKey, setApiKey] = useState("");
+  const [providerHint, setProviderHint] = useState("");
+  const [showHint, setShowHint] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const reloadConnections = () => api.providerConnections().then(setConnections);
   useEffect(() => {
-    Promise.all([api.listProviders(), api.routerStatus(), api.systemProviders(), api.routerHistory(), api.listResearch()])
-      .then(async ([items, status, system, routerHistory, research]) => {
+    Promise.all([api.listProviders(), api.routerStatus(), api.systemProviders(), api.routerHistory(), api.listResearch(), api.providerConnections()])
+      .then(async ([items, status, system, routerHistory, research, connectionItems]) => {
         setProviders(items); setCosts(status.costs); setRuntime(system.providers); setHistory(routerHistory.items);
+        setConnections(connectionItems);
         const latest = [...research].sort((a, b) => b.id - a.id)[0];
         if (latest) {
           const report = await api.finalReport(latest.id) as ReportShape;
@@ -608,6 +617,23 @@ function ProvidersDashboard() {
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки"));
   }, []);
+  const connect = async (event: React.FormEvent) => {
+    event.preventDefault(); setError(""); setNotice(""); setConnecting(true);
+    try {
+      const connection = await api.connectProvider(apiKey.trim(), providerHint);
+      setApiKey(""); setProviderHint(""); setShowHint(false);
+      setNotice(`${connection.display_name} подключён и проверен. Платные модели отключены.`);
+      await reloadConnections();
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Не удалось подключить API";
+      setError(message); if (message.includes("неоднозначен")) setShowHint(true);
+    } finally { setConnecting(false); }
+  };
+  const disconnect = async (connection: ProviderConnection) => {
+    setError(""); setNotice("");
+    try { await api.disconnectProvider(connection.id); await reloadConnections(); setNotice(`${connection.display_name} отключён.`); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось отключить API"); }
+  };
   const available = providers.filter((item) => item.availability === "READY").length;
   return (
     <main className="page providers-page">
@@ -616,7 +642,21 @@ function ProvidersDashboard() {
           <p>Модели, политики, маршрутизация, стоимость и состояние инфраструктуры.</p></div>
         <Badge tone="success">● {available}/{providers.length || "—"} доступны</Badge>
       </div>
+      <section className="provider-connect panel">
+        <div><span className="eyebrow">ВАШИ API-ПОДКЛЮЧЕНИЯ</span><h2>Добавить универсальный слот</h2><p>Вставьте ключ — система распознает провайдера, проверит доступ и покажет его имя. Ключ шифруется и больше не отображается.</p></div>
+        <form onSubmit={connect} autoComplete="off">
+          <label>API-ключ<input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="Вставьте новый ключ" minLength={8} required autoComplete="new-password" /></label>
+          {showHint && <label>Уточните провайдера<select value={providerHint} onChange={(event) => setProviderHint(event.target.value)} required><option value="">Выберите безопасно</option><option value="openrouter">OpenRouter</option><option value="groq">Groq</option><option value="github">GitHub Models</option><option value="huggingface">Hugging Face</option><option value="cerebras">Cerebras</option><option value="mistral">Mistral</option></select></label>}
+          <button disabled={connecting || apiKey.trim().length < 8}>{connecting ? "Проверяем…" : "Определить и подключить"}</button>
+        </form>
+        <small className="provider-safety">Ключ не отправляется разным компаниям: если формат неоднозначен, приложение попросит выбрать провайдера.</small>
+      </section>
+      {notice && <div className="success-message" role="status">{notice}</div>}
       {error && <div className="error" role="alert">{error}</div>}
+      <section className="connection-slots" aria-label="Подключённые API">
+        {connections.map((connection) => <article className="panel connection-slot" key={connection.id}><span className="provider-logo">{connection.display_name.slice(0,2).toUpperCase()}</span><div><small>API-СЛОТ #{connection.id}</small><h3>{connection.display_name}</h3><p>{connection.masked_key} · только бесплатные модели</p></div><Badge tone={connection.status === "CONNECTED" ? "success" : "warning"}>{connection.status === "CONNECTED" ? "ПОДКЛЮЧЕН" : "НЕДОСТУПЕН"}</Badge><button className="secondary" onClick={() => void disconnect(connection)}>Отключить</button></article>)}
+        {!connections.length && <div className="empty-slot"><b>Свободный API-слот</b><span>Подключённых внешних провайдеров пока нет.</span></div>}
+      </section>
       {!providers.length && !error ? <div className="provider-cards">{[1,2,3].map(i => <Skeleton key={i} />)}</div> : (
         <>
           <section className="provider-summary">

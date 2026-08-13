@@ -80,6 +80,12 @@ export type ProviderItem = {
   streaming: boolean; reasoning: boolean; vision: boolean;
 };
 export type SystemProviderItem = { model_id: string; provider: string; latency_ms: number; circuit_state: string; interface: { available?: boolean; mock?: boolean; checked_at?: string; models?: number | string[]; error?: string } };
+export type ProviderConnection = {
+  id: number; organization_id: number; provider: string; display_name: string;
+  masked_key: string; status: string; free_only: boolean; paid_fallback: boolean;
+  last_checked_at?: string; last_success_at?: string; last_error?: string; created_at: string;
+};
+export type ProviderConnectionTest = { provider: string; status: string; latency_ms: number; models: string[]; free_models: string[]; checked_at: string };
 export type RouterHistoryItem = { id: number; selected_models: string[]; latency_ms: number; estimated_cost_usd: number; error?: string | null; created_at: string };
 export type ProductAnalyticsDashboard = {
   period: "HOURLY" | "DAILY" | "WEEKLY" | "MONTHLY";
@@ -239,6 +245,10 @@ export class ApiClient {
   projectCompetitors(projectId: number) { return this.request<CompetitorItem[]>(`/workspace/projects/${projectId}/competitors`); }
   feedback() { return this.request<FeedbackItem[]>("/feedback"); }
   listProviders() { return this.request<ProviderItem[]>("/providers"); }
+  providerConnections() { return this.request<ProviderConnection[]>("/provider-connections"); }
+  connectProvider(apiKey: string, providerHint?: string) { return this.request<ProviderConnection>("/provider-connections", { method: "POST", body: JSON.stringify({ api_key: apiKey, provider_hint: providerHint || null, free_only: true }) }); }
+  testProviderConnection(id: number) { return this.request<ProviderConnectionTest>(`/provider-connections/${id}/test`, { method: "POST" }); }
+  disconnectProvider(id: number) { return this.request<void>(`/provider-connections/${id}`, { method: "DELETE" }); }
   routerStatus() {
     return this.request<{status: string; costs: Record<string, number>}>('/router/status');
   }

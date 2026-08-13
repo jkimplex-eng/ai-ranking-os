@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     admin_email: str | None = None
     admin_password: str | None = None
     admin_display_name: str = "AI Ranking OS Administrator"
+    provider_secret_key: str | None = None
 
 
 @lru_cache
