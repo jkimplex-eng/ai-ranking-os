@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class ConnectionCreate(BaseModel):
     api_key: str = Field(min_length=8, max_length=4096)
     provider_hint: str | None = Field(default=None, max_length=50)
+    folder_id: str | None = Field(default=None, min_length=8, max_length=100)
     organization_id: int | None = None
     free_only: bool = True
 

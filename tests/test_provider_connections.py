@@ -71,7 +71,7 @@ def test_connection_failure_is_sanitized_and_persisted(get: Mock) -> None:
     )
     connection_service, db = service()
 
-    with pytest.raises(ProviderConnectionError, match="HTTP 401"):
+    with pytest.raises(ProviderConnectionError, match="недействителен"):
         connection_service.create(1, 7, ConnectionCreate(api_key="gsk_invalid-secret"))
 
     stored = db.scalar(select(ProviderConnection))
@@ -79,3 +79,35 @@ def test_connection_failure_is_sanitized_and_persisted(get: Mock) -> None:
     assert stored.status == "UNAVAILABLE"
     assert stored.last_checked_at is not None
     assert "invalid-secret" not in (stored.last_error or "")
+
+
+@patch("provider_connections.service.httpx.post")
+def test_yandex_connection_encrypts_folder_and_uses_yandex_auth(post: Mock) -> None:
+    post.return_value = Mock(json=lambda: {"result": {}}, raise_for_status=lambda: None)
+    connection_service, db = service()
+
+    result = connection_service.create(
+        1,
+        7,
+        ConnectionCreate(
+            api_key="AQVN-not-a-real-secret",
+            provider_hint="yandex",
+            folder_id="b1g-test-folder",
+        ),
+    )
+    stored = db.scalar(select(ProviderConnection))
+
+    assert result.provider == "yandex"
+    assert stored is not None and stored.project_ciphertext
+    assert "b1g-test-folder" not in stored.project_ciphertext
+    assert post.call_args.kwargs["headers"]["Authorization"].startswith("Api-Key ")
+    assert post.call_args.kwargs["headers"]["x-folder-id"] == "b1g-test-folder"
+
+
+def test_yandex_requires_folder_id_before_storing() -> None:
+    connection_service, db = service()
+    with pytest.raises(ProviderConnectionError, match="Folder ID"):
+        connection_service.create(
+            1, 7, ConnectionCreate(api_key="AQVN-secret", provider_hint="yandex")
+        )
+    assert db.scalar(select(ProviderConnection)) is None

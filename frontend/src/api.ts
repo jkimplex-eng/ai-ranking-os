@@ -246,7 +246,7 @@ export class ApiClient {
   feedback() { return this.request<FeedbackItem[]>("/feedback"); }
   listProviders() { return this.request<ProviderItem[]>("/providers"); }
   providerConnections() { return this.request<ProviderConnection[]>("/provider-connections"); }
-  connectProvider(apiKey: string, providerHint?: string) { return this.request<ProviderConnection>("/provider-connections", { method: "POST", body: JSON.stringify({ api_key: apiKey, provider_hint: providerHint || null, free_only: true }) }); }
+  connectProvider(apiKey: string, providerHint?: string, folderId?: string) { return this.request<ProviderConnection>("/provider-connections", { method: "POST", body: JSON.stringify({ api_key: apiKey, provider_hint: providerHint || null, folder_id: folderId || null, free_only: true }) }); }
   testProviderConnection(id: number) { return this.request<ProviderConnectionTest>(`/provider-connections/${id}/test`, { method: "POST" }); }
   disconnectProvider(id: number) { return this.request<void>(`/provider-connections/${id}`, { method: "DELETE" }); }
   routerStatus() {

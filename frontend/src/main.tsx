@@ -599,6 +599,7 @@ function ProvidersDashboard() {
   const [connections, setConnections] = useState<ProviderConnection[]>([]);
   const [apiKey, setApiKey] = useState("");
   const [providerHint, setProviderHint] = useState("");
+  const [folderId, setFolderId] = useState("");
   const [showHint, setShowHint] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [notice, setNotice] = useState("");
@@ -620,8 +621,8 @@ function ProvidersDashboard() {
   const connect = async (event: React.FormEvent) => {
     event.preventDefault(); setError(""); setNotice(""); setConnecting(true);
     try {
-      const connection = await api.connectProvider(apiKey.trim(), providerHint);
-      setApiKey(""); setProviderHint(""); setShowHint(false);
+      const connection = await api.connectProvider(apiKey.trim(), providerHint, folderId.trim());
+      setApiKey(""); setProviderHint(""); setFolderId(""); setShowHint(false);
       setNotice(`${connection.display_name} подключён и проверен. Платные модели отключены.`);
       await reloadConnections();
     } catch (reason) {
@@ -646,8 +647,9 @@ function ProvidersDashboard() {
         <div><span className="eyebrow">ВАШИ API-ПОДКЛЮЧЕНИЯ</span><h2>Добавить универсальный слот</h2><p>Вставьте ключ — система распознает провайдера, проверит доступ и покажет его имя. Ключ шифруется и больше не отображается.</p></div>
         <form onSubmit={connect} autoComplete="off">
           <label>API-ключ<input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="Вставьте новый ключ" minLength={8} required autoComplete="new-password" /></label>
-          {showHint && <label>Уточните провайдера<select value={providerHint} onChange={(event) => setProviderHint(event.target.value)} required><option value="">Выберите безопасно</option><option value="openrouter">OpenRouter</option><option value="groq">Groq</option><option value="github">GitHub Models</option><option value="huggingface">Hugging Face</option><option value="cerebras">Cerebras</option><option value="mistral">Mistral</option></select></label>}
-          <button disabled={connecting || apiKey.trim().length < 8}>{connecting ? "Проверяем…" : "Определить и подключить"}</button>
+          {showHint && <label>Уточните провайдера<select value={providerHint} onChange={(event) => setProviderHint(event.target.value)} required><option value="">Выберите безопасно</option><option value="openrouter">OpenRouter</option><option value="groq">Groq</option><option value="github">GitHub Models</option><option value="huggingface">Hugging Face</option><option value="cerebras">Cerebras</option><option value="mistral">Mistral</option><option value="yandex">YandexGPT</option></select></label>}
+          {providerHint === "yandex" && <label>Folder ID каталога<input value={folderId} onChange={(event) => setFolderId(event.target.value)} placeholder="Например: b1g…" minLength={8} required autoComplete="off" /></label>}
+          <button disabled={connecting || apiKey.trim().length < 8 || (providerHint === "yandex" && folderId.trim().length < 8)}>{connecting ? "Проверяем…" : "Определить и подключить"}</button>
         </form>
         <small className="provider-safety">Ключ не отправляется разным компаниям: если формат неоднозначен, приложение попросит выбрать провайдера.</small>
       </section>

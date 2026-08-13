@@ -47,6 +47,12 @@ PROVIDERS = {
         "credential": "MISTRAL_API_KEY",
         "models_url": "https://api.mistral.ai/v1/models",
     },
+    "yandex": {
+        "display_name": "YandexGPT",
+        "credential": "YANDEX_API_KEY",
+        "project_credential": "YANDEX_FOLDER_ID",
+        "models_url": "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
+    },
 }
 
 
@@ -106,10 +112,15 @@ class ProviderConnectionService:
     ) -> ConnectionRead:
         provider = ProviderDetector.detect(payload.api_key.strip(), payload.provider_hint)
         definition = PROVIDERS[provider]
+        if provider == "yandex" and not payload.folder_id:
+            raise ProviderConnectionError("Для YandexGPT укажите Folder ID каталога")
         existing = self.repository.by_provider(organization_id, provider)
         if existing:
             existing.secret_ciphertext = self.cipher.encrypt(payload.api_key.strip())
             existing.secret_suffix = payload.api_key.strip()[-4:]
+            existing.project_ciphertext = (
+                self.cipher.encrypt(payload.folder_id.strip()) if payload.folder_id else None
+            )
             existing.status = "PENDING_CHECK"
             existing.free_only = payload.free_only
             existing.paid_fallback = False
@@ -124,6 +135,11 @@ class ProviderConnectionService:
                     credential_name=definition["credential"],
                     secret_ciphertext=self.cipher.encrypt(payload.api_key.strip()),
                     secret_suffix=payload.api_key.strip()[-4:],
+                    project_ciphertext=(
+                        self.cipher.encrypt(payload.folder_id.strip())
+                        if payload.folder_id
+                        else None
+                    ),
                     status="PENDING_CHECK",
                     free_only=payload.free_only,
                     paid_fallback=False,
@@ -141,23 +157,49 @@ class ProviderConnectionService:
         checked_at = datetime.now(UTC)
         models: list[str] = []
         try:
-            response = httpx.get(
-                PROVIDERS[item.provider]["models_url"],
-                headers={"Authorization": f"Bearer {key}", "Accept": "application/json"},
-                timeout=15,
-            )
+            if item.provider == "yandex":
+                folder = self._project_value(item)
+                response = httpx.post(
+                    PROVIDERS[item.provider]["models_url"],
+                    headers={
+                        "Authorization": f"Api-Key {key}",
+                        "x-folder-id": folder,
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "modelUri": f"gpt://{folder}/yandexgpt-lite/latest",
+                        "completionOptions": {
+                            "stream": False,
+                            "temperature": 0,
+                            "maxTokens": "1",
+                        },
+                        "messages": [{"role": "user", "text": "ping"}],
+                    },
+                    timeout=20,
+                )
+            else:
+                response = httpx.get(
+                    PROVIDERS[item.provider]["models_url"],
+                    headers={"Authorization": f"Bearer {key}", "Accept": "application/json"},
+                    timeout=15,
+                )
             response.raise_for_status()
             body = response.json()
-            values = body.get("data", body) if isinstance(body, dict) else body
-            models = [
-                str(value.get("id") or value.get("name"))
-                for value in values[:200]
-                if isinstance(value, dict) and (value.get("id") or value.get("name"))
-            ]
+            if item.provider == "yandex":
+                models = ["yandexgpt-lite", "yandexgpt-pro"]
+            else:
+                values = body.get("data", body) if isinstance(body, dict) else body
+                models = [
+                    str(value.get("id") or value.get("name"))
+                    for value in values[:200]
+                    if isinstance(value, dict) and (value.get("id") or value.get("name"))
+                ]
             item.status = "CONNECTED"
             item.last_success_at = checked_at
             item.last_error = None
             credentials.set(item.credential_name, key)
+            if item.provider == "yandex":
+                credentials.set("YANDEX_FOLDER_ID", self._project_value(item))
         except (httpx.HTTPError, ValueError) as error:
             item.status = "UNAVAILABLE"
             item.last_checked_at = checked_at
@@ -181,6 +223,8 @@ class ProviderConnectionService:
     def delete(self, connection_id: int, organization_id: int, user_id: int) -> None:
         item = self._owned(connection_id, organization_id)
         credentials.clear(item.credential_name)
+        if item.provider == "yandex":
+            credentials.clear("YANDEX_FOLDER_ID")
         self.repository.delete(item)
         self.repository.audit(
             organization_id, user_id, "provider_connection.revoked", connection_id
@@ -192,10 +236,24 @@ class ProviderConnectionService:
             raise ProviderConnectionError("Подключение не найдено")
         return item
 
+    def _project_value(self, item: ProviderConnection) -> str:
+        if not item.project_ciphertext:
+            raise ProviderConnectionError("Для YandexGPT не сохранён Folder ID")
+        return self.cipher.decrypt(item.project_ciphertext)
+
     @staticmethod
     def _safe_error(error: Exception) -> str:
         if isinstance(error, httpx.HTTPStatusError):
-            return f"Провайдер отклонил ключ (HTTP {error.response.status_code})"
+            messages = {
+                401: "Ключ недействителен или отозван",
+                402: "Недостаточно средств на аккаунте провайдера",
+                403: "Доступ запрещён: проверьте права ключа, Folder ID или регион сервера",
+                429: "Превышен лимит запросов провайдера",
+            }
+            return messages.get(
+                error.response.status_code,
+                f"Провайдер вернул HTTP {error.response.status_code}",
+            )
         if isinstance(error, httpx.TimeoutException):
             return "Провайдер не ответил за 15 секунд"
         return "Не удалось проверить подключение к провайдеру"

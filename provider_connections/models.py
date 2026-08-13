@@ -20,6 +20,7 @@ class ProviderConnection(Base):
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     credential_name: Mapped[str] = mapped_column(String(100), nullable=False)
     secret_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    project_ciphertext: Mapped[str | None] = mapped_column(Text)
     secret_suffix: Mapped[str] = mapped_column(String(8), nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="CONNECTED")
     free_only: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
