@@ -51,7 +51,10 @@ from product_analytics.repository import ProductAnalyticsRepository
 from product_analytics.router import router as product_analytics_router
 from product_analytics.service import ProductAnalyticsService
 from project_monitoring.router import router as project_monitoring_router
+from provider_connections.crypto import SecretCipher
+from provider_connections.repository import ProviderConnectionRepository
 from provider_connections.router import router as provider_connections_router
+from provider_connections.service import hydrate_provider_credentials
 from provider_discovery.router import router as provider_discovery_router
 from provider_recommendation.router import router as provider_recommendation_router
 from provider_registry.router import router as provider_registry_router
@@ -83,6 +86,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     errors = validate_startup(settings)
     if errors:
         raise RuntimeError("Startup validation failed: " + "; ".join(errors))
+    with SessionLocal() as db:
+        hydrate_provider_credentials(
+            ProviderConnectionRepository(db),
+            SecretCipher(settings.provider_secret_key or settings.auth_jwt_secret),
+        )
     if os.getenv("PROVIDER_CATALOG_URL"):
         from provider_discovery.service import ProviderDiscoveryService
 

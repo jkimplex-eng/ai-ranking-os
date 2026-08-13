@@ -257,3 +257,16 @@ class ProviderConnectionService:
         if isinstance(error, httpx.TimeoutException):
             return "Провайдер не ответил за 15 секунд"
         return "Не удалось проверить подключение к провайдеру"
+
+
+def hydrate_provider_credentials(
+    repository: ProviderConnectionRepository, cipher: SecretCipher
+) -> int:
+    """Restore verified BYOK credentials after an API or worker restart."""
+    restored = 0
+    for item in repository.connected():
+        credentials.set(item.credential_name, cipher.decrypt(item.secret_ciphertext))
+        if item.provider == "yandex" and item.project_ciphertext:
+            credentials.set("YANDEX_FOLDER_ID", cipher.decrypt(item.project_ciphertext))
+        restored += 1
+    return restored

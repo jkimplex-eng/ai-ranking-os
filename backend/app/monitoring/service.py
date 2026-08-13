@@ -114,6 +114,21 @@ def provider_status(db: Session) -> list[dict[str, Any]]:
         for row in db.scalars(select(CircuitBreakerRecord))
     }
     configured = {item["provider"]: item for item in provider_health()}
+    from provider_connections.models import ProviderConnection
+
+    verified = {
+        item.provider: item
+        for item in db.scalars(
+            select(ProviderConnection).where(ProviderConnection.status == "CONNECTED")
+        )
+    }
+    for provider, connection in verified.items():
+        configured[provider] = {
+            "status": "connected",
+            "mock": False,
+            "available": True,
+            "checked_at": connection.last_checked_at,
+        }
     return [
         {
             "model_id": model.id,

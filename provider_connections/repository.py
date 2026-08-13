@@ -18,6 +18,13 @@ class ProviderConnectionRepository:
             )
         )
 
+    def connected(self) -> list[ProviderConnection]:
+        return list(
+            self.db.scalars(
+                select(ProviderConnection).where(ProviderConnection.status == "CONNECTED")
+            )
+        )
+
     def get(self, connection_id: int) -> ProviderConnection | None:
         return self.db.get(ProviderConnection, connection_id)
 

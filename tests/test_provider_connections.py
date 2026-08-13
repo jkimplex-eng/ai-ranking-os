@@ -14,6 +14,7 @@ from provider_connections.service import (
     ProviderConnectionError,
     ProviderConnectionService,
     ProviderDetector,
+    hydrate_provider_credentials,
 )
 
 
@@ -111,3 +112,32 @@ def test_yandex_requires_folder_id_before_storing() -> None:
             1, 7, ConnectionCreate(api_key="AQVN-secret", provider_hint="yandex")
         )
     assert db.scalar(select(ProviderConnection)) is None
+
+
+def test_connected_credentials_are_restored_after_restart() -> None:
+    from backend.app.providers.credentials import credentials
+
+    connection_service, db = service()
+    item = ProviderConnection(
+        organization_id=1,
+        provider="yandex",
+        display_name="YandexGPT",
+        credential_name="YANDEX_API_KEY",
+        secret_ciphertext=connection_service.cipher.encrypt("secret-api-key"),
+        project_ciphertext=connection_service.cipher.encrypt("folder-id-value"),
+        secret_suffix="-key",
+        status="CONNECTED",
+        created_by=7,
+    )
+    db.add(item)
+    db.commit()
+    credentials.clear("YANDEX_API_KEY")
+    credentials.clear("YANDEX_FOLDER_ID")
+
+    restored = hydrate_provider_credentials(
+        ProviderConnectionRepository(db), connection_service.cipher
+    )
+
+    assert restored == 1
+    assert credentials.get("YANDEX_API_KEY") == "secret-api-key"
+    assert credentials.get("YANDEX_FOLDER_ID") == "folder-id-value"
