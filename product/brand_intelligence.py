@@ -260,6 +260,8 @@ class BrandIntelligenceEngine:
     def _categories(pages: list[ParsedPage], products: list[dict[str, Any]]) -> list[str]:
         values = {str(item["category"]).strip() for item in products if item.get("category")}
         for page in pages:
+            if page.url.casefold().endswith(".html"):
+                continue
             for heading in page.headings:
                 lowered = heading.casefold()
                 if any(
