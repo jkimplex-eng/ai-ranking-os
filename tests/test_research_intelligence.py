@@ -8,7 +8,11 @@ from product.research_intelligence import (
 
 
 class FakeFetcher:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
     def fetch(self, url: str) -> tuple[str, str]:
+        self.calls.append(url)
         return (
             url,
             """<html><head><meta name='description' content='Уход для чувствительной кожи'></head>
@@ -28,7 +32,17 @@ def test_brand_intelligence_extracts_product_price_and_attributes() -> None:
     assert profile["products"][0]["price"] == "1900"
     assert "Сыворотки" in profile["categories"]
     assert "гиалуроновая кислота" in profile["attributes"]
-    assert "Сыворотки" in profile["categories"]
+
+
+def test_brand_intelligence_reuses_verified_server_profile() -> None:
+    fetcher = FakeFetcher()
+    engine = BrandIntelligenceEngine(fetcher, max_pages=1, cache_ttl_seconds=60)
+
+    first = engine.analyze(brand="Skinjestique", website_url="https://skinjestique.example")
+    second = engine.analyze(brand="Skinjestique", website_url="https://skinjestique.example")
+
+    assert first == second
+    assert fetcher.calls == ["https://skinjestique.example"]
 
 
 def test_query_map_uses_brand_products_for_narrow_queries() -> None:

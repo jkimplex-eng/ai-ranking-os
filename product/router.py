@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from backend.app.database import get_db
 from change_detection.dependencies import build_change_detection
 from notification_center.dependencies import build_notification_service
-from product.brand_intelligence import BrandDiscoveryError, BrandIntelligenceEngine
+from product.brand_intelligence import BrandDiscoveryError, brand_intelligence_engine
 from product.repository import (
     ProductConflictError,
     ProductNotFoundError,
@@ -38,7 +38,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 def build_brand_profile(payload: BrandProfileRequest) -> BrandProfileRead:
     try:
         return BrandProfileRead.model_validate(
-            BrandIntelligenceEngine().analyze(brand=payload.brand, website_url=payload.website_url)
+            brand_intelligence_engine.analyze(brand=payload.brand, website_url=payload.website_url)
         )
     except BrandDiscoveryError as error:
         raise HTTPException(

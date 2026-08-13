@@ -12,6 +12,7 @@ from analytics.repository import SqlAlchemyAnalyticsRepository
 from analytics.schemas import AnalyticsFilter, AnalyticsQuery, FilterOperator, Statistic
 from analytics.service import AnalyticsService
 from backend.app.analytics_source import PlatformAnalyticsDataSource
+from backend.app.config import get_settings
 from backend.app.llm_router.ports import ProviderState
 from backend.app.llm_router.registry import ModelRepository, RegistryNotFoundError, ensure_seeded
 from backend.app.providers.readiness import RuntimeProviderReadiness
@@ -34,7 +35,7 @@ from insights.repository import SqlAlchemyInsightRepository
 from insights.schemas import InsightRequest
 from insights.service import InsightService
 from notification_center.ports import NotificationPort
-from product.brand_intelligence import BrandIntelligenceEngine
+from product.brand_intelligence import brand_intelligence_engine
 from product.repository import ProductNotFoundError, PromptRepository, ResearchTemplateRepository
 from product.research_intelligence import (
     CompetitiveInfluenceEngine,
@@ -134,11 +135,17 @@ class ProductPipeline:
         self.notifications = notifications
 
     def review(self, payload: WizardRequest) -> WizardReview:
-        brand_profile = payload.brand_profile or BrandIntelligenceEngine().analyze(
-            brand=payload.brand, website_url=payload.website_url
+        brand_profile = (
+            payload.brand_profile
+            if get_settings().app_env.casefold() != "production" and payload.brand_profile
+            else brand_intelligence_engine.analyze(
+                brand=payload.brand, website_url=payload.website_url
+            )
         )
         competitor_profiles = [
-            BrandIntelligenceEngine().analyze(brand=item["name"], website_url=item["website_url"])
+            brand_intelligence_engine.analyze(
+                brand=item["name"], website_url=item["website_url"]
+            )
             for item in payload.competitors
             if item.get("name") and item.get("website_url")
         ]

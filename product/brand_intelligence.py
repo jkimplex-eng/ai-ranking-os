@@ -4,8 +4,11 @@ import ipaddress
 import json
 import re
 import socket
+import time
+from copy import deepcopy
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
+from threading import RLock
 from typing import Any, Protocol
 from urllib.parse import urljoin, urlparse
 
@@ -128,12 +131,26 @@ class BrandIntelligenceEngine:
         "каталог",
     )
 
-    def __init__(self, fetcher: PageFetcher | None = None, *, max_pages: int = 12) -> None:
+    def __init__(
+        self,
+        fetcher: PageFetcher | None = None,
+        *,
+        max_pages: int = 12,
+        cache_ttl_seconds: float = 600,
+    ) -> None:
         self.fetcher = fetcher or PublicHttpPageFetcher()
         self.max_pages = max_pages
+        self.cache_ttl_seconds = cache_ttl_seconds
+        self._cache: dict[tuple[str, str], tuple[float, dict[str, Any]]] = {}
+        self._cache_lock = RLock()
 
     def analyze(self, *, brand: str, website_url: str) -> dict[str, Any]:
         root_url = self._normalize_url(website_url)
+        cache_key = (brand.strip().casefold(), root_url.casefold())
+        with self._cache_lock:
+            cached = self._cache.get(cache_key)
+            if cached and time.monotonic() - cached[0] < self.cache_ttl_seconds:
+                return deepcopy(cached[1])
         root_host = urlparse(root_url).hostname
         queue = [root_url]
         visited: set[str] = set()
@@ -178,7 +195,7 @@ class BrandIntelligenceEngine:
         products = self._products(pages)
         categories = self._categories(pages, products)
         attributes = self._attributes(pages, products)
-        return {
+        result = {
             "version": self.VERSION,
             "brand": brand.strip(),
             "website_url": root_url,
@@ -194,6 +211,9 @@ class BrandIntelligenceEngine:
                 "Цена и характеристики отсутствуют, если сайт не публикует их в HTML или JSON-LD.",
             ],
         }
+        with self._cache_lock:
+            self._cache[cache_key] = (time.monotonic(), deepcopy(result))
+        return result
 
     @staticmethod
     def _normalize_url(value: str) -> str:
@@ -311,3 +331,8 @@ class BrandIntelligenceEngine:
             for canonical, forms in vocabulary.items()
             if any(form in text for form in forms)
         ]
+
+
+# Reuse a server-verified profile across adjacent wizard calls without trusting
+# data sent back by the browser.
+brand_intelligence_engine = BrandIntelligenceEngine()
