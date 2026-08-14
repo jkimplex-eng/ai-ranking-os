@@ -29,7 +29,7 @@ export type WizardReview = {
   estimated_cost_usd: number;
   estimated_time_ms: number;
   selected_models: string[];
-  query_catalog: Array<{ id: string; cluster: string; intent: string; text: string; buyer_stage?: string; brand_mode?: string }>;
+  query_catalog: Array<{ id: string; cluster: string; intent: string; text: string; buyer_stage?: string; brand_mode?: string; rationale?: string }>;
   task_count: number;
   brand_profile: BrandProfile;
   competitor_profiles: BrandProfile[];

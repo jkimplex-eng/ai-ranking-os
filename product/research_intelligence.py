@@ -16,6 +16,7 @@ class QueryScenario:
     text: str
     buyer_stage: str = "consideration"
     brand_mode: str = "unbranded"
+    rationale: str = ""
 
     def as_dict(self) -> dict[str, str]:
         return {
@@ -25,6 +26,7 @@ class QueryScenario:
             "text": self.text,
             "buyer_stage": self.buyer_stage,
             "brand_mode": self.brand_mode,
+            "rationale": self.rationale,
         }
 
 
@@ -42,6 +44,7 @@ class QueryMapBuilder:
         profile: str,
         variables: dict[str, str],
         brand_profile: dict[str, Any] | None = None,
+        competitor_profiles: list[dict[str, Any]] | None = None,
     ) -> list[QueryScenario]:
         is_english = language.casefold().startswith("en")
         profile_data = brand_profile or {}
@@ -49,6 +52,13 @@ class QueryMapBuilder:
         attributes = [str(item).strip() for item in profile_data.get("attributes", []) if item]
         fallback_category = variables.get("category") or self._category(profile, english=is_english)
         categories = list(dict.fromkeys([*categories, fallback_category]))[:4]
+        products = [item for item in profile_data.get("products", []) if item.get("name")]
+        price_context = self._price_context(products, english=is_english)
+        competitors = [
+            str(item.get("brand") or item.get("name") or "").strip()
+            for item in (competitor_profiles or [])
+            if item.get("brand") or item.get("name")
+        ]
         if is_english:
             needs = list(dict.fromkeys([*attributes, *self._default_needs(profile, True)]))[:4]
             terms = [self._product_term(item, True) for item in categories]
@@ -61,7 +71,7 @@ class QueryMapBuilder:
                     "unbranded",
                 )
                 for index, (term, need) in enumerate(
-                    zip((terms * 9)[:9], (needs * 9)[:9], strict=False)
+                    zip((terms * 7)[:7], (needs * 7)[:7], strict=False)
                 )
             ]
             templates += [
@@ -72,20 +82,20 @@ class QueryMapBuilder:
                     "consideration",
                     "unbranded",
                 )
-                for need in needs
+                for need in needs[:3]
             ]
             templates += [
                 (
                     "price_comparison",
                     "comparison",
                     (
-                        f"Compare the best {term} for {needs[index % len(needs)]} "
-                        "by ingredients, price, and evidence."
+                        f"Which {term} for {needs[index % len(needs)]} offers the best "
+                        f"ingredients and evidence {price_context}?"
                     ),
                     "consideration",
                     "unbranded",
                 )
-                for index, term in enumerate((terms * 3)[:3])
+                for index, term in enumerate((terms * 2)[:2])
             ]
             templates += [
                 (
@@ -105,6 +115,16 @@ class QueryMapBuilder:
                     "validation",
                     "unbranded",
                 ),
+            ]
+            templates += self._competitor_questions(
+                brand=brand,
+                competitors=competitors,
+                category=fallback_category,
+                need=needs[0],
+                price_context=price_context,
+                english=True,
+            )
+            templates += [
                 (
                     "brand_control",
                     "brand",
@@ -138,7 +158,7 @@ class QueryMapBuilder:
                     "unbranded",
                 )
                 for index, (term, need) in enumerate(
-                    zip((terms * 9)[:9], (needs * 9)[:9], strict=False)
+                    zip((terms * 7)[:7], (needs * 7)[:7], strict=False)
                 )
             ]
             templates += [
@@ -149,21 +169,21 @@ class QueryMapBuilder:
                     "consideration",
                     "unbranded",
                 )
-                for need in needs
+                for need in needs[:3]
             ]
             templates += [
                 (
                     "price_comparison",
                     "comparison",
                     (
-                        f"Сравните лучшие {self._comparison_term(term)} для "
-                        f"{needs[index % len(needs)]} по составу, цене и "
-                        "доказательствам эффективности."
+                        f"Какие {self._comparison_term(term)} для "
+                        f"{needs[index % len(needs)]} лучше по составу и доказательствам "
+                        f"эффективности {price_context}?"
                     ),
                     "consideration",
                     "unbranded",
                 )
-                for index, term in enumerate((terms * 3)[:3])
+                for index, term in enumerate((terms * 2)[:2])
             ]
             templates += [
                 (
@@ -183,6 +203,16 @@ class QueryMapBuilder:
                     "validation",
                     "unbranded",
                 ),
+            ]
+            templates += self._competitor_questions(
+                brand=brand,
+                competitors=competitors,
+                category=fallback_category,
+                need=needs[0],
+                price_context=price_context,
+                english=False,
+            )
+            templates += [
                 (
                     "brand_control",
                     "brand",
@@ -207,9 +237,128 @@ class QueryMapBuilder:
                 text=text,
                 buyer_stage=buyer_stage,
                 brand_mode=brand_mode,
+                rationale=self._rationale(cluster, english=is_english),
             )
             for cluster, intent, text, buyer_stage, brand_mode in templates
         ]
+
+    @staticmethod
+    def _price_context(products: list[dict[str, Any]], *, english: bool) -> str:
+        prices: list[float] = []
+        currency = ""
+        for product in products:
+            try:
+                prices.append(float(str(product.get("price") or "").replace(" ", "")))
+                currency = str(product.get("currency") or currency)
+            except ValueError:
+                continue
+        if not prices:
+            return "in the mid-price segment" if english else "в среднем ценовом сегменте"
+        ceiling = int(max(prices) * 1.15 // 100 * 100 + 100)
+        if english:
+            return f"under {ceiling} {currency or 'in local currency'}"
+        unit = "рублей" if currency.casefold() in {"rub", "руб", "₽"} else currency
+        return f"до {ceiling} {unit or 'в местной валюте'}"
+
+    @staticmethod
+    def _competitor_questions(
+        *,
+        brand: str,
+        competitors: list[str],
+        category: str,
+        need: str,
+        price_context: str,
+        english: bool,
+    ) -> list[tuple[str, str, str, str, str]]:
+        rivals = (competitors + ["a category leader", "a popular premium brand"])[:2]
+        if not english:
+            rivals = (competitors + ["лидера категории", "популярного премиального бренда"])[
+                :2
+            ]
+        if english:
+            return [
+                (
+                    "competitor_alternative",
+                    "comparison",
+                    f"What alternatives to {rivals[0]} have similar features {price_context}?",
+                    "consideration",
+                    "comparative",
+                ),
+                (
+                    "competitor_alternative",
+                    "replacement",
+                    f"What should I choose instead of {rivals[1]} for {need}?",
+                    "consideration",
+                    "comparative",
+                ),
+                (
+                    "competitor_comparison",
+                    "comparison",
+                    f"Compare {brand} with {rivals[0]} by price, features, and evidence.",
+                    "validation",
+                    "comparative",
+                ),
+                (
+                    "competitor_comparison",
+                    "comparison",
+                    f"Which {category} brands outperform {brand}, and on which criteria?",
+                    "validation",
+                    "comparative",
+                ),
+            ]
+        return [
+            (
+                "competitor_alternative",
+                "comparison",
+                f"Какие альтернативы {rivals[0]} имеют похожие характеристики {price_context}?",
+                "consideration",
+                "comparative",
+            ),
+            (
+                "competitor_alternative",
+                "replacement",
+                f"Что выбрать вместо {rivals[1]} для {need}?",
+                "consideration",
+                "comparative",
+            ),
+            (
+                "competitor_comparison",
+                "comparison",
+                f"Сравните {brand} и {rivals[0]} по цене, характеристикам и доказательствам.",
+                "validation",
+                "comparative",
+            ),
+            (
+                "competitor_comparison",
+                "comparison",
+                f"Какие бренды категории «{category}» превосходят {brand} и по каким критериям?",
+                "validation",
+                "comparative",
+            ),
+        ]
+
+    @staticmethod
+    def _rationale(cluster: str, *, english: bool) -> str:
+        labels = {
+            "category_discovery": "Checks spontaneous recommendation for a concrete need.",
+            "problem_solution": "Checks whether the brand appears when the buyer states a problem.",
+            "price_comparison": "Checks price and feature competitiveness.",
+            "trust_evidence": "Checks independent authority and evidence signals.",
+            "competitor_alternative": "Checks whether the brand appears as an alternative.",
+            "competitor_comparison": "Checks strengths and weaknesses against competitors.",
+            "brand_control": "Control query measuring direct brand knowledge.",
+        }
+        if english:
+            return labels.get(cluster, "Checks buyer demand.")
+        return {
+            "category_discovery": "Проверяет естественную рекомендацию под конкретную потребность.",
+            "problem_solution": "Проверяет появление бренда при описании проблемы покупателя.",
+            "price_comparison": "Проверяет конкурентоспособность по цене и характеристикам.",
+            "trust_evidence": "Проверяет независимые источники и сигналы доверия.",
+            "competitor_alternative": "Проверяет появление бренда среди альтернатив конкуренту.",
+            "competitor_comparison": "Проверяет сильные и слабые стороны относительно конкурентов.",
+            "brand_control": "Контрольный запрос на прямое знание бренда.",
+        }.get(cluster, "Проверяет покупательский спрос.")
 
     @staticmethod
     def _deduplicate(

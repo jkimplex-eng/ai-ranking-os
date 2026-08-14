@@ -123,7 +123,7 @@ type ReportShape = {
     unsupported_metrics: string[];
     sample_scope?: { query_count: number; response_count: number; successful_response_count: number; failed_response_count: number; provider_model_count: number; languages: string[]; regions: string[]; limitation: string };
   };
-  query_catalog?: Array<{ id: string; cluster: string; intent: string; text: string }>;
+  query_catalog?: Array<{ id: string; cluster: string; intent: string; text: string; buyer_stage?: string; brand_mode?: string; rationale?: string }>;
   research_patterns?: {
     sample: { queries: number; responses: number; successful_responses: number; providers: string[]; models: string[] };
     query_matrix: Array<{ response_id: number; cluster: string; query: string; provider: string; model: string; mentioned: boolean; competitors: string[]; sources: string[] }>;
@@ -1349,7 +1349,7 @@ function Wizard({
             <div><span>Всего проверок</span><b>{customQueries.length * Math.max(scopedModels().length, 1)}</b></div>
             <div><span>Оценка времени</span><b>{review?.estimated_time_ms ? `${review.estimated_time_ms} ms` : "Не рассчитана"}</b></div>
             <div><span>Оценка стоимости</span><b>{review?.estimated_cost_usd != null ? `$${review.estimated_cost_usd.toFixed(6)}` : "Не рассчитана"}</b></div>
-            {customQueries.length ? <details open><summary>Проверить и изменить вопросы покупателей</summary><p className="muted">Большинство вопросов намеренно не содержит название бренда: так мы проверяем, появится ли он в естественной рекомендации.</p>{customQueries.map((query, index) => <div className="query-editor" key={`${index}-${query.slice(0, 24)}`}><textarea aria-label={`Запрос ${index + 1}`} value={query} onChange={(event) => setCustomQueries((items) => items.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} /><button type="button" onClick={() => setCustomQueries((items) => items.filter((_, itemIndex) => itemIndex !== index))}>Удалить</button></div>)}<button type="button" onClick={() => setCustomQueries((items) => [...items, ""])}>Добавить свой вопрос</button></details> : null}
+            {customQueries.length ? <details open><summary>Проверить и изменить вопросы покупателей</summary><p className="muted">Матрица: 70% естественных запросов без бренда, 20% сравнений и 10% контрольных брендовых вопросов.</p>{customQueries.map((query, index) => { const scenario = review?.query_catalog[index]; return <div className="query-editor" key={`${index}-${query.slice(0, 24)}`}><small>{scenario?.brand_mode === "branded" ? "БРЕНДОВЫЙ КОНТРОЛЬ" : scenario?.brand_mode === "comparative" ? "СРАВНЕНИЕ" : "ЕСТЕСТВЕННЫЙ СПРОС"} · {scenario?.rationale ?? "Пользовательский запрос"}</small><textarea aria-label={`Запрос ${index + 1}`} value={query} onChange={(event) => setCustomQueries((items) => items.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} /><button type="button" onClick={() => setCustomQueries((items) => items.filter((_, itemIndex) => itemIndex !== index))}>Удалить</button></div>; })}<button type="button" onClick={() => setCustomQueries((items) => [...items, ""])}>Добавить свой вопрос</button></details> : null}
           </div>
         )}
         {error && (

@@ -1,3 +1,5 @@
+import pytest
+
 from product.brand_intelligence import BrandIntelligenceEngine
 from product.research_intelligence import (
     CompetitiveInfluenceEngine,
@@ -63,8 +65,55 @@ def test_query_map_uses_brand_context_for_narrow_buyer_queries() -> None:
     assert len(catalog) == 20
     assert any("увлажнен" in item.text for item in catalog)
     assert any("цене" in item.text and "доказательствам" in item.text for item in catalog)
-    assert sum("Skinjestique" in item.text for item in catalog) == 2
+    assert sum(item.brand_mode == "branded" for item in catalog) == 2
     assert all("Hydra Serum" not in item.text for item in catalog)
+
+
+@pytest.mark.parametrize(
+    ("profile", "category", "product", "attribute"),
+    [
+        ("BEAUTY", "Сыворотки", "Hydra Serum", "увлажняющий"),
+        ("BEAUTY", "Кремы", "Barrier Cream", "чувствительная кожа"),
+        ("BEAUTY", "Тонеры", "Balance Toner", "ниацинамид"),
+        ("BEAUTY", "Маски", "Recovery Mask", "покраснение"),
+        ("BEAUTY", "SPF-защита", "Daily SPF", "пигментация"),
+        ("ECOMMERCE", "Смартфоны", "Phone X", "надёжность"),
+        ("ECOMMERCE", "Ноутбуки", "Notebook Pro", "автономность"),
+        ("MEDICAL", "Диагностика", "Checkup", "точность"),
+        ("GEO", "Маркетинг", "GEO Audit", "рост видимости"),
+        ("ENTERPRISE", "CRM", "Enterprise CRM", "интеграции"),
+    ],
+)
+def test_adaptive_query_eval_set_keeps_buyer_mix_and_context(
+    profile: str,
+    category: str,
+    product: str,
+    attribute: str,
+) -> None:
+    catalog = QueryMapBuilder().build(
+        brand="Acme",
+        language="ru",
+        region="RU",
+        profile=profile,
+        variables={},
+        brand_profile={
+            "categories": [category],
+            "products": [{"name": product, "price": 2400, "currency": "RUB"}],
+            "attributes": [attribute],
+        },
+        competitor_profiles=[{"brand": "Rival One"}, {"brand": "Rival Two"}],
+    )
+
+    assert len(catalog) == 20
+    assert sum(item.brand_mode == "unbranded" for item in catalog) == 14
+    assert sum(item.brand_mode == "comparative" for item in catalog) == 4
+    assert sum(item.brand_mode == "branded" for item in catalog) == 2
+    assert all(item.rationale for item in catalog)
+    assert len({item.text.casefold() for item in catalog}) == 20
+    assert any("2800" in item.text for item in catalog)
+    assert any("Rival One" in item.text for item in catalog)
+    expected_need = QueryMapBuilder._need_context(attribute).casefold()
+    assert any(expected_need in item.text.casefold() for item in catalog)
 
 
 def test_competitive_influence_matches_price_features_and_marks_correlation() -> None:
@@ -125,9 +174,12 @@ def test_query_map_covers_demand_intents() -> None:
         "problem_solution",
         "price_comparison",
         "trust_evidence",
+        "competitor_alternative",
+        "competitor_comparison",
         "brand_control",
     }
-    assert sum(item.brand_mode == "unbranded" for item in catalog) == 18
+    assert sum(item.brand_mode == "unbranded" for item in catalog) == 14
+    assert sum(item.brand_mode == "comparative" for item in catalog) == 4
     assert sum(item.brand_mode == "branded" for item in catalog) == 2
     assert len({item.id for item in catalog}) == len(catalog)
 
