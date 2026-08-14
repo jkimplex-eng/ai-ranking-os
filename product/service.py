@@ -53,7 +53,7 @@ from research.models import ExtractedEntity, Research, ResearchStatus, ResearchT
 from research.reporting import ReportingService
 from research.repositories import ResearchRepository
 from research.schemas import ResearchCreate, ResearchRunRequest
-from research.scoring import SCORING_VERSION, SCORING_WEIGHTS, response_recommends_target
+from research.scoring import SCORING_VERSION, SCORING_WEIGHTS
 from research.service import run_research
 from trend.research_adapter import build_trend_engine
 
@@ -485,7 +485,16 @@ class FinalReportService:
             )
             for response in responses
         )
-        recommended = sum(response_recommends_target(response, target) for response in responses)
+        # ``base.responses`` contains the public ResponseRead DTO, while extracted
+        # recommendations are returned as a separate collection.  Keep report
+        # composition on that public contract instead of assuming ORM relations.
+        recommended = sum(
+            any(
+                target in item.content.casefold()
+                for item in recommendations_by_response[response.id]
+            )
+            for response in responses
+        )
         citation_count = len(base.citations)
         processed = sum(response.processing_status.value == "PROCESSED" for response in responses)
         unique_models = len(
