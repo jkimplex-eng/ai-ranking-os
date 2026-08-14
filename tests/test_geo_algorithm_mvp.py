@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from pathlib import Path
 from time import perf_counter
 
 import pytest
@@ -269,3 +270,7 @@ def test_batch_prioritization_and_openapi_contract(client: TestClient) -> None:
     assert "/geo/platforms" in paths
     assert "/geo/prompt-sets/{prompt_set_id}/fan-out" in paths
     assert "/api/v1/eis/calculate" in paths
+
+    nginx = Path("deployment/production/nginx/internal.conf").read_text(encoding="utf-8")
+    assert "location /api/v1/eis/" in nginx
+    assert "proxy_pass http://backend_upstream/api/v1/eis/;" in nginx
