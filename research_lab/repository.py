@@ -17,7 +17,12 @@ class PublicationRepository:
         self.db = db
 
     def create(self, payload: PublicationCreate) -> ResearchPublication:
-        item = ResearchPublication(**payload.model_dump(exclude={"url"}), url=str(payload.url))
+        values = payload.model_dump(exclude={"url", "metadata"})
+        item = ResearchPublication(
+            **values,
+            url=str(payload.url),
+            metadata_payload=payload.metadata,
+        )
         self.db.add(item)
         self.db.commit()
         return self.get(item.id)

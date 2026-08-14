@@ -57,8 +57,9 @@ export type ResearchLaboratory = {
   entities: Array<{ canonical_name: string; type: string; aliases: string[]; occurrences: Array<{ response_id: number; provider: string; model: string; confidence: number }>; source_ids: number[]; knowledge_graph_ids: string[] }>;
   graph: { status: string; reason?: string; snapshot_id?: number; version?: string; nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown> & { id: number; source?: string; target?: string; type: string; confidence: number; evidence_status: string }> };
   timeline: Array<{ type: string; at: string; id: number; label: string }>;
-  publications: Array<{ id: number; title: string; url: string; published_at: string; observations: Array<{ id: number; provider: string; model: string; first_observed_at: string; evidence_excerpt: string }> }>;
+  publications: Array<{ id: number; title: string; url: string; channel: string; content_type: string; topic?: string; target_queries: string[]; published_at: string; observations: Array<{ id: number; provider: string; model: string; first_observed_at: string; evidence_excerpt: string }> }>;
 };
+export type PublicationCreatePayload = { entity_id: string; research_id?: number; url: string; content_hash: string; title: string; channel: string; content_type: string; topic?: string; target_queries: string[]; published_at: string };
 export type ActionPlanItem = { recommendation: RecommendationItem; template?: { title: string; description: string; steps: string[]; expected_result: string; estimated_time: string; version: string }; steps: string[]; expected_effect: string; estimated_time?: string };
 export type ActionPlan = { research_id: number; engine_version: string; generated_at: string; items: ActionPlanItem[] };
 export type SimulationItem = { recommendation_id: number; metric: string; current_metric: number; expected_metric_change: number; predicted_visibility: number; predicted_delta: number; confidence_min: number; confidence_expected: number; confidence_max: number; estimated_duration_days: number; model_version: string };
@@ -236,6 +237,7 @@ export class ApiClient {
   routerModels() { return this.request<{ items: RouterModel[]; total: number }>("/router/models?page_size=100&status=ACTIVE&capability=chat"); }
   researchTasks(researchId: number) { return this.request<ResearchTaskItem[]>(`/research-tasks?research_id=${researchId}`); }
   researchLaboratory(researchId: number) { return this.request<ResearchLaboratory>(`/research/${researchId}/laboratory`); }
+  createResearchPublication(payload: PublicationCreatePayload) { return this.request("/research-publications", { method: "POST", body: JSON.stringify(payload) }); }
   execution(id: number) { return this.request<ExecutionItem>(`/execution/${id}`); }
   reports() { return this.request<{ items: ReportCatalogItem[]; total: number }>("/reports?limit=100"); }
   recommendations(researchId: number) { return this.request<{ recommendations: RecommendationItem[] }>(`/research/${researchId}/recommendations`); }

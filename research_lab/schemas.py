@@ -15,6 +15,11 @@ class PublicationCreate(BaseModel):
     url: AnyHttpUrl
     content_hash: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
     title: str = Field(min_length=1, max_length=500)
+    channel: str = Field(default="OWNED", min_length=1, max_length=50)
+    content_type: str = Field(default="ARTICLE", min_length=1, max_length=80)
+    topic: str | None = Field(default=None, max_length=500)
+    target_queries: list[str] = Field(default_factory=list, max_length=100)
+    metadata: dict[str, Any] = Field(default_factory=dict)
     published_at: datetime
 
 
@@ -46,6 +51,11 @@ class PublicationRead(ApiModel):
     url: str
     content_hash: str
     title: str
+    channel: str
+    content_type: str
+    topic: str | None
+    target_queries: list[str]
+    metadata_payload: dict[str, Any]
     published_at: datetime
     created_at: datetime
     observations: list[ObservationRead]

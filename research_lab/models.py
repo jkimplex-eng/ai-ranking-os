@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, Uuid, text
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text, Uuid, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.database import Base
@@ -21,6 +21,11 @@ class ResearchPublication(Base):
     url: Mapped[str] = mapped_column(Text, nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
+    channel: Mapped[str] = mapped_column(String(50), nullable=False, default="OWNED")
+    content_type: Mapped[str] = mapped_column(String(80), nullable=False, default="ARTICLE")
+    topic: Mapped[str | None] = mapped_column(String(500))
+    target_queries: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    metadata_payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False

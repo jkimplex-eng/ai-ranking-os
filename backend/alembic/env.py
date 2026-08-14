@@ -35,6 +35,7 @@ from product import models as product_models  # noqa: F401
 from product_analytics import models as product_analytics_models  # noqa: F401
 from project_monitoring import models as project_monitoring_models  # noqa: F401
 from provider_connections import models as provider_connections_models  # noqa: F401
+from publication_learning import models as publication_learning_models  # noqa: F401
 from query_executor import models as query_executor_models  # noqa: F401
 from query_intent import models as query_intent_models  # noqa: F401
 from rate_limit import models as rate_limit_models  # noqa: F401

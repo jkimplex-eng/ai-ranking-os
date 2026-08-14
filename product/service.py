@@ -46,6 +46,7 @@ from product.research_intelligence import (
 from product.schemas import WizardRequest, WizardReview
 from provider_recommendation.research_adapter import SqlAlchemyResearchUsageSource
 from provider_recommendation.service import SmartProviderRecommendationService
+from publication_learning.service import PublicationLearningService
 from recommendation.engine import RecommendationEngine
 from recommendation.research_adapter import SqlAlchemyResearchScoreAdapter
 from research.models import ExtractedEntity, Research, ResearchStatus, ResearchTask, Response
@@ -320,6 +321,7 @@ class ProductPipeline:
         ]
         research.metadata_payload = {**research.metadata_payload, "product_artifacts": artifacts}
         self.db.commit()
+        PublicationLearningService(self.db).evaluate_followup(research.id)
         if self.change_detector is not None:
             self.change_detector.detect(research.id)
         if self.notifications is not None:
@@ -416,6 +418,11 @@ class FinalReportService:
             competitor_profiles=research.metadata_payload.get("competitor_profiles", []),
             patterns=patterns,
         )
+        publication_learning = (
+            PublicationLearningService(self.db).summary(research.entity_id)
+            if research.entity_id
+            else None
+        )
         return {
             "executive_summary": self._summary(research, score),
             "research": base.research.model_dump(mode="json"),
@@ -439,6 +446,7 @@ class FinalReportService:
             "research_patterns": patterns,
             "geo_opportunities": opportunities,
             "competitive_influence": competitive_influence,
+            "publication_learning": publication_learning,
         }
 
     @staticmethod

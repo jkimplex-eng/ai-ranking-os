@@ -58,6 +58,7 @@ from provider_connections.service import hydrate_provider_credentials
 from provider_discovery.router import router as provider_discovery_router
 from provider_recommendation.router import router as provider_recommendation_router
 from provider_registry.router import router as provider_registry_router
+from publication_learning.router import router as publication_learning_router
 from query_executor.router import router as query_executor_router
 from query_intent.router import router as query_intent_router
 from rate_limit.router import router as rate_limit_router
@@ -131,6 +132,7 @@ app.include_router(product_router)
 app.include_router(product_analytics_router)
 app.include_router(project_monitoring_router)
 app.include_router(research_lab_router)
+app.include_router(publication_learning_router)
 app.include_router(research_router)
 app.include_router(recommendation_router)
 app.include_router(recommendation_simulation_router)
