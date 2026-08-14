@@ -31,6 +31,8 @@ jobs:
   quality:
     name: Ruff and Pytest
     runs-on: ubuntu-latest
+    env:
+      PROVIDER_SECRET_KEY: ci-provider-secret-key-12345678901234567890
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -97,9 +99,21 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Runtime smoke and container healthcheck
         run: |
+          docker network create ai-ranking-ci
+          docker run -d --name ai-ranking-postgres --network ai-ranking-ci \
+            -e POSTGRES_DB=ai_ranking \
+            -e POSTGRES_USER=ai_ranking \
+            -e POSTGRES_PASSWORD=ai_ranking \
+            postgres:16-alpine
+          for attempt in $(seq 1 30); do
+            if docker exec ai-ranking-postgres pg_isready -U ai_ranking -d ai_ranking; then break; fi
+            sleep 1
+          done
           docker run -d --name ai-ranking-api -p 8000:8000 \
+            --network ai-ranking-ci \
             -e WEB_CONCURRENCY=1 \
-            -e RUN_MIGRATIONS=false \
+            -e RUN_MIGRATIONS=true \
+            -e DATABASE_URL=postgresql+psycopg://ai_ranking:ai_ranking@ai-ranking-postgres:5432/ai_ranking \
             -e PROVIDER_SECRET_KEY=ci-provider-secret-key-12345678901234567890 \
             ai-ranking-os:ci
           for attempt in $(seq 1 30); do
