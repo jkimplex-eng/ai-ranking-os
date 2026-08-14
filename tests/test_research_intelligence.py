@@ -5,6 +5,8 @@ from product.research_intelligence import (
     QueryMapBuilder,
     ResearchPatternAnalyzer,
 )
+from product.schemas import WizardRequest
+from product.service import ProductPipeline
 
 
 class FakeFetcher:
@@ -45,7 +47,7 @@ def test_brand_intelligence_reuses_verified_server_profile() -> None:
     assert fetcher.calls == ["https://skinjestique.example"]
 
 
-def test_query_map_uses_brand_products_for_narrow_queries() -> None:
+def test_query_map_uses_brand_context_for_narrow_buyer_queries() -> None:
     catalog = QueryMapBuilder().build(
         brand="Skinjestique",
         language="ru",
@@ -58,10 +60,11 @@ def test_query_map_uses_brand_products_for_narrow_queries() -> None:
             "attributes": ["увлажняющий"],
         },
     )
-    assert any(
-        "Hydra Serum" in item.text and "цене и характеристикам" in item.text for item in catalog
-    )
-    assert any("увлажняющий" in item.text for item in catalog)
+    assert len(catalog) == 20
+    assert any("увлажнен" in item.text for item in catalog)
+    assert any("цене" in item.text and "доказательствам" in item.text for item in catalog)
+    assert sum("Skinjestique" in item.text for item in catalog) == 2
+    assert all("Hydra Serum" not in item.text for item in catalog)
 
 
 def test_competitive_influence_matches_price_features_and_marks_correlation() -> None:
@@ -116,17 +119,16 @@ def test_query_map_covers_demand_intents() -> None:
         profile="BEAUTY",
         variables={"category": "уход за проблемной кожей"},
     )
-    assert len(catalog) == 8
+    assert len(catalog) == 20
     assert {item.cluster for item in catalog} == {
-        "brand",
-        "category",
-        "recommendation",
-        "problem",
-        "comparison",
-        "trust",
-        "commercial",
-        "evidence",
+        "category_discovery",
+        "problem_solution",
+        "price_comparison",
+        "trust_evidence",
+        "brand_control",
     }
+    assert sum(item.brand_mode == "unbranded" for item in catalog) == 18
+    assert sum(item.brand_mode == "branded" for item in catalog) == 2
     assert len({item.id for item in catalog}) == len(catalog)
 
 
@@ -141,6 +143,25 @@ def test_query_map_localizes_default_context_to_english() -> None:
 
     assert all("продукт" not in item.text and "покупател" not in item.text for item in catalog)
     assert any("products and services" in item.text for item in catalog)
+
+
+def test_wizard_accepts_user_edited_buyer_queries() -> None:
+    payload = WizardRequest(
+        brand="Skinjestique",
+        website_url="https://skinjestique.example",
+        languages=["ru"],
+        regions=["RU"],
+        custom_queries=[
+            "Какую сыворотку выбрать для чувствительной кожи?",
+            "Какие средства помогают уменьшить пигментацию?",
+        ],
+    )
+
+    catalog = ProductPipeline._query_catalog(payload)
+
+    assert [item["text"] for item in catalog] == payload.custom_queries
+    assert all(item["cluster"] == "custom_buyer_query" for item in catalog)
+    assert all(item["brand_mode"] == "unbranded" for item in catalog)
 
 
 def test_patterns_and_opportunities_are_evidence_backed() -> None:

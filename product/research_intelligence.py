@@ -14,6 +14,8 @@ class QueryScenario:
     cluster: str
     intent: str
     text: str
+    buyer_stage: str = "consideration"
+    brand_mode: str = "unbranded"
 
     def as_dict(self) -> dict[str, str]:
         return {
@@ -21,13 +23,15 @@ class QueryScenario:
             "cluster": self.cluster,
             "intent": self.intent,
             "text": self.text,
+            "buyer_stage": self.buyer_stage,
+            "brand_mode": self.brand_mode,
         }
 
 
 class QueryMapBuilder:
-    """Build a reproducible demand sample from user-supplied brand context."""
+    """Build natural buyer questions from verified brand and product context."""
 
-    VERSION = "1.0"
+    VERSION = "2.0"
 
     def build(
         self,
@@ -40,106 +44,284 @@ class QueryMapBuilder:
         brand_profile: dict[str, Any] | None = None,
     ) -> list[QueryScenario]:
         is_english = language.casefold().startswith("en")
-        category = variables.get("category") or self._category(profile, english=is_english)
-        audience = variables.get("audience") or ("customer" if is_english else "покупателя")
-        product = variables.get("product") or ("products" if is_english else "товары")
+        profile_data = brand_profile or {}
+        categories = [str(item).strip() for item in profile_data.get("categories", []) if item]
+        attributes = [str(item).strip() for item in profile_data.get("attributes", []) if item]
+        fallback_category = variables.get("category") or self._category(profile, english=is_english)
+        categories = list(dict.fromkeys([*categories, fallback_category]))[:4]
         if is_english:
+            needs = list(dict.fromkeys([*attributes, *self._default_needs(profile, True)]))[:4]
+            terms = [self._product_term(item, True) for item in categories]
             templates = [
-                ("brand", "awareness", f"What is {brand} and what is it known for?"),
-                ("category", "discovery", f"Which {category} brands are worth considering?"),
                 (
+                    "category_discovery",
                     "recommendation",
-                    "recommendation",
-                    f"What {category} would you recommend to a {audience}?",
-                ),
+                    self._discovery_question(term, need, index, True),
+                    "discovery",
+                    "unbranded",
+                )
+                for index, (term, need) in enumerate(
+                    zip((terms * 9)[:9], (needs * 9)[:9], strict=False)
+                )
+            ]
+            templates += [
                 (
-                    "problem",
+                    "problem_solution",
                     "solution",
-                    f"Which {category} products solve common customer problems?",
-                ),
-                ("comparison", "comparison", f"Compare {brand} with its strongest alternatives."),
+                    f"What skincare works best for {need}?",
+                    "consideration",
+                    "unbranded",
+                )
+                for need in needs
+            ]
+            templates += [
                 (
-                    "trust",
+                    "price_comparison",
+                    "comparison",
+                    (
+                        f"Compare the best {term} for {needs[index % len(needs)]} "
+                        "by ingredients, price, and evidence."
+                    ),
+                    "consideration",
+                    "unbranded",
+                )
+                for index, term in enumerate((terms * 3)[:3])
+            ]
+            templates += [
+                (
+                    "trust_evidence",
                     "validation",
-                    f"Is {brand} trustworthy? Use independent sources where possible.",
+                    (
+                        f"Which {fallback_category} brands publish credible product research "
+                        "and independent evidence?"
+                    ),
+                    "validation",
+                    "unbranded",
                 ),
                 (
-                    "commercial",
-                    "purchase",
-                    f"Where and why should someone buy {product} from {brand}?",
+                    "trust_evidence",
+                    "validation",
+                    f"Which {fallback_category} brands are trusted by experts and why?",
+                    "validation",
+                    "unbranded",
                 ),
                 (
-                    "evidence",
-                    "research",
-                    f"What independent publications or studies mention {brand}?",
+                    "brand_control",
+                    "brand",
+                    f"Is {brand} worth considering and for whom?",
+                    "validation",
+                    "branded",
+                ),
+                (
+                    "brand_control",
+                    "comparison",
+                    (
+                        f"What are the strongest alternatives to {brand} at a similar price "
+                        "and with similar features?"
+                    ),
+                    "consideration",
+                    "branded",
                 ),
             ]
         else:
+            needs = [
+                self._need_context(item)
+                for item in dict.fromkeys([*attributes, *self._default_needs(profile, False)])
+            ][:4]
+            terms = [self._product_term(item, False) for item in categories]
             templates = [
-                ("brand", "awareness", f"Что такое {brand} и чем известен этот бренд?"),
                 (
-                    "category",
+                    "category_discovery",
+                    "recommendation",
+                    self._discovery_question(term, need, index, False),
                     "discovery",
-                    f"Какие бренды в категории «{category}» стоит рассмотреть?",
-                ),
+                    "unbranded",
+                )
+                for index, (term, need) in enumerate(
+                    zip((terms * 9)[:9], (needs * 9)[:9], strict=False)
+                )
+            ]
+            templates += [
                 (
-                    "recommendation",
-                    "recommendation",
-                    f"Что из категории «{category}» вы рекомендуете для {audience}?",
-                ),
-                (
-                    "problem",
+                    "problem_solution",
                     "solution",
-                    f"Какие продукты категории «{category}» решают основные проблемы покупателей?",
-                ),
-                ("comparison", "comparison", f"Сравните {brand} с его сильнейшими альтернативами."),
+                    f"Какие средства стоит выбрать для {need}?",
+                    "consideration",
+                    "unbranded",
+                )
+                for need in needs
+            ]
+            templates += [
                 (
-                    "trust",
+                    "price_comparison",
+                    "comparison",
+                    (
+                        f"Сравните лучшие {self._comparison_term(term)} для "
+                        f"{needs[index % len(needs)]} по составу, цене и "
+                        "доказательствам эффективности."
+                    ),
+                    "consideration",
+                    "unbranded",
+                )
+                for index, term in enumerate((terms * 3)[:3])
+            ]
+            templates += [
+                (
+                    "trust_evidence",
                     "validation",
-                    f"Можно ли доверять бренду {brand}? Приведите независимые источники.",
+                    (
+                        f"Какие бренды в категории «{fallback_category}» публикуют "
+                        "достоверные исследования и независимые подтверждения?"
+                    ),
+                    "validation",
+                    "unbranded",
                 ),
-                ("commercial", "purchase", f"Где и почему стоит купить {product} бренда {brand}?"),
                 (
-                    "evidence",
-                    "research",
-                    f"Какие независимые публикации или исследования упоминают {brand}?",
+                    "trust_evidence",
+                    "validation",
+                    f"Каким брендам в категории «{fallback_category}» доверяют эксперты и почему?",
+                    "validation",
+                    "unbranded",
+                ),
+                (
+                    "brand_control",
+                    "brand",
+                    f"Стоит ли рассматривать {brand} и кому подходит этот бренд?",
+                    "validation",
+                    "branded",
+                ),
+                (
+                    "brand_control",
+                    "comparison",
+                    f"Какие альтернативы {brand} сопоставимы по цене и характеристикам?",
+                    "consideration",
+                    "branded",
                 ),
             ]
-        if brand_profile:
-            categories = [str(item) for item in brand_profile.get("categories", []) if item][:3]
-            products = [item for item in brand_profile.get("products", []) if item.get("name")][:4]
-            attributes = [str(item) for item in brand_profile.get("attributes", []) if item][:3]
-            for item in categories:
-                text = (
-                    f"Which {item} brands would you recommend?"
-                    if is_english
-                    else f"Какие бренды категории «{item}» вы рекомендуете?"
-                )
-                templates.append(("category_specific", "recommendation", text))
-            for item in products:
-                name = str(item["name"])
-                text = (
-                    f"Which alternative to {name} is best by price and features?"
-                    if is_english
-                    else f"Какой аналог продукта «{name}» стоит выбрать по цене и характеристикам?"
-                )
-                templates.append(("product_specific", "comparison", text))
-            for item in attributes:
-                text = (
-                    f"What would you recommend to a customer looking for {item}?"
-                    if is_english
-                    else f"Что вы рекомендуете покупателю, которому важно: {item}?"
-                )
-                templates.append(("need_specific", "solution", text))
+        templates = self._deduplicate(templates)
         return [
             QueryScenario(
                 id=str(uuid5(NAMESPACE_URL, f"ai-ranking-query:{brand}:{region}:{cluster}:{text}")),
                 cluster=cluster,
                 intent=intent,
                 text=text,
+                buyer_stage=buyer_stage,
+                brand_mode=brand_mode,
             )
-            for cluster, intent, text in templates
+            for cluster, intent, text, buyer_stage, brand_mode in templates
         ]
+
+    @staticmethod
+    def _deduplicate(
+        items: list[tuple[str, str, str, str, str]],
+    ) -> list[tuple[str, str, str, str, str]]:
+        result = []
+        seen: set[str] = set()
+        for item in items:
+            key = re.sub(r"\W+", " ", item[2].casefold()).strip()
+            if key not in seen and 12 <= len(item[2]) <= 500:
+                seen.add(key)
+                result.append(item)
+        return result
+
+    @staticmethod
+    def _product_term(category: str, english: bool) -> str:
+        if english:
+            return category.casefold()
+        known = {
+            "сыворотки": "сыворотку",
+            "кремы": "крем",
+            "тонеры": "тонер",
+            "маски": "маску",
+            "средства очищения": "средство для очищения",
+            "spf-защита": "SPF-крем",
+        }
+        return known.get(category.casefold(), category.casefold())
+
+    @staticmethod
+    def _recommendation_question(term: str, need: str) -> str:
+        if term in {"сыворотку", "маску"}:
+            return f"Какую {term} вы бы порекомендовали для {need}?"
+        if term.startswith("средство"):
+            return f"Какое {term} вы бы порекомендовали для {need}?"
+        if term in {"крем", "тонер", "SPF-крем"}:
+            return f"Какой {term} вы бы порекомендовали для {need}?"
+        return f"Что из категории «{term}» вы бы порекомендовали для {need}?"
+
+    @staticmethod
+    def _comparison_term(term: str) -> str:
+        return {
+            "сыворотку": "сыворотки",
+            "маску": "маски",
+            "крем": "кремы",
+            "тонер": "тонеры",
+            "SPF-крем": "SPF-кремы",
+            "средство для очищения": "средства для очищения",
+        }.get(term, term)
+
+    @staticmethod
+    def _need_context(value: str) -> str:
+        normalized = value.casefold().strip()
+        known = {
+            "чувствительная кожа": "чувствительной кожи",
+            "ниацинамид": "ухода с ниацинамидом",
+            "витамин c": "ухода с витамином C",
+            "гиалуроновая кислота": "увлажнения с гиалуроновой кислотой",
+            "увлажняющий": "интенсивного увлажнения",
+            "увлажнение чувствительной кожи": "увлажнения чувствительной кожи",
+            "пигментация и постакне": "пигментации и постакне",
+            "первые возрастные изменения": "первых возрастных изменений",
+            "покраснение и нарушенный защитный барьер": (
+                "покраснения и восстановления защитного барьера"
+            ),
+        }
+        return known.get(normalized, value.strip())
+
+    @classmethod
+    def _discovery_question(cls, term: str, need: str, index: int, english: bool) -> str:
+        if english:
+            variants = (
+                f"Which {term} would you recommend for {need}?",
+                f"What are the best {term} for {need}?",
+                f"Which {term} offers the best value for {need}?",
+            )
+            return variants[(index // 4) % len(variants)]
+        base = cls._recommendation_question(term, need)
+        variants = (
+            base,
+            base.replace("вы бы порекомендовали", "лучше выбрать"),
+            base.replace("вы бы порекомендовали", "даёт лучшее соотношение цены и результата"),
+        )
+        return variants[(index // 4) % len(variants)]
+
+    @staticmethod
+    def _default_needs(profile: str, english: bool) -> list[str]:
+        if profile == "BEAUTY":
+            return (
+                [
+                    "sensitive dehydrated skin",
+                    "pigmentation and post-acne marks",
+                    "first signs of aging",
+                    "redness and a damaged skin barrier",
+                ]
+                if english
+                else [
+                    "увлажнение чувствительной кожи",
+                    "пигментация и постакне",
+                    "первые возрастные изменения",
+                    "покраснение и нарушенный защитный барьер",
+                ]
+            )
+        return (
+            ["best value", "reliable quality", "expert recommendation", "a proven solution"]
+            if english
+            else [
+                "лучшее соотношение цены и качества",
+                "надёжное качество",
+                "рекомендация экспертов",
+                "доказанная эффективность",
+            ]
+        )
 
     @staticmethod
     def _category(profile: str, *, english: bool = False) -> str:

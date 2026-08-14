@@ -115,7 +115,7 @@ def test_skinjestique_end_to_end_wizard(client: TestClient) -> None:
     review = client.post("/research/wizard/review", json=payload)
     assert review.status_code == 200
     assert review.json()["valid"] is True
-    assert len(review.json()["query_catalog"]) == 8
+    assert len(review.json()["query_catalog"]) == 20
     assert review.json()["task_count"] == 8
 
     completed = client.post("/research/wizard/run", json=payload)

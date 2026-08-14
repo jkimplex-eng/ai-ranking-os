@@ -143,9 +143,7 @@ class ProductPipeline:
             )
         )
         competitor_profiles = [
-            brand_intelligence_engine.analyze(
-                brand=item["name"], website_url=item["website_url"]
-            )
+            brand_intelligence_engine.analyze(brand=item["name"], website_url=item["website_url"])
             for item in payload.competitors
             if item.get("name") and item.get("website_url")
         ]
@@ -347,6 +345,25 @@ class ProductPipeline:
     def _query_catalog(
         payload: WizardRequest, brand_profile: dict[str, Any] | None = None
     ) -> list[dict[str, str]]:
+        if payload.custom_queries:
+            return [
+                {
+                    "id": str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            f"ai-ranking-custom-query:{payload.brand}:{payload.regions[0]}:{text}",
+                        )
+                    ),
+                    "cluster": "custom_buyer_query",
+                    "intent": "recommendation",
+                    "text": text,
+                    "buyer_stage": "user_defined",
+                    "brand_mode": (
+                        "branded" if payload.brand.casefold() in text.casefold() else "unbranded"
+                    ),
+                }
+                for text in payload.custom_queries
+            ]
         return [
             item.as_dict()
             for item in QueryMapBuilder().build(

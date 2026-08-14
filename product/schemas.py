@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backend.app.llm_router.schemas import RoutingProfile
 from research.schemas import ResearchModelSelection, ResearchRead
@@ -140,6 +140,15 @@ class WizardRequest(BaseModel):
     variables: dict[str, str] = Field(default_factory=dict)
     brand_profile: dict[str, Any] | None = None
     competitors: list[dict[str, str]] = Field(default_factory=list, max_length=20)
+    custom_queries: list[str] = Field(default_factory=list, max_length=60)
+
+    @field_validator("custom_queries")
+    @classmethod
+    def validate_custom_queries(cls, values: list[str]) -> list[str]:
+        cleaned = list(dict.fromkeys(value.strip() for value in values if value.strip()))
+        if any(len(value) < 12 or len(value) > 500 for value in cleaned):
+            raise ValueError("Каждый пользовательский запрос должен содержать 12–500 символов")
+        return cleaned
 
 
 class BrandProfileRequest(BaseModel):

@@ -87,6 +87,10 @@
 .wizard-inline-actions button { width: auto; padding: 9px 13px; }
 .wizard-inline-actions button { color: #dce7f8; background: #142136; border: 1px solid #344763; border-radius: 9px; }
 .wizard-inline-actions button:hover { color: #fff; border-color: #6594ed; background: #1b2d49; }
+.query-editor { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin: 10px 0; }
+.query-editor textarea { min-height: 72px; resize: vertical; padding: 12px; color: var(--text); background: var(--background); border: 1px solid var(--border); border-radius: 10px; font: inherit; line-height: 1.45; }
+.query-editor button { align-self: stretch; padding: 0 14px; color: #fca5a5; background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.25); border-radius: 10px; }
+@media (max-width: 680px) { .query-editor { grid-template-columns: 1fr; }.query-editor button { padding: 10px; } }
 .wizard-page .model { color: #eaf0fb; text-align: left; }
 .wizard-page .model b { color: #f5f8ff; }
 .wizard-page .model small { color: #9fb0c8; }

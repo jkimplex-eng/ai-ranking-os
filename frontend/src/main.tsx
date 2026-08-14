@@ -1046,7 +1046,7 @@ function Wizard({
   onComplete: (result: ReportResult) => void;
   onCancel: () => void;
 }) {
-  const saved = useMemo(() => { try { return JSON.parse(sessionStorage.getItem("research-wizard") ?? "{}") as Partial<{ step: number; brand: string; websiteUrl: string; brandProfile: BrandProfile; region: string; language: string; profile: WizardPayload["routing_profile"]; scope: WizardPayload["research_scope"]; researchProfile: WizardPayload["research_profile"]; selectedModels: string[] }>; } catch { return {}; } }, []);
+  const saved = useMemo(() => { try { return JSON.parse(sessionStorage.getItem("research-wizard") ?? "{}") as Partial<{ step: number; brand: string; websiteUrl: string; brandProfile: BrandProfile; region: string; language: string; profile: WizardPayload["routing_profile"]; scope: WizardPayload["research_scope"]; researchProfile: WizardPayload["research_profile"]; selectedModels: string[]; customQueries: string[] }>; } catch { return {}; } }, []);
   const [step, setStep] = useState(saved.step && saved.step >= 1 && saved.step <= 8 ? saved.step : 1);
   const [brand, setBrand] = useState(saved.brand ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(saved.websiteUrl ?? "");
@@ -1062,6 +1062,7 @@ function Wizard({
   const [models, setModels] = useState<RouterModel[]>([]);
   const [runtimeProviders, setRuntimeProviders] = useState<SystemProviderItem[]>([]);
   const [selectedModels, setSelectedModels] = useState<string[]>(saved.selectedModels ?? []);
+  const [customQueries, setCustomQueries] = useState<string[]>(saved.customQueries ?? []);
   const [review, setReview] = useState<WizardReview>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -1073,7 +1074,7 @@ function Wizard({
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось проверить подключение моделей"));
   }, []);
-  useEffect(() => { sessionStorage.setItem("research-wizard", JSON.stringify({ step, brand, websiteUrl, brandProfile, region, language, profile, scope, researchProfile, selectedModels })); }, [step, brand, websiteUrl, brandProfile, region, language, profile, scope, researchProfile, selectedModels]);
+  useEffect(() => { sessionStorage.setItem("research-wizard", JSON.stringify({ step, brand, websiteUrl, brandProfile, region, language, profile, scope, researchProfile, selectedModels, customQueries })); }, [step, brand, websiteUrl, brandProfile, region, language, profile, scope, researchProfile, selectedModels, customQueries]);
   const scopedModels = () => {
     const ready = models.filter((item) => modelIsReady(item));
     if (scope === "ALL") return ready;
@@ -1099,6 +1100,7 @@ function Wizard({
     regions: [region],
     prompt_code: "ai-visibility",
     research_template_code: "ai-visibility",
+    custom_queries: customQueries,
   });
   async function next() {
     if (step === 1) {
@@ -1122,7 +1124,9 @@ function Wizard({
     setBusy(true);
     setError("");
     try {
-      setReview(await api.review(payload()));
+      const generatedReview = await api.review({ ...payload(), custom_queries: [] });
+      setReview(generatedReview);
+      setCustomQueries(generatedReview.query_catalog.map((item) => item.text));
       setStep(8);
     } catch (e) {
       setError(
@@ -1340,11 +1344,11 @@ function Wizard({
             <div><span>Профиль исследования</span><b>{researchProfile}</b></div>
             <p>{review?.prompt}</p>
             <div><span>Выбранные модели</span><b>{review?.selected_models?.join(", ") || review?.provider_models?.join(", ") || "Router не вернул план"}</b></div>
-            <div><span>Смежных запросов</span><b>{review?.query_catalog?.length ?? 0}</b></div>
-            <div><span>Всего проверок</span><b>{review?.task_count ?? 0}</b></div>
+            <div><span>Покупательских запросов</span><b>{customQueries.length}</b></div>
+            <div><span>Всего проверок</span><b>{customQueries.length * Math.max(scopedModels().length, 1)}</b></div>
             <div><span>Оценка времени</span><b>{review?.estimated_time_ms ? `${review.estimated_time_ms} ms` : "Не рассчитана"}</b></div>
             <div><span>Оценка стоимости</span><b>{review?.estimated_cost_usd != null ? `$${review.estimated_cost_usd.toFixed(6)}` : "Не рассчитана"}</b></div>
-            {review?.query_catalog?.length ? <details><summary>Показать карту запросов</summary>{review.query_catalog.map((item) => <p key={item.id}><b>{item.cluster}</b> — {item.text}</p>)}</details> : null}
+            {customQueries.length ? <details open><summary>Проверить и изменить вопросы покупателей</summary><p className="muted">Большинство вопросов намеренно не содержит название бренда: так мы проверяем, появится ли он в естественной рекомендации.</p>{customQueries.map((query, index) => <div className="query-editor" key={`${index}-${query.slice(0, 24)}`}><textarea aria-label={`Запрос ${index + 1}`} value={query} onChange={(event) => setCustomQueries((items) => items.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} /><button type="button" onClick={() => setCustomQueries((items) => items.filter((_, itemIndex) => itemIndex !== index))}>Удалить</button></div>)}<button type="button" onClick={() => setCustomQueries((items) => [...items, ""])}>Добавить свой вопрос</button></details> : null}
           </div>
         )}
         {error && (

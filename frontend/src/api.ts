@@ -14,6 +14,7 @@ export type WizardPayload = {
   research_template_code: string;
   research_scope?: "ALL" | "SELECTED" | "RUSSIAN" | "COMMERCIAL" | "FREE" | "CONSENSUS" | "COMPARE";
   research_profile?: "GEO" | "ECOMMERCE" | "MEDICAL" | "BEAUTY" | "ENTERPRISE" | "UNIVERSAL";
+  custom_queries?: string[];
 };
 export type BrandProfile = { version: string; brand: string; website_url: string; pages_analyzed: number; evidence_urls: string[]; description: string; categories: string[]; products: Array<{ name: string; category?: string; description?: string; price?: string | number; currency?: string; url?: string; evidence_url?: string }>; attributes: string[]; confidence: number; limitations: string[] };
 export type RouterModel = { id: string; provider: string; display_name: string; version: string; status: string; tier: string; capabilities: string[]; availability: number; pricing: { input_per_million: number; output_per_million: number } };
@@ -28,7 +29,7 @@ export type WizardReview = {
   estimated_cost_usd: number;
   estimated_time_ms: number;
   selected_models: string[];
-  query_catalog: Array<{ id: string; cluster: string; intent: string; text: string }>;
+  query_catalog: Array<{ id: string; cluster: string; intent: string; text: string; buyer_stage?: string; brand_mode?: string }>;
   task_count: number;
   brand_profile: BrandProfile;
   competitor_profiles: BrandProfile[];
