@@ -52,7 +52,7 @@ from research.models import ExtractedEntity, Research, ResearchStatus, ResearchT
 from research.reporting import ReportingService
 from research.repositories import ResearchRepository
 from research.schemas import ResearchCreate, ResearchRunRequest
-from research.scoring import SCORING_VERSION, SCORING_WEIGHTS
+from research.scoring import SCORING_VERSION, SCORING_WEIGHTS, response_recommends_target
 from research.service import run_research
 from trend.research_adapter import build_trend_engine
 
@@ -477,7 +477,7 @@ class FinalReportService:
             )
             for response in responses
         )
-        recommended = sum(bool(recommendations_by_response[response.id]) for response in responses)
+        recommended = sum(response_recommends_target(response, target) for response in responses)
         citation_count = len(base.citations)
         processed = sum(response.processing_status.value == "PROCESSED" for response in responses)
         unique_models = len(
@@ -496,9 +496,9 @@ class FinalReportService:
                 "weight": SCORING_WEIGHTS["mention"],
             },
             "recommendation_score": {
-                "formula": "responses_with_recommendations / total_responses * 100",
+                "formula": "responses_recommending_target_brand / total_responses * 100",
                 "inputs": {
-                    "responses_with_recommendations": recommended,
+                    "responses_recommending_target_brand": recommended,
                     "total_responses": len(responses),
                 },
                 "normalization": "bounded 0..100",

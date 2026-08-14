@@ -13,7 +13,7 @@ from research.models import (
 )
 from research.repositories import EntityNotFoundError
 
-SCORING_VERSION = "1.1"
+SCORING_VERSION = "1.2"
 SCORING_WEIGHTS = {
     "mention": 0.35,
     "recommendation": 0.20,
@@ -55,7 +55,7 @@ class ScoringService:
             len(responses),
         )
         recommendation_score = _ratio(
-            sum(bool(response.extracted_recommendations) for response in processed),
+            sum(self._recommends_target(response, target) for response in processed),
             len(responses),
         )
         citation_score = _ratio(
@@ -169,6 +169,20 @@ class ScoringService:
             }
             for entity in response.extracted_entities
         )
+
+    @staticmethod
+    def _recommends_target(response: Response, target: str) -> bool:
+        """Count only recommendations that explicitly name the measured brand.
+
+        Generic product/category advice is useful evidence, but it is not a brand
+        recommendation and must not inflate the target's recommendation score.
+        """
+        return any(target in item.content.casefold() for item in response.extracted_recommendations)
+
+
+def response_recommends_target(response: Response, target: str) -> bool:
+    """Public scoring predicate reused by explainability/report composition."""
+    return ScoringService._recommends_target(response, target.casefold())
 
 
 def _ratio(numerator: int, denominator: int) -> float:
