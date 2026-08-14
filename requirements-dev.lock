@@ -24,7 +24,11 @@ certifi==2026.7.22
     #   httpcore
     #   httpx
 cffi==2.1.1
-    # via argon2-cffi-bindings
+    # via
+    #   argon2-cffi-bindings
+    #   cryptography
+cryptography==46.0.7
+    # via -r requirements.txt
 click==8.4.2
     # via uvicorn
 colorama==0.4.6

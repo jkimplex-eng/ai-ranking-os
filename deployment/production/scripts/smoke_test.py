@@ -43,14 +43,28 @@ def main() -> None:
     token = tokens["access_token"]
     provider = os.environ.get("SMOKE_PROVIDER", "openai")
     model = os.environ.get("SMOKE_MODEL", "gpt-4o-mini")
+    website_url = os.environ.get("SMOKE_WEBSITE_URL", "https://skinjestique.ru")
     payload = {
         "brand": "Skinjestique",
-        "website_url": os.environ.get("SMOKE_WEBSITE_URL", "https://skinjestique.ru"),
+        "website_url": website_url,
         "models": [{"provider": provider, "model": model}],
         "languages": ["en"],
         "regions": ["GLOBAL"],
         "prompt_code": "ai-visibility",
         "research_template_code": "ai-visibility",
+        "brand_profile": {
+            "version": "1.0",
+            "brand": "Skinjestique",
+            "website_url": website_url,
+            "pages_analyzed": 1,
+            "evidence_urls": [website_url],
+            "description": "Skinjestique beauty brand",
+            "categories": ["cosmetics"],
+            "products": [{"name": "Hydrating Serum"}],
+            "attributes": ["hydrating"],
+            "confidence": 0.8,
+            "limitations": [],
+        },
     }
     status, review = call(
         "/api/research/wizard/review", method="POST", payload=payload, token=token

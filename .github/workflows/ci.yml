@@ -100,6 +100,7 @@ jobs:
           docker run -d --name ai-ranking-api -p 8000:8000 \
             -e WEB_CONCURRENCY=1 \
             -e RUN_MIGRATIONS=false \
+            -e PROVIDER_SECRET_KEY=ci-provider-secret-key-12345678901234567890 \
             ai-ranking-os:ci
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:8000/health; then

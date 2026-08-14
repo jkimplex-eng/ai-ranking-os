@@ -34,7 +34,7 @@ test("all production navigation routes use the real backend", async ({ page }) =
     ["Knowledge Graph", "/knowledge-graph", "Knowledge Graph"],
     ["Competitors", "/competitors", "Конкуренты"],
     ["History", "/history", "История"],
-    ["AI Providers", "/providers", "AI Providers"],
+    ["AI Providers", "/providers", "Провайдеры ИИ"],
     ["Product Analytics", "/product-analytics", "Product Analytics"],
     ["Notifications", "/notifications", "Уведомления"],
     ["Organizations", "/organizations", "Организация"],

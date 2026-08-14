@@ -33,6 +33,8 @@ test("wizard transparently refreshes an expired access token", async ({ page }) 
           provider_models: ["ollama/qwen2.5:3b"], selected_models: ["ollama/qwen2.5:3b"],
           languages: ["ru"], regions: ["GLOBAL"], pipeline: [],
           estimated_cost_usd: 0, estimated_time_ms: 20000,
+          query_catalog: [{ id: "q-1", cluster: "category", intent: "buyer", text: "Какую увлажняющую сыворотку выбрать?" }],
+          task_count: 1,
         };
       }
     } else if (path.endsWith("/research/wizard/brand-profile")) {
@@ -65,7 +67,7 @@ test("wizard transparently refreshes an expired access token", async ({ page }) 
   await page.getByRole("button", { name: /Продолжить/ }).click();
   await page.getByRole("button", { name: "Проверить" }).click();
 
-  await expect(page.getByText("Analyze Acme")).toBeVisible();
+  await expect(page.getByLabel("Запрос 1")).toHaveValue("Какую увлажняющую сыворотку выбрать?");
   expect(refreshed).toBe(true);
   expect(reviewAttempts).toBe(2);
 });
@@ -137,6 +139,10 @@ test("authenticated routes survive refresh and browser history", async ({ page }
           ? { id: 1, name: "Workspace", settings: {} }
           : path.endsWith("/router/status")
             ? { status: "ok", costs: {} }
+          : path.endsWith("/router/history")
+            ? { items: [], total: 0 }
+          : path.endsWith("/provider-connections")
+            ? []
           : path.endsWith("/system/health")
             ? { status: "healthy" }
           : path.endsWith("/providers") || path.endsWith("/api-keys") || path.endsWith("/research") || path.endsWith("/workspace/projects") || path.endsWith("/feedback") || path.endsWith("/notifications") || path.endsWith("/organizations") || path.endsWith("/execution/history") || path.endsWith("/admin/feedback") || path.endsWith("/admin/beta/users")
@@ -169,7 +175,7 @@ test("authenticated routes survive refresh and browser history", async ({ page }
     ["Граф знаний", "/knowledge-graph", "Граф знаний"],
     ["Конкуренты", "/competitors", "Конкуренты"],
     ["История", "/history", "История"],
-    ["Провайдеры ИИ", "/providers", "AI Providers"],
+    ["Провайдеры ИИ", "/providers", "Провайдеры ИИ"],
     ["Аналитика продукта", "/product-analytics", "Product Analytics"],
     ["Уведомления", "/notifications", "Уведомления"],
     ["Организации", "/organizations", "Организация"],

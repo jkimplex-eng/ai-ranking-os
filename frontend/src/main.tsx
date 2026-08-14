@@ -640,7 +640,7 @@ function ProvidersDashboard() {
   return (
     <main className="page providers-page">
       <div className="page-heading">
-        <div><span className="eyebrow">INTELLIGENT ROUTING</span><h1>AI Providers</h1>
+        <div><span className="eyebrow">ИНТЕЛЛЕКТУАЛЬНАЯ МАРШРУТИЗАЦИЯ</span><h1>Провайдеры ИИ</h1>
           <p>Модели, политики, маршрутизация, стоимость и состояние инфраструктуры.</p></div>
         <Badge tone="success">● {available}/{providers.length || "—"} доступны</Badge>
       </div>
