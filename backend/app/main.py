@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from time import perf_counter, time
 
 from fastapi import FastAPI, Request
+from sqlalchemy import inspect
 
 from ai_visibility.router import router as ai_visibility_router
 from alert.router import router as alert_router
@@ -88,10 +89,16 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     if errors:
         raise RuntimeError("Startup validation failed: " + "; ".join(errors))
     with SessionLocal() as db:
-        hydrate_provider_credentials(
-            ProviderConnectionRepository(db),
-            SecretCipher(settings.provider_secret_key or settings.auth_jwt_secret),
-        )
+        if inspect(db.get_bind()).has_table("provider_connections"):
+            hydrate_provider_credentials(
+                ProviderConnectionRepository(db),
+                SecretCipher(settings.provider_secret_key or settings.auth_jwt_secret),
+            )
+        else:
+            logger.warning(
+                "provider_credentials_hydration_skipped",
+                extra={"reason": "table_missing"},
+            )
     if os.getenv("PROVIDER_CATALOG_URL"):
         from provider_discovery.service import ProviderDiscoveryService
 

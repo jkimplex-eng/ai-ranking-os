@@ -43,10 +43,14 @@ def client() -> Generator[TestClient]:
     Base.metadata.drop_all(test_engine)
 
 
-def test_all_global_and_russian_providers_implement_contract() -> None:
+def test_all_global_and_russian_providers_implement_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PROVIDER_MOCK_MODE", "true")
     providers = {provider.name: provider for provider in factory.all()}
     assert set(providers) == {
         "openai",
+        "openrouter",
         "anthropic",
         "gemini",
         "deepseek",
