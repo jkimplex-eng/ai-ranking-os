@@ -183,7 +183,11 @@ class ProductPipeline:
             estimated_time = max(estimated_time, model.latency_ms)
         if not selected:
             selected = [payload.routing_profile]
-        query_catalog = self._query_catalog(payload, brand_profile, competitor_profiles)
+        query_catalog = self._query_catalog(
+            payload,
+            brand_profile,
+            [*competitor_profiles, *payload.competitors],
+        )
         estimated_cost *= len(query_catalog)
         estimated_time *= len(query_catalog)
         return WizardReview(

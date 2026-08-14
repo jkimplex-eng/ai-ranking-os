@@ -54,11 +54,13 @@ class QueryMapBuilder:
         categories = list(dict.fromkeys([*categories, fallback_category]))[:4]
         products = [item for item in profile_data.get("products", []) if item.get("name")]
         price_context = self._price_context(products, english=is_english)
-        competitors = [
-            str(item.get("brand") or item.get("name") or "").strip()
-            for item in (competitor_profiles or [])
-            if item.get("brand") or item.get("name")
-        ]
+        competitors = list(
+            dict.fromkeys(
+                str(item.get("brand") or item.get("name") or "").strip()
+                for item in (competitor_profiles or [])
+                if item.get("brand") or item.get("name")
+            )
+        )
         if is_english:
             needs = list(dict.fromkeys([*attributes, *self._default_needs(profile, True)]))[:4]
             terms = [self._product_term(item, True) for item in categories]
@@ -270,31 +272,38 @@ class QueryMapBuilder:
         price_context: str,
         english: bool,
     ) -> list[tuple[str, str, str, str, str]]:
-        rivals = (competitors + ["a category leader", "a popular premium brand"])[:2]
-        if not english:
-            rivals = (competitors + ["лидера категории", "популярного премиального бренда"])[
-                :2
-            ]
         if english:
+            first = competitors[0] if competitors else f"leading {category} brands"
+            second = competitors[1] if len(competitors) > 1 else f"popular {category} brands"
+            alternative = (
+                f"What alternatives to {first} have similar features {price_context}?"
+                if competitors
+                else f"Which {category} brands have similar features {price_context}?"
+            )
+            replacement = (
+                f"What should I choose instead of {second} for {need}?"
+                if competitors
+                else f"Which {category} brands should I choose for {need}?"
+            )
             return [
                 (
                     "competitor_alternative",
                     "comparison",
-                    f"What alternatives to {rivals[0]} have similar features {price_context}?",
+                    alternative,
                     "consideration",
                     "comparative",
                 ),
                 (
                     "competitor_alternative",
                     "replacement",
-                    f"What should I choose instead of {rivals[1]} for {need}?",
+                    replacement,
                     "consideration",
                     "comparative",
                 ),
                 (
                     "competitor_comparison",
                     "comparison",
-                    f"Compare {brand} with {rivals[0]} by price, features, and evidence.",
+                    f"Compare {brand} with {first} by price, features, and evidence.",
                     "validation",
                     "comparative",
                 ),
@@ -306,25 +315,44 @@ class QueryMapBuilder:
                     "comparative",
                 ),
             ]
+        first = competitors[0] if competitors else f"ведущие бренды категории «{category}»"
+        second = (
+            competitors[1]
+            if len(competitors) > 1
+            else f"популярные бренды категории «{category}»"
+        )
+        alternative = (
+            f"Какие альтернативы {first} имеют похожие характеристики {price_context}?"
+            if competitors
+            else (
+                f"Какие бренды категории «{category}» имеют похожие "
+                f"характеристики {price_context}?"
+            )
+        )
+        replacement = (
+            f"Что выбрать вместо {second} для {need}?"
+            if competitors
+            else f"Какие бренды категории «{category}» выбрать для {need}?"
+        )
         return [
             (
                 "competitor_alternative",
                 "comparison",
-                f"Какие альтернативы {rivals[0]} имеют похожие характеристики {price_context}?",
+                alternative,
                 "consideration",
                 "comparative",
             ),
             (
                 "competitor_alternative",
                 "replacement",
-                f"Что выбрать вместо {rivals[1]} для {need}?",
+                replacement,
                 "consideration",
                 "comparative",
             ),
             (
                 "competitor_comparison",
                 "comparison",
-                f"Сравните {brand} и {rivals[0]} по цене, характеристикам и доказательствам.",
+                f"Сравните {brand} и {first} по цене, характеристикам и доказательствам.",
                 "validation",
                 "comparative",
             ),

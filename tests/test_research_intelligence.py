@@ -216,6 +216,26 @@ def test_wizard_accepts_user_edited_buyer_queries() -> None:
     assert all(item["brand_mode"] == "unbranded" for item in catalog)
 
 
+def test_query_map_uses_manual_competitor_without_website() -> None:
+    payload = WizardRequest(
+        brand="Skinjestique",
+        website_url="https://skinjestique.example",
+        languages=["ru"],
+        regions=["RU"],
+        research_profile="BEAUTY",
+        competitors=[{"name": "Librederm"}],
+    )
+
+    catalog = ProductPipeline._query_catalog(
+        payload,
+        {"categories": ["Сыворотки"], "products": [], "attributes": []},
+        payload.competitors,
+    )
+
+    assert sum(item["brand_mode"] == "comparative" for item in catalog) == 4
+    assert any("Librederm" in item["text"] for item in catalog)
+
+
 def test_patterns_and_opportunities_are_evidence_backed() -> None:
     query = {
         "id": "q1",
