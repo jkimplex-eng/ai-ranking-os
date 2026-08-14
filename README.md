@@ -1,5 +1,18 @@
 # AI Ranking OS
 
+## GEO Algorithm MVP
+
+The platform now includes the first evidence-backed GEO methodology increment:
+
+- a publication platform registry with normalized imports and source evidence;
+- immutable Frozen Prompt Sets with deterministic query fan-out;
+- versioned heuristic EIS calculation and P0-P3 prioritization;
+- full score provenance, including inputs, weights, contributions, missing evidence, and limits.
+
+The EIS result is a correlation-based estimate because AI retrieval/ranking systems are black
+boxes. It must not be interpreted as proof that a placement caused an AI recommendation. See
+[`docs/GEO_ALGORITHM_MVP_SPEC.md`](docs/GEO_ALGORITHM_MVP_SPEC.md) for the contract and formula.
+
 > Intelligent Routing consolidation details and validation evidence are maintained in
 > [EPIC_10_1_INTELLIGENT_ROUTING_CONSOLIDATION.md](EPIC_10_1_INTELLIGENT_ROUTING_CONSOLIDATION.md).
 

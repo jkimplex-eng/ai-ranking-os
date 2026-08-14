@@ -30,11 +30,14 @@ from change_detection.router import router as change_detection_router
 from closed_beta.router import router as closed_beta_router
 from cost_analytics.router import router as cost_analytics_router
 from decision_center.router import router as decision_center_router
+from eis.router import router as eis_router
 from entity_extraction.router import router as entity_extraction_router
 from entity_linking.router import router as entity_linking_router
 from execution_engine.router import router as execution_engine_router
 from export_engine.router import router as export_router
 from feedback_center.router import router as feedback_center_router
+from frozen_prompts.router import router as frozen_prompts_router
+from geo_platforms.router import router as geo_platforms_router
 from graph.router import router as graph_router
 from graph_search.router import router as graph_search_router
 from hardening.router import router as hardening_router
@@ -140,6 +143,9 @@ app.include_router(product_analytics_router)
 app.include_router(project_monitoring_router)
 app.include_router(research_lab_router)
 app.include_router(publication_learning_router)
+app.include_router(geo_platforms_router)
+app.include_router(frozen_prompts_router)
+app.include_router(eis_router)
 app.include_router(research_router)
 app.include_router(recommendation_router)
 app.include_router(recommendation_simulation_router)
