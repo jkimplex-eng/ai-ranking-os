@@ -6,6 +6,7 @@ from time import perf_counter
 import httpx
 
 from backend.app.providers.credentials import credentials
+from backend.app.providers.readiness import RuntimeProviderReadiness
 from provider_connections.crypto import SecretCipher
 from provider_connections.models import ProviderConnection
 from provider_connections.repository import ProviderConnectionRepository
@@ -200,6 +201,7 @@ class ProviderConnectionService:
             credentials.set(item.credential_name, key)
             if item.provider == "yandex":
                 credentials.set("YANDEX_FOLDER_ID", self._project_value(item))
+            RuntimeProviderReadiness.invalidate(item.provider)
         except (httpx.HTTPError, ValueError) as error:
             item.status = "UNAVAILABLE"
             item.last_checked_at = checked_at
@@ -225,6 +227,7 @@ class ProviderConnectionService:
         credentials.clear(item.credential_name)
         if item.provider == "yandex":
             credentials.clear("YANDEX_FOLDER_ID")
+        RuntimeProviderReadiness.invalidate(item.provider)
         self.repository.delete(item)
         self.repository.audit(
             organization_id, user_id, "provider_connection.revoked", connection_id
@@ -268,5 +271,6 @@ def hydrate_provider_credentials(
         credentials.set(item.credential_name, cipher.decrypt(item.secret_ciphertext))
         if item.provider == "yandex" and item.project_ciphertext:
             credentials.set("YANDEX_FOLDER_ID", cipher.decrypt(item.project_ciphertext))
+        RuntimeProviderReadiness.invalidate(item.provider)
         restored += 1
     return restored

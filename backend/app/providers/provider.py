@@ -247,11 +247,22 @@ class ConfiguredProvider(Provider):
         available = configured
         if configured and not self.mock_mode:
             try:
-                self._transport.request(
-                    "GET",
-                    f"{self.definition.base_url}/models",
-                    headers=self._headers(),
-                )
+                if self.definition.protocol == "yandex":
+                    model = self.models()[0].id
+                    self._transport.request(
+                        "POST",
+                        self._generate_url(model),
+                        headers=self._headers(),
+                        json=self._generate_payload(
+                            GenerateRequest(model=model, prompt="ping", max_tokens=1)
+                        ),
+                    )
+                else:
+                    self._transport.request(
+                        "GET",
+                        f"{self.definition.base_url}/models",
+                        headers=self._headers(),
+                    )
             except ProviderError:
                 available = False
         AVAILABILITY.labels(provider=self.name).set(1 if available else 0)
@@ -322,14 +333,25 @@ class ConfiguredProvider(Provider):
             }
         if self.definition.protocol == "yandex":
             folder = self._credentials.get(self.definition.project_credential)
+            model_aliases = {
+                "yandexgpt-pro": "yandexgpt",
+                "yandexgpt-lite": "yandexgpt-lite",
+            }
+            model_name = model_aliases.get(request.model, request.model)
             return {
-                "modelUri": f"gpt://{folder}/{request.model}",
+                "modelUri": f"gpt://{folder}/{model_name}/latest",
                 "completionOptions": {
                     "stream": False,
                     "temperature": request.temperature,
                     "maxTokens": request.max_tokens,
                 },
-                "messages": messages,
+                "messages": [
+                    {
+                        "role": message.get("role", "user"),
+                        "text": message.get("text", message.get("content", "")),
+                    }
+                    for message in messages
+                ],
             }
         payload: dict[str, Any] = {
             "model": request.model,
