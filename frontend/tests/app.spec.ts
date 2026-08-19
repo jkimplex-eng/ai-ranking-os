@@ -135,6 +135,8 @@ test("authenticated routes survive refresh and browser history", async ({ page }
           ? { items: [], total: 0 }
         : path.endsWith("/graph")
           ? { id: 1, structure_version: "1.0", node_count: 0, edge_count: 0, nodes: [], edges: [], created_at: new Date().toISOString() }
+        : path.endsWith("/geo/platforms") || path.endsWith("/geo/prompt-sets")
+          ? []
         : path.endsWith("/workspace")
           ? { id: 1, name: "Workspace", settings: {} }
           : path.endsWith("/router/status")
@@ -173,6 +175,7 @@ test("authenticated routes survive refresh and browser history", async ({ page }
     ["Отчёты", "/reports", "Отчёты"],
     ["Рекомендации", "/recommendations", "Рекомендации"],
     ["Граф знаний", "/knowledge-graph", "Граф знаний"],
+    ["GEO-площадки", "/geo-opportunities", "Где публиковаться, чтобы вас рекомендовали ИИ"],
     ["Конкуренты", "/competitors", "Конкуренты"],
     ["История", "/history", "История"],
     ["Провайдеры ИИ", "/providers", "Провайдеры ИИ"],
@@ -189,6 +192,35 @@ test("authenticated routes survive refresh and browser history", async ({ page }
     await expect(page).toHaveURL(new RegExp(`${path.replace("/", "\\/")}$`));
     await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
   }
+});
+
+test("GEO screen exposes real platform scoring and explainability", async ({ page }) => {
+  const platform = { id: "platform-1", name: "Отраслевое СМИ", domain: "media.example", platform_type: "PUBLICATION", category: "BEAUTY", country: "RU", language: "ru", ai_engines: [], domain_trust: 82, topical_authority_score: 76, ai_citation_history: 12, cost_per_placement: 25000, evidence: { source: "USER_INPUT" }, active: true, created_at: "2026-08-19T00:00:00Z", updated_at: "2026-08-19T00:00:00Z" };
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    let json: unknown = {};
+    let status = 200;
+    if (path.endsWith("/auth/login")) json = { access_token: "access", refresh_token: "refresh-token-with-valid-length" };
+    else if (path.endsWith("/auth/me")) json = { id: 1, display_name: "Analyst", email: "analyst@example.com", roles: ["analyst"] };
+    else if (path.endsWith("/geo/platforms") && route.request().method() === "POST") { json = platform; status = 201; }
+    else if (path.endsWith("/geo/platforms")) json = [platform];
+    else if (path.endsWith("/geo/prompt-sets")) json = [{ id: "set-1", code: "beauty-core", version: 1, name: "Beauty Core", category: "BEAUTY", language: "ru", region: "RU", fingerprint: "0123456789abcdef", frozen: true, active: true, templates: [{ key: "category", query_type: "CATEGORY", template: "Какую {category} выбрать?" }], instances: [], created_at: "2026-08-19T00:00:00Z" }];
+    else if (path.endsWith("/v1/eis/batch-prioritize")) json = { methodology_version: "heuristic_v1.0", limitations: ["Correlation-based estimates; no causal effect is claimed."], items: [{ cost_efficiency: 0.0034, score: { id: "score-1", platform_id: "platform-1", ai_engine: "YandexGPT", eis_value: 84.6, priority: "P1", evidence_status: "PARTIAL", methodology_version: "heuristic_v1.0", weight_set_version: "geo-eis-v1", explanation: {}, calculated_at: "2026-08-19T00:00:00Z", components: { authority: { value: 81, numerator: 81, denominator: 1, inputs: {}, weights: {}, exclusions: [] }, match: { value: 76, numerator: 76, denominator: 1, inputs: {}, weights: {}, exclusions: ["cep_coverage"] }, content: { value: 90, numerator: 90, denominator: 1, inputs: {}, weights: {}, exclusions: [] } } } }] };
+    else if (path.endsWith("/research") || path.endsWith("/providers")) json = [];
+    else if (path.endsWith("/system/health")) json = { status: "healthy" };
+    await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(json) });
+  });
+  await page.goto("/geo-opportunities");
+  await page.getByLabel("Email").fill("analyst@example.com");
+  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByRole("button", { name: "Войти" }).click();
+  await expect(page.getByRole("heading", { name: "Где публиковаться, чтобы вас рекомендовали ИИ" })).toBeVisible();
+  await expect(page.getByText("Отраслевое СМИ")).toBeVisible();
+  await expect(page.getByText("Beauty Core")).toBeVisible();
+  await page.getByRole("button", { name: "Рассчитать приоритет" }).click();
+  await expect(page.getByText("84.6")).toBeVisible();
+  await expect(page.getByText("частичные данные")).toBeVisible();
+  await expect(page.getByText(/не выдаёт корреляцию за доказанную причинность/)).toBeVisible();
 });
 
 test("executive report explains metrics, zero citations and graph evidence", async ({ page }) => {

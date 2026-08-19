@@ -10,6 +10,9 @@ import {
   type CompetitorItem,
   type FeedbackItem,
   type GraphSnapshot,
+  type GeoPlatform,
+  type EisPriorityResult,
+  type FrozenPromptSet,
   type ProductAnalyticsDashboard as AnalyticsDashboard,
   type NotificationItem,
   type OrganizationItem,
@@ -53,6 +56,7 @@ const screenPaths: Record<Screen, string> = {
   report: "/reports/latest",
   recommendations: "/recommendations",
   graph: "/knowledge-graph",
+  geo: "/geo-opportunities",
   competitors: "/competitors",
   history: "/history",
   providers: "/providers",
@@ -83,7 +87,7 @@ const metricMeta = [
   ["Достоверность", "confidence_score"],
 ] as const;
 
-type Screen = "home" | "research" | "wizard" | "reports" | "report" | "recommendations" | "graph" | "competitors" | "history" | "providers" | "analytics" | "notifications" | "organization" | "settings" | "feedback" | "profile" | "admin" | "onboarding";
+type Screen = "home" | "research" | "wizard" | "reports" | "report" | "recommendations" | "graph" | "geo" | "competitors" | "history" | "providers" | "analytics" | "notifications" | "organization" | "settings" | "feedback" | "profile" | "admin" | "onboarding";
 type ReportShape = {
   executive_summary?: string;
   research?: ResearchItem;
@@ -254,6 +258,7 @@ function Shell({
     ["⌂", "Обзор", "home"], ["→", "Начало работы", "onboarding"],
     ["◉", "Исследования", "research"], ["▤", "Отчёты", "reports"],
     ["✓", "Рекомендации", "recommendations"], ["⌘", "Граф знаний", "graph"],
+    ["◈", "GEO-площадки", "geo"],
     ["◇", "Конкуренты", "competitors"], ["↗", "История", "history"],
     ["✦", "Провайдеры ИИ", "providers"], ["◫", "Аналитика продукта", "analytics"],
     ["♢", "Уведомления", "notifications"], ["◎", "Организации", "organization"],
@@ -682,6 +687,92 @@ function ProvidersDashboard() {
           </section>
         </>
       )}
+    </main>
+  );
+}
+
+function GeoOpportunitiesScreen() {
+  const [platforms, setPlatforms] = useState<GeoPlatform[]>([]);
+  const [promptSets, setPromptSets] = useState<FrozenPromptSet[]>([]);
+  const [priorities, setPriorities] = useState<EisPriorityResult>();
+  const [engine, setEngine] = useState("YandexGPT");
+  const [form, setForm] = useState({ name: "", domain: "", category: "UNIVERSAL", country: "RU", language: "ru", trust: "", authority: "", citations: "", cost: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const load = useCallback(() => Promise.all([api.geoPlatforms(), api.frozenPromptSets()]).then(([items, sets]) => { setPlatforms(items); setPromptSets(sets); }), []);
+  useEffect(() => { load().catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить GEO-данные")); }, [load]);
+  const numericField = (value: string) => value.trim() === "" ? undefined : Number(value);
+  const create = async (event: React.FormEvent) => {
+    event.preventDefault(); setBusy(true); setError("");
+    try {
+      await api.createGeoPlatform({
+        name: form.name.trim(), domain: form.domain.trim(), category: form.category,
+        country: form.country.trim().toUpperCase(), language: form.language.trim().toLowerCase(),
+        domain_trust: numericField(form.trust), topical_authority_score: numericField(form.authority),
+        ai_citation_history: numericField(form.citations), cost_per_placement: numericField(form.cost),
+        evidence: { source: "USER_INPUT", recorded_at: new Date().toISOString() },
+      });
+      setForm((current) => ({ ...current, name: "", domain: "", trust: "", authority: "", citations: "", cost: "" }));
+      setPriorities(undefined); await load();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось добавить площадку"); }
+    finally { setBusy(false); }
+  };
+  const calculate = async () => {
+    if (!platforms.length) return;
+    setBusy(true); setError("");
+    try { setPriorities(await api.prioritizeGeoPlatforms(platforms.map((item) => item.id), engine)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось рассчитать приоритеты"); }
+    finally { setBusy(false); }
+  };
+  const remove = async (item: GeoPlatform) => {
+    setBusy(true); setError("");
+    try { await api.deleteGeoPlatform(item.id); setPriorities(undefined); await load(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось удалить площадку"); }
+    finally { setBusy(false); }
+  };
+  const platformById = new Map(platforms.map((item) => [item.id, item]));
+  const activeSets = promptSets.filter((item) => item.active);
+  return (
+    <main className="analytics-page geo-page">
+      <header className="analytics-hero">
+        <div><span className="eyebrow">GEO OPPORTUNITY ENGINE</span><h1>Где публиковаться, чтобы вас рекомендовали ИИ</h1><p>Сравните площадки по авторитетности, тематической близости, истории цитирования и стоимости. Оценка EIS показывает потенциал влияния, а не выдаёт корреляцию за доказанную причинность.</p></div>
+        <div className="geo-method"><span>Методология</span><b>{priorities?.methodology_version ?? "heuristic_v1.0"}</b><small>Версионированный расчёт</small></div>
+      </header>
+      {error && <div className="error" role="alert">{error}</div>}
+      <section className="geo-summary">
+        <article className="analytics-card metric"><span>Площадки</span><strong>{platforms.length}</strong><small>реальные записи реестра</small></article>
+        <article className="analytics-card metric"><span>Активные наборы запросов</span><strong>{activeSets.length}</strong><small>frozen prompt set</small></article>
+        <article className="analytics-card metric"><span>Последний расчёт</span><strong>{priorities?.items.length ?? 0}</strong><small>оценено площадок</small></article>
+      </section>
+      <section className="geo-layout">
+        <form className="analytics-card geo-form" onSubmit={create}>
+          <div><span className="eyebrow">ДОБАВИТЬ ПЛОЩАДКУ</span><h2>Источник для проверки</h2><p>Укажите только измеренные значения. Пустое поле будет отмечено как «нет данных», а не как ноль.</p></div>
+          <label>Название площадки<input aria-label="Название площадки" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Например, отраслевое СМИ" required /></label>
+          <label>Домен<input aria-label="Домен площадки" value={form.domain} onChange={(event) => setForm({ ...form, domain: event.target.value })} placeholder="example.ru" required /></label>
+          <div className="geo-form-grid">
+            <label>Категория<input value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} /></label>
+            <label>Страна<input value={form.country} onChange={(event) => setForm({ ...form, country: event.target.value })} /></label>
+            <label>Язык<input value={form.language} onChange={(event) => setForm({ ...form, language: event.target.value })} /></label>
+            <label>Domain Trust, 0–100<input type="number" min="0" max="100" value={form.trust} onChange={(event) => setForm({ ...form, trust: event.target.value })} /></label>
+            <label>Тематический авторитет, 0–100<input type="number" min="0" max="100" value={form.authority} onChange={(event) => setForm({ ...form, authority: event.target.value })} /></label>
+            <label>Цитирования ИИ<input type="number" min="0" value={form.citations} onChange={(event) => setForm({ ...form, citations: event.target.value })} /></label>
+            <label>Стоимость размещения<input type="number" min="0" value={form.cost} onChange={(event) => setForm({ ...form, cost: event.target.value })} /></label>
+          </div>
+          <Button type="submit" disabled={busy}>{busy ? "Сохраняем…" : "Добавить в реестр"}</Button>
+        </form>
+        <article className="analytics-card geo-prompts">
+          <span className="eyebrow">КАРТА ЗАПРОСОВ</span><h2>Зафиксированные наборы</h2>
+          {activeSets.length ? activeSets.map((set) => <div className="prompt-set-row" key={set.id}><div><b>{set.name}</b><span>{set.category} · {set.language}/{set.region}</span></div><Badge tone="success">v{set.version} · АКТИВЕН</Badge><small>{set.templates.length} шаблонов · fingerprint {set.fingerprint.slice(0, 10)}…</small></div>) : <div className="empty-state"><b>Активных наборов пока нет</b><p>Создайте и активируйте Frozen Prompt Set через API. Здесь появится его версия и контрольный fingerprint.</p></div>}
+        </article>
+      </section>
+      <section className="geo-ranking-head">
+        <div><span className="eyebrow">EIS — ВЛИЯНИЕ ИСТОЧНИКА</span><h2>Приоритет площадок</h2><p>Чем выше EIS, тем сильнее совокупные сигналы площадки для выбранной AI-системы.</p></div>
+        <div className="geo-calculate"><label>ИИ для оценки<select value={engine} onChange={(event) => setEngine(event.target.value)}><option>YandexGPT</option><option>ChatGPT</option><option>Gemini</option><option>GigaChat</option><option>Perplexity</option><option>Claude</option></select></label><Button onClick={() => void calculate()} disabled={busy || !platforms.length}>{busy ? "Считаем…" : "Рассчитать приоритет"}</Button></div>
+      </section>
+      {!platforms.length ? <section className="analytics-card geo-empty"><strong>Площадки ещё не добавлены</strong><p>Добавьте реальный ресурс выше. Система не подставляет демонстрационные сайты и не выдумывает показатели.</p></section> : priorities ? <section className="geo-ranking">
+        {priorities.items.map(({ score, cost_efficiency }, index) => { const platform = platformById.get(score.platform_id); const measured = score.eis_value !== undefined && score.eis_value !== null; return <article className="analytics-card geo-rank-card" key={score.id}><div className="geo-rank-number">#{index + 1}</div><div className="geo-rank-main"><div><h3>{platform?.name ?? score.platform_id}</h3><a href={`https://${platform?.domain}`} target="_blank" rel="noreferrer">{platform?.domain}</a></div><Badge tone={score.priority === "P0" ? "danger" : score.priority === "P1" ? "warning" : "neutral"}>{score.priority ?? "НЕТ ПРИОРИТЕТА"}</Badge></div><div className="geo-score"><strong>{measured ? score.eis_value?.toFixed(1) : "—"}</strong><span>из 100</span></div><div className="geo-components">{Object.entries(score.components).map(([name, component]) => <div key={name}><span>{name === "authority" ? "Авторитет" : name === "match" ? "Соответствие запросу" : name === "content" ? "Качество контента" : name}</span><b>{component.value === null || component.value === undefined ? "Нет данных" : component.value.toFixed(1)}</b><div className="track"><i style={{ width: `${component.value ?? 0}%` }} /></div>{component.exclusions.length > 0 && <small>Не учтено: {component.exclusions.join(", ")}</small>}</div>)}</div><footer><span>Доказательства: <b>{score.evidence_status === "MEASURED" ? "измерено" : score.evidence_status === "PARTIAL" ? "частичные данные" : "не измерено"}</b></span><span>Эффективность затрат: <b>{cost_efficiency === undefined || cost_efficiency === null ? "нет данных" : cost_efficiency.toFixed(4)}</b></span><button className="secondary" onClick={() => void remove(platform!)} disabled={busy}>Удалить</button></footer></article>; })}
+        <p className="geo-limitation">Важно: {priorities.limitations.join(" ")} Перед размещением подтвердите эффект повторным исследованием с неизменным набором запросов.</p>
+      </section> : <section className="geo-platform-list">{platforms.map((item) => <article className="analytics-card record-card" key={item.id}><div><small>{item.category} · {item.country}/{item.language}</small><h2>{item.name}</h2><p>{item.domain} · Domain Trust: {item.domain_trust ?? "нет данных"} · Тематический авторитет: {item.topical_authority_score ?? "нет данных"}</p></div><Badge tone={item.active ? "success" : "neutral"}>{item.active ? "В РЕЕСТРЕ" : "ОТКЛЮЧЕНА"}</Badge></article>)}</section>}
     </main>
   );
 }
@@ -1634,6 +1725,8 @@ function App() {
         <RecordsScreen key="recommendations" kind="recommendations" onNewResearch={() => navigate("wizard")} />
       ) : screen === "graph" ? (
         <GraphScreen />
+      ) : screen === "geo" ? (
+        <GeoOpportunitiesScreen />
       ) : screen === "competitors" ? (
         <RecordsScreen key="competitors" kind="competitors" onNewResearch={() => navigate("wizard")} />
       ) : screen === "history" ? (

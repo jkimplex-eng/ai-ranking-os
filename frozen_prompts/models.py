@@ -42,7 +42,9 @@ class FrozenPromptSet(Base):
         DateTime(timezone=True), server_default=sql_text("CURRENT_TIMESTAMP"), nullable=False
     )
     instances: Mapped[list["FrozenPromptInstance"]] = relationship(
-        back_populates="prompt_set", cascade="all, delete-orphan"
+        back_populates="prompt_set",
+        cascade="all, delete-orphan",
+        order_by="FrozenPromptInstance.position",
     )
 
 

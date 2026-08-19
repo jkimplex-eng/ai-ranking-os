@@ -88,6 +88,35 @@ export type ProviderConnection = {
   last_checked_at?: string; last_success_at?: string; last_error?: string; created_at: string;
 };
 export type ProviderConnectionTest = { provider: string; status: string; latency_ms: number; models: string[]; free_models: string[]; checked_at: string };
+export type GeoPlatform = {
+  id: string; name: string; domain: string; platform_type: string; category: string;
+  country: string; language: string; ai_engines: string[]; domain_trust?: number;
+  topical_authority_score?: number; ai_citation_history?: number;
+  allows_ai_crawlers?: boolean; in_knowledge_graph?: boolean;
+  cost_per_placement?: number; evidence: Record<string, unknown>; active: boolean;
+  created_at: string; updated_at: string;
+};
+export type FrozenPromptSet = {
+  id: string; code: string; version: number; name: string; category: string;
+  language: string; region: string; fingerprint: string; frozen: boolean;
+  active: boolean; templates: Array<{ key: string; query_type: string; template: string }>;
+  instances: Array<{ id: string; stable_key: string; text: string; query_type: string; position: number }>;
+  created_at: string;
+};
+export type EisComponent = {
+  value?: number; numerator: number; denominator: number;
+  inputs: Record<string, number | boolean | null>; weights: Record<string, number>; exclusions: string[];
+};
+export type EisScore = {
+  id: string; platform_id: string; ai_engine: string; eis_value?: number; priority?: string;
+  components: Record<string, EisComponent>; evidence_status: string;
+  methodology_version: string; weight_set_version: string; explanation: Record<string, unknown>;
+  calculated_at: string;
+};
+export type EisPriorityResult = {
+  items: Array<{ score: EisScore; cost_efficiency?: number }>;
+  methodology_version: string; limitations: string[];
+};
 export type RouterHistoryItem = { id: number; selected_models: string[]; latency_ms: number; estimated_cost_usd: number; error?: string | null; created_at: string };
 export type ProductAnalyticsDashboard = {
   period: "HOURLY" | "DAILY" | "WEEKLY" | "MONTHLY";
@@ -251,6 +280,20 @@ export class ApiClient {
   providerConnections() { return this.request<ProviderConnection[]>("/provider-connections"); }
   connectProvider(apiKey: string, providerHint?: string, folderId?: string) { return this.request<ProviderConnection>("/provider-connections", { method: "POST", body: JSON.stringify({ api_key: apiKey, provider_hint: providerHint || null, folder_id: folderId || null, free_only: true }) }); }
   testProviderConnection(id: number) { return this.request<ProviderConnectionTest>(`/provider-connections/${id}/test`, { method: "POST" }); }
+  geoPlatforms() { return this.request<GeoPlatform[]>("/geo/platforms"); }
+  createGeoPlatform(payload: {
+    name: string; domain: string; category: string; country: string; language: string;
+    domain_trust?: number; topical_authority_score?: number; ai_citation_history?: number;
+    cost_per_placement?: number; evidence: Record<string, unknown>;
+  }) { return this.request<GeoPlatform>("/geo/platforms", { method: "POST", body: JSON.stringify(payload) }); }
+  deleteGeoPlatform(id: string) { return this.request<void>(`/geo/platforms/${id}`, { method: "DELETE" }); }
+  frozenPromptSets() { return this.request<FrozenPromptSet[]>("/geo/prompt-sets"); }
+  prioritizeGeoPlatforms(platformIds: string[], aiEngine: string) {
+    return this.request<EisPriorityResult>("/v1/eis/batch-prioritize", {
+      method: "POST",
+      body: JSON.stringify({ platform_ids: platformIds, ai_engine: aiEngine, query_evidence: {} }),
+    });
+  }
   disconnectProvider(id: number) { return this.request<void>(`/provider-connections/${id}`, { method: "DELETE" }); }
   routerStatus() {
     return this.request<{status: string; costs: Record<string, number>}>('/router/status');
