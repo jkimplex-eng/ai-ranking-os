@@ -35,9 +35,22 @@ class PublicationExperiment(Base):
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     causality_status: Mapped[str] = mapped_column(String(40), nullable=False)
     evidence_grade: Mapped[str] = mapped_column(String(20), nullable=False)
+    evidence_level: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="HYPOTHESIS", server_default="HYPOTHESIS"
+    )
     metric_deltas: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     provider_deltas: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     sample_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    baseline_sample_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    followup_sample_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    matched_pairs: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_responses: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    confidence_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    confidence_method: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="MATCHED_RESPONSE_COVERAGE_V1"
+    )
+    evidence_matrix: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    limitations: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     algorithm_version: Mapped[str] = mapped_column(String(20), nullable=False)
     evaluated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False
@@ -80,6 +93,14 @@ class PublicationInfluenceEstimate(Base):
     confidence_max: Mapped[float] = mapped_column(Float, nullable=False)
     confidence_score: Mapped[float] = mapped_column(Float, nullable=False)
     evidence_grade: Mapped[str] = mapped_column(String(20), nullable=False)
+    evidence_level: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="OBSERVATION", server_default="OBSERVATION"
+    )
+    positive_experiments: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    negative_experiments: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    neutral_experiments: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    limitations: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     algorithm_version: Mapped[str] = mapped_column(String(20), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False

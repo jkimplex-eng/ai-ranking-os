@@ -18,9 +18,18 @@ class ExperimentRead(ApiModel):
     status: str
     causality_status: str
     evidence_grade: str
+    evidence_level: str
     metric_deltas: dict[str, float]
     provider_deltas: dict[str, dict[str, float]]
     sample_size: int
+    baseline_sample_size: int
+    followup_sample_size: int
+    matched_pairs: int
+    failed_responses: int
+    confidence_score: float = Field(ge=0, le=1)
+    confidence_method: str
+    evidence_matrix: dict
+    limitations: list[str]
     algorithm_version: str
     evaluated_at: datetime
 
@@ -42,6 +51,12 @@ class InfluenceEstimateRead(ApiModel):
     confidence_max: float
     confidence_score: float = Field(ge=0, le=1)
     evidence_grade: str
+    evidence_level: str
+    positive_experiments: int
+    negative_experiments: int
+    neutral_experiments: int
+    last_observed_at: datetime | None
+    limitations: list[str]
     algorithm_version: str
     updated_at: datetime
 

@@ -19,6 +19,9 @@ class PublicationLearningRepository:
             )
         )
 
+    def experiment(self, experiment_id: int) -> PublicationExperiment | None:
+        return self.db.get(PublicationExperiment, experiment_id)
+
     def estimates(
         self, entity_dimensions: dict[str, str] | None = None
     ) -> list[PublicationInfluenceEstimate]:

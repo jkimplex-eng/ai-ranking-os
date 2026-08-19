@@ -28,7 +28,7 @@ from research_lab.models import ResearchPublication
 from research_lab.repository import PublicationRepository
 from research_lab.schemas import ObservationCreate
 
-ALGORITHM_VERSION = "1.0"
+ALGORITHM_VERSION = "1.1"
 METRICS = (
     "visibility_score",
     "mention_score",
@@ -63,7 +63,7 @@ class PublicationLearningService:
         )
         saved: list[PublicationExperiment] = []
         for publication in publications:
-            self._record_observations(publication, followup)
+            detection_response_ids = self._record_observations(publication, followup)
             baseline = self._matched_baseline(followup, publication)
             if baseline is None:
                 continue
@@ -77,19 +77,32 @@ class PublicationLearningService:
                 )
             )
             if existing is None:
-                existing = self._build_experiment(publication, baseline, followup)
+                existing = self._build_experiment(
+                    publication, baseline, followup, detection_response_ids
+                )
                 self.db.add(existing)
             else:
-                refreshed = self._build_experiment(publication, baseline, followup)
+                refreshed = self._build_experiment(
+                    publication, baseline, followup, detection_response_ids
+                )
                 for key in (
                     "baseline_research_id",
                     "matrix_fingerprint",
                     "status",
                     "causality_status",
                     "evidence_grade",
+                    "evidence_level",
                     "metric_deltas",
                     "provider_deltas",
                     "sample_size",
+                    "baseline_sample_size",
+                    "followup_sample_size",
+                    "matched_pairs",
+                    "failed_responses",
+                    "confidence_score",
+                    "confidence_method",
+                    "evidence_matrix",
+                    "limitations",
                     "evaluated_at",
                 ):
                     setattr(existing, key, getattr(refreshed, key))
@@ -99,7 +112,9 @@ class PublicationLearningService:
             self._rebuild_estimates()
         return saved
 
-    def _record_observations(self, publication: ResearchPublication, followup: Research) -> None:
+    def _record_observations(
+        self, publication: ResearchPublication, followup: Research
+    ) -> list[int]:
         responses = list(
             self.db.scalars(
                 select(Response)
@@ -110,6 +125,7 @@ class PublicationLearningService:
         )
         needle = publication.url.rstrip("/").casefold()
         recorded = False
+        response_ids: list[int] = []
         for response in responses:
             haystack = "\n".join(
                 (
@@ -120,6 +136,7 @@ class PublicationLearningService:
             index = haystack.casefold().find(needle)
             if index < 0:
                 continue
+            response_ids.append(response.id)
             start, end = max(0, index - 160), min(len(haystack), index + len(needle) + 160)
             PublicationRepository(self.db).record_observation(
                 publication.id,
@@ -135,6 +152,7 @@ class PublicationLearningService:
             recorded = True
         if recorded:
             self.db.refresh(publication, ["observations"])
+        return response_ids
 
     def summary(self, entity_id: UUID) -> dict[str, Any]:
         experiments = self.repository.experiments_for_entity(entity_id)
@@ -181,7 +199,11 @@ class PublicationLearningService:
         )
 
     def _build_experiment(
-        self, publication: ResearchPublication, baseline: Research, followup: Research
+        self,
+        publication: ResearchPublication,
+        baseline: Research,
+        followup: Research,
+        detection_response_ids: list[int],
     ) -> PublicationExperiment:
         before = self._score(baseline.id)
         after = self._score(followup.id)
@@ -198,9 +220,44 @@ class PublicationLearningService:
             }
             for key in sorted(set(baseline_providers) & set(followup_providers))
         }
-        observed = bool(publication.observations)
-        sample_size = min(len(baseline.tasks), len(followup.tasks))
-        evidence_grade = "MODERATE" if observed and sample_size >= 8 else "PRELIMINARY"
+        observed = bool(detection_response_ids)
+        evidence_matrix = self._evidence_matrix(baseline, followup)
+        evidence_matrix["publication_detection"] = {
+            "url": publication.url,
+            "detected": observed,
+            "followup_response_ids": detection_response_ids,
+        }
+        baseline_size = len(evidence_matrix["baseline"])
+        followup_size = len(evidence_matrix["followup"])
+        matched_pairs = sum(pair["eligible"] for pair in evidence_matrix["pairs"])
+        failed_responses = sum(
+            bool(row["excluded"])
+            for phase in ("baseline", "followup")
+            for row in evidence_matrix[phase]
+        )
+        eligible = max(baseline_size, followup_size, 1)
+        coverage = matched_pairs / eligible
+        confidence = min(0.95, coverage * (0.45 + min(matched_pairs, 20) / 40))
+        if not observed:
+            confidence *= 0.35
+        confidence = round(confidence, 4)
+        evidence_level = "OBSERVATION" if observed else "HYPOTHESIS"
+        evidence_grade = (
+            "MODERATE" if observed and matched_pairs >= 8 and coverage >= 0.8 else "PRELIMINARY"
+        )
+        limitations = [
+            "Совпадение до/после показывает ассоциацию, но не доказывает причинность.",
+            "Внутренние механизмы поиска и ранжирования ИИ недоступны для проверки.",
+        ]
+        if not observed:
+            limitations.insert(
+                0,
+                "URL публикации не обнаружен в ответах; изменение метрик не обучает площадку.",
+            )
+        if failed_responses:
+            limitations.append(
+                f"Исключено неуспешных или отсутствующих ответов: {failed_responses}."
+            )
         return PublicationExperiment(
             publication_id=publication.id,
             entity_id=followup.entity_id,
@@ -208,18 +265,38 @@ class PublicationLearningService:
             followup_research_id=followup.id,
             matrix_fingerprint=self._matrix_fingerprint(followup),
             status="MATCHED",
-            causality_status="OBSERVED_ASSOCIATION",
+            causality_status=(
+                "OBSERVED_ASSOCIATION" if observed else "UNVERIFIED_TIMING_ASSOCIATION"
+            ),
             evidence_grade=evidence_grade,
+            evidence_level=evidence_level,
             metric_deltas=metric_deltas,
             provider_deltas=provider_deltas,
-            sample_size=sample_size,
+            sample_size=matched_pairs,
+            baseline_sample_size=baseline_size,
+            followup_sample_size=followup_size,
+            matched_pairs=matched_pairs,
+            failed_responses=failed_responses,
+            confidence_score=confidence,
+            confidence_method="MATCHED_RESPONSE_COVERAGE_V1",
+            evidence_matrix=evidence_matrix,
+            limitations=limitations,
             algorithm_version=ALGORITHM_VERSION,
             evaluated_at=datetime.now(UTC),
         )
 
     def _rebuild_estimates(self) -> None:
-        experiments = list(self.db.scalars(select(PublicationExperiment)))
-        grouped: defaultdict[tuple[str, ...], list[float]] = defaultdict(list)
+        experiments = list(
+            self.db.scalars(
+                select(PublicationExperiment).where(
+                    PublicationExperiment.algorithm_version == ALGORITHM_VERSION,
+                    PublicationExperiment.evidence_level != "HYPOTHESIS",
+                )
+            )
+        )
+        grouped: defaultdict[tuple[str, ...], list[tuple[float, datetime, float]]] = defaultdict(
+            list
+        )
         for experiment in experiments:
             publication = self.db.get(ResearchPublication, experiment.publication_id)
             followup = self.db.get(Research, experiment.followup_research_id)
@@ -234,23 +311,36 @@ class PublicationLearningService:
                 self._first(followup.metadata_payload, "regions", "region", "ALL"),
             )
             for metric, delta in experiment.metric_deltas.items():
-                grouped[(*dimensions, metric, "ALL", "ALL")].append(float(delta))
+                grouped[(*dimensions, metric, "ALL", "ALL")].append(
+                    (float(delta), experiment.evaluated_at, experiment.confidence_score)
+                )
             for provider_model, deltas in experiment.provider_deltas.items():
                 provider, _, model = provider_model.partition("/")
                 for metric, delta in deltas.items():
-                    grouped[(*dimensions, metric, provider, model or "ALL")].append(float(delta))
+                    grouped[(*dimensions, metric, provider, model or "ALL")].append(
+                        (float(delta), experiment.evaluated_at, experiment.confidence_score)
+                    )
 
         self.db.execute(delete(PublicationInfluenceEstimate))
         now = datetime.now(UTC)
-        for key, values in grouped.items():
+        for key, observations in grouped.items():
             domain, channel, content_type, category, language, region, metric, provider, model = key
+            values = [item[0] for item in observations]
             expected = statistics.fmean(values)
-            spread = statistics.stdev(values) if len(values) > 1 else 20.0
-            margin = 1.96 * spread / math.sqrt(len(values))
-            confidence = min(0.95, 0.2 + len(values) * 0.12)
+            spread = statistics.stdev(values) if len(values) > 1 else 30.0
+            margin = self._critical_value(len(values)) * spread / math.sqrt(len(values))
+            confidence = min(
+                0.95,
+                statistics.fmean(item[2] for item in observations)
+                * (0.65 + min(len(values), 5) * 0.07),
+            )
             grade = (
                 "STRONG" if len(values) >= 5 else "MODERATE" if len(values) >= 3 else "PRELIMINARY"
             )
+            evidence_level = "CORRELATION" if len(values) >= 3 else "OBSERVATION"
+            positive = sum(value > 1 for value in values)
+            negative = sum(value < -1 for value in values)
+            neutral = len(values) - positive - negative
             self.db.add(
                 PublicationInfluenceEstimate(
                     resource_domain=domain,
@@ -264,15 +354,115 @@ class PublicationLearningService:
                     region=region,
                     sample_size=len(values),
                     expected_delta=round(expected, 4),
-                    confidence_min=round(expected - margin, 4),
-                    confidence_max=round(expected + margin, 4),
+                    confidence_min=round(max(-100.0, expected - margin), 4),
+                    confidence_max=round(min(100.0, expected + margin), 4),
                     confidence_score=round(confidence, 4),
                     evidence_grade=grade,
+                    evidence_level=evidence_level,
+                    positive_experiments=positive,
+                    negative_experiments=negative,
+                    neutral_experiments=neutral,
+                    last_observed_at=max(item[1] for item in observations),
+                    limitations=[
+                        "Оценка отражает наблюдаемую связь, а не гарантированный причинный эффект.",
+                        "Диапазон расширяется при малом числе сопоставимых экспериментов.",
+                    ],
                     algorithm_version=ALGORITHM_VERSION,
                     updated_at=now,
                 )
             )
         self.db.commit()
+
+    def _evidence_matrix(self, baseline: Research, followup: Research) -> dict[str, Any]:
+        before = self._evidence_rows(baseline)
+        after = self._evidence_rows(followup)
+        before_by_key: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+        after_by_key: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in before:
+            before_by_key[row["stable_key"]].append(row)
+        for row in after:
+            after_by_key[row["stable_key"]].append(row)
+        pairs: list[dict[str, Any]] = []
+        for key in sorted(set(before_by_key) & set(after_by_key)):
+            for left, right in zip(before_by_key[key], after_by_key[key], strict=False):
+                pairs.append(
+                    {
+                        "stable_key": key,
+                        "baseline_response_id": left["response_id"],
+                        "followup_response_id": right["response_id"],
+                        "eligible": not left["excluded"] and not right["excluded"],
+                        "signal_delta": {
+                            signal: int(right[signal]) - int(left[signal])
+                            for signal in ("mentioned", "recommended", "cited")
+                        },
+                    }
+                )
+        return {"baseline": before, "followup": after, "pairs": pairs}
+
+    def _evidence_rows(self, research: Research) -> list[dict[str, Any]]:
+        target = str(research.metadata_payload.get("target_entity", research.title)).casefold()
+        tasks = list(
+            self.db.scalars(
+                select(ResearchTask)
+                .where(ResearchTask.research_id == research.id)
+                .options(
+                    selectinload(ResearchTask.responses).selectinload(
+                        Response.extracted_citations
+                    ),
+                    selectinload(ResearchTask.responses).selectinload(
+                        Response.extracted_recommendations
+                    ),
+                )
+                .order_by(ResearchTask.id)
+            )
+        )
+        rows: list[dict[str, Any]] = []
+        for task in tasks:
+            stable_key = self._response_key(task.query, task.provider, task.model)
+            if not task.responses:
+                rows.append(
+                    {
+                        "research_id": research.id,
+                        "task_id": task.id,
+                        "response_id": None,
+                        "stable_key": stable_key,
+                        "query": task.query,
+                        "provider": task.provider or "",
+                        "model": task.model or "",
+                        "processing_status": "MISSING",
+                        "mentioned": False,
+                        "recommended": False,
+                        "cited": False,
+                        "citation_count": 0,
+                        "excluded": True,
+                        "exclusion_reason": task.error or "Ответ отсутствует",
+                    }
+                )
+                continue
+            for response in sorted(task.responses, key=lambda item: item.id):
+                processed = response.processing_status == ResponseProcessingStatus.PROCESSED
+                citations = response.extracted_citations or []
+                normalized_citations = response.normalized_response.get("citations", [])
+                citation_count = max(len(citations), len(normalized_citations))
+                rows.append(
+                    {
+                        "research_id": research.id,
+                        "task_id": task.id,
+                        "response_id": response.id,
+                        "stable_key": stable_key,
+                        "query": task.query,
+                        "provider": response.provider,
+                        "model": response.model,
+                        "processing_status": str(response.processing_status),
+                        "mentioned": processed and target in response.content.casefold(),
+                        "recommended": processed and response_recommends_target(response, target),
+                        "cited": processed and citation_count > 0,
+                        "citation_count": citation_count,
+                        "excluded": not processed or bool(response.error_type),
+                        "exclusion_reason": response.error_message or response.processing_error,
+                    }
+                )
+        return rows
 
     def _provider_signals(self, research: Research) -> dict[str, dict[str, float]]:
         target = str(research.metadata_payload.get("target_entity", research.title)).casefold()
@@ -348,6 +538,24 @@ class PublicationLearningService:
             "regions": research.metadata_payload.get("regions"),
         }
         return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+    @staticmethod
+    def _response_key(query: str, provider: str | None, model: str | None) -> str:
+        value = "|".join(
+            (
+                query.strip().casefold(),
+                (provider or "").casefold(),
+                (model or "").casefold(),
+            )
+        )
+        return hashlib.sha256(value.encode()).hexdigest()[:24]
+
+    @staticmethod
+    def _critical_value(sample_size: int) -> float:
+        if sample_size <= 1:
+            return 1.0
+        values = {2: 12.706, 3: 4.303, 4: 3.182, 5: 2.776, 6: 2.571, 7: 2.447}
+        return values.get(sample_size, 2.262 if sample_size < 30 else 1.96)
 
     @staticmethod
     def _domain(url: str) -> str:

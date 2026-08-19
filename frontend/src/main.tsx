@@ -12,6 +12,7 @@ import {
   type GraphSnapshot,
   type GeoPlatform,
   type EisPriorityResult,
+  type PublicationInfluenceEstimate,
   type FrozenPromptSet,
   type ProductAnalyticsDashboard as AnalyticsDashboard,
   type NotificationItem,
@@ -695,11 +696,16 @@ function GeoOpportunitiesScreen() {
   const [platforms, setPlatforms] = useState<GeoPlatform[]>([]);
   const [promptSets, setPromptSets] = useState<FrozenPromptSet[]>([]);
   const [priorities, setPriorities] = useState<EisPriorityResult>();
+  const [learnedInfluence, setLearnedInfluence] = useState<PublicationInfluenceEstimate[]>([]);
   const [engine, setEngine] = useState("YandexGPT");
   const [form, setForm] = useState({ name: "", domain: "", category: "UNIVERSAL", country: "RU", language: "ru", trust: "", authority: "", citations: "", cost: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const load = useCallback(() => Promise.all([api.geoPlatforms(), api.frozenPromptSets()]).then(([items, sets]) => { setPlatforms(items); setPromptSets(sets); }), []);
+  const load = useCallback(() => Promise.all([
+    api.geoPlatforms(), api.frozenPromptSets(), api.publicationInfluence(),
+  ]).then(([items, sets, estimates]) => {
+    setPlatforms(items); setPromptSets(sets); setLearnedInfluence(estimates);
+  }), []);
   useEffect(() => { load().catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить GEO-данные")); }, [load]);
   const numericField = (value: string) => value.trim() === "" ? undefined : Number(value);
   const create = async (event: React.FormEvent) => {
@@ -742,7 +748,7 @@ function GeoOpportunitiesScreen() {
       <section className="geo-summary">
         <article className="analytics-card metric"><span>Площадки</span><strong>{platforms.length}</strong><small>реальные записи реестра</small></article>
         <article className="analytics-card metric"><span>Активные наборы запросов</span><strong>{activeSets.length}</strong><small>frozen prompt set</small></article>
-        <article className="analytics-card metric"><span>Последний расчёт</span><strong>{priorities?.items.length ?? 0}</strong><small>оценено площадок</small></article>
+        <article className="analytics-card metric"><span>Обученные наблюдения</span><strong>{learnedInfluence.filter((item) => item.metric === "visibility_score" && item.provider === "ALL").reduce((total, item) => total + item.sample_size, 0)}</strong><small>подтверждены обнаружением публикации</small></article>
       </section>
       <section className="geo-layout">
         <form className="analytics-card geo-form" onSubmit={create}>
@@ -764,6 +770,12 @@ function GeoOpportunitiesScreen() {
           <span className="eyebrow">КАРТА ЗАПРОСОВ</span><h2>Зафиксированные наборы</h2>
           {activeSets.length ? activeSets.map((set) => <div className="prompt-set-row" key={set.id}><div><b>{set.name}</b><span>{set.category} · {set.language}/{set.region}</span></div><Badge tone="success">v{set.version} · АКТИВЕН</Badge><small>{set.templates.length} шаблонов · fingerprint {set.fingerprint.slice(0, 10)}…</small></div>) : <div className="empty-state"><b>Активных наборов пока нет</b><p>Создайте и активируйте Frozen Prompt Set через API. Здесь появится его версия и контрольный fingerprint.</p></div>}
         </article>
+      </section>
+      <section className="geo-learning-section">
+        <div className="geo-ranking-head compact">
+          <div><span className="eyebrow">ОБУЧЕНИЕ НА ПУБЛИКАЦИЯХ</span><h2>Что уже повлияло на ответы ИИ</h2><p>Здесь показаны только площадки, публикации которых были обнаружены в ответах и сопоставлены с одинаковым набором запросов до и после размещения.</p></div>
+        </div>
+        {learnedInfluence.some((item) => item.metric === "visibility_score" && item.provider === "ALL") ? <div className="geo-learned-grid">{learnedInfluence.filter((item) => item.metric === "visibility_score" && item.provider === "ALL").map((item) => <article className="analytics-card geo-learned" key={item.id}><header><div><small>{item.channel} · {item.content_type}</small><h3>{item.resource_domain}</h3></div><Badge tone={item.evidence_level === "CORRELATION" ? "success" : "warning"}>{item.evidence_level === "CORRELATION" ? "ПОВТОРЯЕМАЯ КОРРЕЛЯЦИЯ" : "НАБЛЮДЕНИЕ"}</Badge></header><div className="geo-learned-metrics"><div><span>Изменение Visibility</span><strong>{item.expected_delta >= 0 ? "+" : ""}{item.expected_delta.toFixed(1)}</strong></div><div><span>Диапазон</span><b>{item.confidence_min.toFixed(1)}…{item.confidence_max.toFixed(1)}</b></div><div><span>Наблюдения</span><b>{item.sample_size}</b></div><div><span>Положительные</span><b>{item.positive_experiments}</b></div><div><span>Уверенность</span><b>{Math.round(item.confidence_score * 100)}%</b></div></div><p>Алгоритм {item.algorithm_version}. Это наблюдаемая связь, а не гарантия причинного эффекта.</p></article>)}</div> : <div className="analytics-card geo-empty"><strong>Подтверждённых наблюдений пока нет</strong><p>Добавьте вышедшую публикацию в отчёте и повторите тот же Frozen Prompt Set. Площадка появится здесь только после обнаружения URL в ответах ИИ.</p></div>}
       </section>
       <section className="geo-ranking-head">
         <div><span className="eyebrow">EIS — ВЛИЯНИЕ ИСТОЧНИКА</span><h2>Приоритет площадок</h2><p>Чем выше EIS, тем сильнее совокупные сигналы площадки для выбранной AI-системы.</p></div>

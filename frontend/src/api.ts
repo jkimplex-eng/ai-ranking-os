@@ -117,6 +117,15 @@ export type EisPriorityResult = {
   items: Array<{ score: EisScore; cost_efficiency?: number }>;
   methodology_version: string; limitations: string[];
 };
+export type PublicationInfluenceEstimate = {
+  id: number; resource_domain: string; channel: string; content_type: string;
+  metric: string; provider: string; model: string; category: string;
+  language: string; region: string; sample_size: number; expected_delta: number;
+  confidence_min: number; confidence_max: number; confidence_score: number;
+  evidence_grade: string; evidence_level: string; positive_experiments: number;
+  negative_experiments: number; neutral_experiments: number;
+  last_observed_at?: string; limitations: string[]; algorithm_version: string;
+};
 export type RouterHistoryItem = { id: number; selected_models: string[]; latency_ms: number; estimated_cost_usd: number; error?: string | null; created_at: string };
 export type ProductAnalyticsDashboard = {
   period: "HOURLY" | "DAILY" | "WEEKLY" | "MONTHLY";
@@ -293,6 +302,9 @@ export class ApiClient {
       method: "POST",
       body: JSON.stringify({ platform_ids: platformIds, ai_engine: aiEngine, query_evidence: {} }),
     });
+  }
+  publicationInfluence() {
+    return this.request<PublicationInfluenceEstimate[]>("/publication-learning/influence");
   }
   disconnectProvider(id: number) { return this.request<void>(`/provider-connections/${id}`, { method: "DELETE" }); }
   routerStatus() {

@@ -25,6 +25,17 @@ def entity_learning(entity_id: UUID, db: DbSession) -> LearningSummary:
     return PublicationLearningService(db).summary(entity_id)
 
 
+@router.get("/experiments/{experiment_id}", response_model=ExperimentRead)
+def experiment_detail(experiment_id: int, db: DbSession) -> ExperimentRead:
+    item = PublicationLearningService(db).repository.experiment(experiment_id)
+    if item is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Publication experiment {experiment_id} not found",
+        )
+    return item
+
+
 @router.get("/influence", response_model=list[InfluenceEstimateRead])
 def influence_estimates(
     db: DbSession,
