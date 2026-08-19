@@ -219,7 +219,7 @@ test("GEO screen exposes real platform scoring and explainability", async ({ pag
   await expect(page.getByText("Отраслевое СМИ")).toBeVisible();
   await expect(page.getByText("Beauty Core")).toBeVisible();
   await expect(page.getByText("Что уже повлияло на ответы ИИ")).toBeVisible();
-  await expect(page.getByText("ПОВТОРЯЕМАЯ КОРРЕЛЯЦИЯ")).toBeVisible();
+  await expect(page.getByText("С КОНТРОЛЬНОЙ ГРУППОЙ")).toBeVisible();
   await expect(page.getByText("+12.4")).toBeVisible();
   await page.getByRole("button", { name: "Рассчитать приоритет" }).click();
   await expect(page.getByText("84.6")).toBeVisible();

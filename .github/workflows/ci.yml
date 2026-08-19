@@ -158,7 +158,7 @@ jobs:
             if [ "$attempt" = 3 ]; then exit 1; fi
             sleep $((attempt * 10))
           done
-          docker compose --env-file .env up -d postgres redis
+          docker compose --env-file .env up -d --wait postgres redis
           docker compose --env-file .env run --rm --no-deps backend alembic -c backend/alembic.ini upgrade head
           docker compose --env-file .env up -d
           docker compose --env-file .env ps
