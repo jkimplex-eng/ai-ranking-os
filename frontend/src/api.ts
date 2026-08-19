@@ -124,6 +124,7 @@ export type PublicationInfluenceEstimate = {
   confidence_min: number; confidence_max: number; confidence_score: number;
   evidence_grade: string; evidence_level: string; positive_experiments: number;
   negative_experiments: number; neutral_experiments: number;
+  controlled_experiments: number; effect_method: string;
   last_observed_at?: string; limitations: string[]; algorithm_version: string;
 };
 export type RouterHistoryItem = { id: number; selected_models: string[]; latency_ms: number; estimated_cost_usd: number; error?: string | null; created_at: string };

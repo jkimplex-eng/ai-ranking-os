@@ -29,6 +29,11 @@ class ExperimentRead(ApiModel):
     confidence_score: float = Field(ge=0, le=1)
     confidence_method: str
     evidence_matrix: dict
+    design_type: str
+    treatment_pairs: int
+    control_pairs: int
+    adjusted_metric_deltas: dict[str, float]
+    effect_method: str
     limitations: list[str]
     algorithm_version: str
     evaluated_at: datetime
@@ -55,6 +60,8 @@ class InfluenceEstimateRead(ApiModel):
     positive_experiments: int
     negative_experiments: int
     neutral_experiments: int
+    controlled_experiments: int
+    effect_method: str
     last_observed_at: datetime | None
     limitations: list[str]
     algorithm_version: str

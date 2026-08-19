@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
 from publication_learning.schemas import ExperimentRead, InfluenceEstimateRead, LearningSummary
-from publication_learning.service import PublicationLearningService
+from publication_learning.service import ALGORITHM_VERSION, PublicationLearningService
 
 router = APIRouter(prefix="/publication-learning", tags=["publication-learning"])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -51,6 +51,8 @@ def influence_estimates(
     }
     return [
         item
-        for item in PublicationLearningService(db).repository.estimates(filters)
+        for item in PublicationLearningService(db).repository.estimates(
+            {**filters, "algorithm_version": ALGORITHM_VERSION}
+        )
         if item.sample_size >= min_samples
     ]

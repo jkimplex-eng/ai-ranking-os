@@ -50,6 +50,21 @@ class PublicationExperiment(Base):
         String(80), nullable=False, default="MATCHED_RESPONSE_COVERAGE_V1"
     )
     evidence_matrix: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    design_type: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="MATCHED_BEFORE_AFTER",
+        server_default="MATCHED_BEFORE_AFTER",
+    )
+    treatment_pairs: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    control_pairs: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    adjusted_metric_deltas: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    effect_method: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+        default="RAW_BEFORE_AFTER_V1",
+        server_default="RAW_BEFORE_AFTER_V1",
+    )
     limitations: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     algorithm_version: Mapped[str] = mapped_column(String(20), nullable=False)
     evaluated_at: Mapped[datetime] = mapped_column(
@@ -99,6 +114,13 @@ class PublicationInfluenceEstimate(Base):
     positive_experiments: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     negative_experiments: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     neutral_experiments: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    controlled_experiments: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    effect_method: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+        default="RAW_BEFORE_AFTER_V1",
+        server_default="RAW_BEFORE_AFTER_V1",
+    )
     last_observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     limitations: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     algorithm_version: Mapped[str] = mapped_column(String(20), nullable=False)

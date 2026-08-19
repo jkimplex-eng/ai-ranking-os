@@ -113,4 +113,7 @@
 .simulation-total strong { font-size: 2rem; }
 .publication-form { display: grid; gap: 12px; margin: 24px 0; padding: 20px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-soft); }
 .publication-form input { width: 100%; padding: 13px; color: #eef4ff; background: #08111e; border: 1px solid var(--border); border-radius: 10px; }
+.publication-query-picker { display: grid; gap: 8px; max-height: 260px; overflow: auto; padding: 14px; border: 1px solid var(--border); border-radius: 12px; }
+.publication-query-picker label { display: flex; gap: 10px; align-items: flex-start; color: var(--text-muted); }
+.publication-query-picker input { width: auto; margin-top: 3px; }
 .influence-estimate { margin-top: 14px; padding: 18px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-soft); }

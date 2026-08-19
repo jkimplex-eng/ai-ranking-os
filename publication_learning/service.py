@@ -28,7 +28,7 @@ from research_lab.models import ResearchPublication
 from research_lab.repository import PublicationRepository
 from research_lab.schemas import ObservationCreate
 
-ALGORITHM_VERSION = "1.1"
+ALGORITHM_VERSION = "1.2"
 METRICS = (
     "visibility_score",
     "mention_score",
@@ -102,6 +102,11 @@ class PublicationLearningService:
                     "confidence_score",
                     "confidence_method",
                     "evidence_matrix",
+                    "design_type",
+                    "treatment_pairs",
+                    "control_pairs",
+                    "adjusted_metric_deltas",
+                    "effect_method",
                     "limitations",
                     "evaluated_at",
                 ):
@@ -162,7 +167,9 @@ class PublicationLearningService:
             if self.db.get(ResearchPublication, item.publication_id) is not None
         }
         estimates = [
-            item for item in self.repository.estimates() if item.resource_domain in domains
+            item
+            for item in self.repository.estimates({"algorithm_version": ALGORITHM_VERSION})
+            if item.resource_domain in domains
         ]
         return {
             "entity_id": entity_id,
@@ -230,6 +237,27 @@ class PublicationLearningService:
         baseline_size = len(evidence_matrix["baseline"])
         followup_size = len(evidence_matrix["followup"])
         matched_pairs = sum(pair["eligible"] for pair in evidence_matrix["pairs"])
+        target_queries = {
+            self._normalize_query(query) for query in publication.target_queries if query.strip()
+        }
+        eligible_pairs = [pair for pair in evidence_matrix["pairs"] if pair["eligible"]]
+        treatment = [
+            pair
+            for pair in eligible_pairs
+            if self._normalize_query(pair["query"]) in target_queries
+        ]
+        controls = [
+            pair
+            for pair in eligible_pairs
+            if self._normalize_query(pair["query"]) not in target_queries
+        ]
+        adjusted_deltas = self._difference_in_differences(treatment, controls)
+        controlled = bool(treatment and controls)
+        controlled_provider_deltas = self._provider_difference_in_differences(
+            treatment, controls
+        )
+        provider_deltas.update(controlled_provider_deltas)
+        evidence_matrix["controlled_provider_keys"] = sorted(controlled_provider_deltas)
         failed_responses = sum(
             bool(row["excluded"])
             for phase in ("baseline", "followup")
@@ -241,7 +269,9 @@ class PublicationLearningService:
         if not observed:
             confidence *= 0.35
         confidence = round(confidence, 4)
-        evidence_level = "OBSERVATION" if observed else "HYPOTHESIS"
+        evidence_level = (
+            "CONTROLLED" if observed and controlled else "OBSERVATION" if observed else "HYPOTHESIS"
+        )
         evidence_grade = (
             "MODERATE" if observed and matched_pairs >= 8 and coverage >= 0.8 else "PRELIMINARY"
         )
@@ -253,6 +283,16 @@ class PublicationLearningService:
             limitations.insert(
                 0,
                 "URL публикации не обнаружен в ответах; изменение метрик не обучает площадку.",
+            )
+        if not treatment:
+            limitations.append(
+                "Целевые запросы публикации не совпали с матрицей исследования; "
+                "эффект не скорректирован."
+            )
+        elif not controls:
+            limitations.append(
+                "Контрольных запросов нет; показано изменение до/после без поправки "
+                "на общий дрейф модели."
             )
         if failed_responses:
             limitations.append(
@@ -266,7 +306,11 @@ class PublicationLearningService:
             matrix_fingerprint=self._matrix_fingerprint(followup),
             status="MATCHED",
             causality_status=(
-                "OBSERVED_ASSOCIATION" if observed else "UNVERIFIED_TIMING_ASSOCIATION"
+                "CONTROLLED_ASSOCIATION"
+                if observed and controlled
+                else "OBSERVED_ASSOCIATION"
+                if observed
+                else "UNVERIFIED_TIMING_ASSOCIATION"
             ),
             evidence_grade=evidence_grade,
             evidence_level=evidence_level,
@@ -280,6 +324,19 @@ class PublicationLearningService:
             confidence_score=confidence,
             confidence_method="MATCHED_RESPONSE_COVERAGE_V1",
             evidence_matrix=evidence_matrix,
+            design_type=(
+                "MATCHED_DIFFERENCE_IN_DIFFERENCES"
+                if controlled
+                else "MATCHED_BEFORE_AFTER"
+            ),
+            treatment_pairs=len(treatment),
+            control_pairs=len(controls),
+            adjusted_metric_deltas=adjusted_deltas,
+            effect_method=(
+                "QUERY_LEVEL_DIFFERENCE_IN_DIFFERENCES_V1"
+                if controlled
+                else "RAW_BEFORE_AFTER_V1"
+            ),
             limitations=limitations,
             algorithm_version=ALGORITHM_VERSION,
             evaluated_at=datetime.now(UTC),
@@ -294,9 +351,9 @@ class PublicationLearningService:
                 )
             )
         )
-        grouped: defaultdict[tuple[str, ...], list[tuple[float, datetime, float]]] = defaultdict(
-            list
-        )
+        grouped: defaultdict[
+            tuple[str, ...], list[tuple[float, datetime, float, bool]]
+        ] = defaultdict(list)
         for experiment in experiments:
             publication = self.db.get(ResearchPublication, experiment.publication_id)
             followup = self.db.get(Research, experiment.followup_research_id)
@@ -310,18 +367,38 @@ class PublicationLearningService:
                 self._first(followup.metadata_payload, "languages", "language", "ALL"),
                 self._first(followup.metadata_payload, "regions", "region", "ALL"),
             )
-            for metric, delta in experiment.metric_deltas.items():
+            learned_deltas = dict(experiment.metric_deltas)
+            learned_deltas.update(experiment.adjusted_metric_deltas or {})
+            is_controlled = experiment.effect_method == "QUERY_LEVEL_DIFFERENCE_IN_DIFFERENCES_V1"
+            for metric, delta in learned_deltas.items():
                 grouped[(*dimensions, metric, "ALL", "ALL")].append(
-                    (float(delta), experiment.evaluated_at, experiment.confidence_score)
+                    (
+                        float(delta),
+                        experiment.evaluated_at,
+                        experiment.confidence_score,
+                        is_controlled,
+                    )
                 )
             for provider_model, deltas in experiment.provider_deltas.items():
                 provider, _, model = provider_model.partition("/")
+                provider_is_controlled = provider_model in set(
+                    experiment.evidence_matrix.get("controlled_provider_keys", [])
+                )
                 for metric, delta in deltas.items():
                     grouped[(*dimensions, metric, provider, model or "ALL")].append(
-                        (float(delta), experiment.evaluated_at, experiment.confidence_score)
+                        (
+                            float(delta),
+                            experiment.evaluated_at,
+                            experiment.confidence_score,
+                            provider_is_controlled,
+                        )
                     )
 
-        self.db.execute(delete(PublicationInfluenceEstimate))
+        self.db.execute(
+            delete(PublicationInfluenceEstimate).where(
+                PublicationInfluenceEstimate.algorithm_version == ALGORITHM_VERSION
+            )
+        )
         now = datetime.now(UTC)
         for key, observations in grouped.items():
             domain, channel, content_type, category, language, region, metric, provider, model = key
@@ -341,6 +418,7 @@ class PublicationLearningService:
             positive = sum(value > 1 for value in values)
             negative = sum(value < -1 for value in values)
             neutral = len(values) - positive - negative
+            controlled_count = sum(item[3] for item in observations)
             self.db.add(
                 PublicationInfluenceEstimate(
                     resource_domain=domain,
@@ -362,10 +440,17 @@ class PublicationLearningService:
                     positive_experiments=positive,
                     negative_experiments=negative,
                     neutral_experiments=neutral,
+                    controlled_experiments=controlled_count,
+                    effect_method=(
+                        "QUERY_LEVEL_DIFFERENCE_IN_DIFFERENCES_V1"
+                        if controlled_count == len(observations)
+                        else "MIXED_EVIDENCE_V1"
+                    ),
                     last_observed_at=max(item[1] for item in observations),
                     limitations=[
                         "Оценка отражает наблюдаемую связь, а не гарантированный причинный эффект.",
                         "Диапазон расширяется при малом числе сопоставимых экспериментов.",
+                        f"Контролируемых наблюдений: {controlled_count} из {len(observations)}.",
                     ],
                     algorithm_version=ALGORITHM_VERSION,
                     updated_at=now,
@@ -388,6 +473,9 @@ class PublicationLearningService:
                 pairs.append(
                     {
                         "stable_key": key,
+                        "query": left["query"],
+                        "provider": left["provider"],
+                        "model": left["model"],
                         "baseline_response_id": left["response_id"],
                         "followup_response_id": right["response_id"],
                         "eligible": not left["excluded"] and not right["excluded"],
@@ -398,6 +486,55 @@ class PublicationLearningService:
                     }
                 )
         return {"baseline": before, "followup": after, "pairs": pairs}
+
+    @staticmethod
+    def _difference_in_differences(
+        treatment: list[dict[str, Any]], controls: list[dict[str, Any]]
+    ) -> dict[str, float]:
+        """Estimate query-level effect while subtracting model-wide drift.
+
+        Only response-derived metrics are adjusted. The aggregate visibility score remains
+        available as the raw before/after delta because its weighted formula cannot be
+        reconstructed from a subset of queries without changing the scoring contract.
+        """
+        if not treatment or not controls:
+            return {}
+        metric_signals = {
+            "mention_score": "mentioned",
+            "recommendation_score": "recommended",
+            "citation_score": "cited",
+        }
+        result: dict[str, float] = {}
+        for metric, signal in metric_signals.items():
+            treatment_delta = statistics.fmean(
+                pair["signal_delta"][signal] * 100 for pair in treatment
+            )
+            control_delta = statistics.fmean(
+                pair["signal_delta"][signal] * 100 for pair in controls
+            )
+            result[metric] = round(treatment_delta - control_delta, 4)
+        return result
+
+    @classmethod
+    def _provider_difference_in_differences(
+        cls,
+        treatment: list[dict[str, Any]],
+        controls: list[dict[str, Any]],
+    ) -> dict[str, dict[str, float]]:
+        treatment_by_provider: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+        controls_by_provider: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+        for pair in treatment:
+            key = f"{pair['provider']}/{pair['model']}"
+            treatment_by_provider[key].append(pair)
+        for pair in controls:
+            key = f"{pair['provider']}/{pair['model']}"
+            controls_by_provider[key].append(pair)
+        return {
+            key: cls._difference_in_differences(
+                treatment_by_provider[key], controls_by_provider[key]
+            )
+            for key in sorted(set(treatment_by_provider) & set(controls_by_provider))
+        }
 
     def _evidence_rows(self, research: Research) -> list[dict[str, Any]]:
         target = str(research.metadata_payload.get("target_entity", research.title)).casefold()
@@ -549,6 +686,10 @@ class PublicationLearningService:
             )
         )
         return hashlib.sha256(value.encode()).hexdigest()[:24]
+
+    @staticmethod
+    def _normalize_query(query: str) -> str:
+        return " ".join(query.casefold().split())
 
     @staticmethod
     def _critical_value(sample_size: int) -> float:

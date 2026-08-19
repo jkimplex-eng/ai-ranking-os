@@ -234,6 +234,115 @@ def test_learning_rejects_changed_query_matrix() -> None:
         assert PublicationLearningService(db).evaluate_followup(followup.id) == []
 
 
+def test_learning_subtracts_control_query_drift() -> None:
+    engine = _engine()
+    Base.metadata.create_all(engine)
+    entity_id = uuid4()
+    target_query = "Какую увлажняющую сыворотку выбрать?"
+    control_query = "Как выбрать солнцезащитный крем?"
+    with Session(engine) as db:
+        baseline = _research(
+            db,
+            entity_id=entity_id,
+            created_at=datetime(2026, 4, 1, tzinfo=UTC),
+            visibility=20,
+            query=target_query,
+        )
+        baseline.metadata_payload["query_catalog"] = [
+            {"text": target_query},
+            {"text": control_query},
+        ]
+        baseline.tasks.append(
+            ResearchTask(
+                query=control_query,
+                provider="yandex",
+                model="yandexgpt-pro",
+                responses=[
+                    Response(
+                        provider="yandex",
+                        model="yandexgpt-pro",
+                        content="Нейтральный контрольный ответ.",
+                        prompt=control_query,
+                        normalized_response={"citations": []},
+                        processing_status=ResponseProcessingStatus.PROCESSED,
+                        finished_at=datetime(2026, 4, 1, tzinfo=UTC),
+                    )
+                ],
+            )
+        )
+        publication = ResearchPublication(
+            entity_id=entity_id,
+            research_id=baseline.id,
+            url="https://controlled.example/serum",
+            content_hash="d" * 64,
+            title="Материал о сыворотках",
+            channel="EARNED",
+            content_type="ARTICLE",
+            target_queries=[target_query],
+            metadata_payload={},
+            published_at=datetime(2026, 4, 2, tzinfo=UTC),
+        )
+        followup = _research(
+            db,
+            entity_id=entity_id,
+            created_at=datetime(2026, 4, 3, tzinfo=UTC),
+            visibility=50,
+            query=target_query,
+        )
+        followup.metadata_payload["query_catalog"] = [
+            {"text": target_query},
+            {"text": control_query},
+        ]
+        target_response = followup.tasks[0].responses[0]
+        target_response.content = "Источник: https://controlled.example/serum"
+        target_response.normalized_response = {
+            "citations": ["https://controlled.example/serum"]
+        }
+        followup.tasks.append(
+            ResearchTask(
+                query=control_query,
+                provider="yandex",
+                model="yandexgpt-pro",
+                responses=[
+                    Response(
+                        provider="yandex",
+                        model="yandexgpt-pro",
+                        content="Нейтральный контрольный ответ.",
+                        prompt=control_query,
+                        normalized_response={"citations": []},
+                        processing_status=ResponseProcessingStatus.PROCESSED,
+                        finished_at=datetime(2026, 4, 3, tzinfo=UTC),
+                    )
+                ],
+            )
+        )
+        db.add(publication)
+        db.commit()
+
+        experiment = PublicationLearningService(db).evaluate_followup(followup.id)[0]
+
+        assert experiment.design_type == "MATCHED_DIFFERENCE_IN_DIFFERENCES"
+        assert experiment.effect_method == "QUERY_LEVEL_DIFFERENCE_IN_DIFFERENCES_V1"
+        assert experiment.treatment_pairs == 1
+        assert experiment.control_pairs == 1
+        assert experiment.adjusted_metric_deltas["citation_score"] == 100
+        assert experiment.provider_deltas["yandex/yandexgpt-pro"]["citation_score"] == 100
+        assert experiment.evidence_matrix["controlled_provider_keys"] == [
+            "yandex/yandexgpt-pro"
+        ]
+        assert experiment.evidence_level == "CONTROLLED"
+        assert experiment.causality_status == "CONTROLLED_ASSOCIATION"
+        provider_estimate = next(
+            item
+            for item in PublicationLearningService(db).repository.estimates(
+                {"algorithm_version": "1.2", "provider": "yandex", "metric": "citation_score"}
+            )
+        )
+        assert provider_estimate.expected_delta == 100
+        assert provider_estimate.controlled_experiments == 1
+        assert provider_estimate.effect_method == "QUERY_LEVEL_DIFFERENCE_IN_DIFFERENCES_V1"
+
+
 def test_repeated_observations_upgrade_domain_to_correlation() -> None:
     engine = _engine()
     Base.metadata.create_all(engine)
@@ -288,7 +397,7 @@ def test_repeated_observations_upgrade_domain_to_correlation() -> None:
                     confidence_method="MATCHED_RESPONSE_COVERAGE_V1",
                     evidence_matrix={},
                     limitations=[],
-                    algorithm_version="1.1",
+                    algorithm_version="1.2",
                     evaluated_at=datetime(2026, 3, index * 2, 13, tzinfo=UTC),
                 )
             )
