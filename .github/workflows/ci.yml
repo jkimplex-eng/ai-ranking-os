@@ -25,7 +25,9 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
+      # GitHub-hosted Ubuntu already provides the browser runtime libraries.
+      # Installing OS packages here can block indefinitely when the apt mirror is degraded.
+      - run: npx playwright install chromium
       - run: npm run test:e2e
 
   quality:
