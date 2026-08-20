@@ -454,6 +454,7 @@ function CompetitorsScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const dashboardRequest = useRef(0);
+  const projectsRequest = useRef(0);
 
   const loadDashboard = useCallback(async (id: number, refresh = false) => {
     const requestNumber = ++dashboardRequest.current;
@@ -474,13 +475,16 @@ function CompetitorsScreen() {
   }, []);
 
   useEffect(() => {
+    const requestNumber = ++projectsRequest.current;
     api.workspaceProjects()
       .then((items) => {
+        if (requestNumber !== projectsRequest.current) return;
         setProjects(items);
         setProjectId((current) => current ?? items[0]?.id);
         if (!items.length) setLoading(false);
       })
       .catch((reason) => {
+        if (requestNumber !== projectsRequest.current) return;
         setError(reason instanceof Error ? reason.message : "Не удалось загрузить проекты");
         setLoading(false);
       });
@@ -530,6 +534,7 @@ function CompetitorsScreen() {
   const createProject = async (event: FormEvent) => {
     event.preventDefault();
     if (!projectName.trim()) return;
+    ++projectsRequest.current;
     setSaving(true);
     setError("");
     try {

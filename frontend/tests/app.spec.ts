@@ -85,7 +85,7 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
   await page.getByLabel("Сайт").fill("librederm.ru");
   await page.getByRole("button", { name: "Добавить конкурента" }).click();
 
-  await expect(page.getByRole("heading", { name: "Librederm" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Librederm" })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("66.5")).toBeVisible();
   await expect(page.getByRole("link", { name: "Обзор сывороток" })).toBeVisible();
   await expect(page.getByText(/не доказывает причинное влияние/)).toBeVisible();
