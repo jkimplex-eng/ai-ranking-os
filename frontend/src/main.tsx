@@ -512,7 +512,9 @@ function CompetitorsScreen() {
   const addCompetitor = async (event: FormEvent) => {
     event.preventDefault();
     if (!projectId || !name.trim()) return;
+    const requestNumber = ++dashboardRequest.current;
     setSaving(true);
+    setLoading(true);
     setError("");
     try {
       await api.createProjectCompetitor(projectId, {
@@ -523,10 +525,14 @@ function CompetitorsScreen() {
       setName("");
       setDomain("");
       setAliases("");
-      await loadDashboard(projectId, true);
+      const refreshed = await api.refreshCompetitorDashboard(projectId);
+      if (requestNumber === dashboardRequest.current) setDashboard(refreshed);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Не удалось добавить конкурента");
+      if (requestNumber === dashboardRequest.current) {
+        setError(reason instanceof Error ? reason.message : "Не удалось добавить конкурента");
+      }
     } finally {
+      if (requestNumber === dashboardRequest.current) setLoading(false);
       setSaving(false);
     }
   };
