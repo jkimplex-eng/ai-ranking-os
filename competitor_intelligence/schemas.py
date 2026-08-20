@@ -1,6 +1,7 @@
 from datetime import date, datetime
+from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 
 class CompetitorSnapshotRead(BaseModel):
@@ -60,3 +61,58 @@ class DailyMonitoringRequest(BaseModel):
     enabled: bool = True
     template_research_id: int | None = Field(default=None, ge=1)
 
+
+class SocialPlatform(StrEnum):
+    TELEGRAM = "TELEGRAM"
+    INSTAGRAM = "INSTAGRAM"
+    YOUTUBE = "YOUTUBE"
+    VK = "VK"
+
+
+class SocialSourceCreate(BaseModel):
+    platform: SocialPlatform
+    profile_url: HttpUrl
+    external_id: str = Field(min_length=1, max_length=300)
+    access_token: str | None = Field(default=None, min_length=8, max_length=4000)
+
+
+class SocialPostRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    external_post_id: str
+    url: str
+    title: str | None
+    content: str
+    published_at: datetime
+    views: int | None
+    likes: int | None
+    comments: int | None
+    shares: int | None
+    engagement_rate: float | None
+    significance_score: float
+
+
+class SocialSourceRead(BaseModel):
+    id: int
+    competitor_id: int
+    platform: SocialPlatform
+    profile_url: str
+    external_id: str
+    configured: bool
+    active: bool
+    status: str
+    last_scanned_at: datetime | None
+    next_scan_at: datetime | None
+    last_error: str | None
+    posts: list[SocialPostRead] = Field(default_factory=list)
+
+
+class SocialDashboardRead(BaseModel):
+    competitor_id: int
+    sources: list[SocialSourceRead]
+    total_posts: int
+    limitation: str = (
+        "Значимость публикации основана на доступных публичных метриках и повторных "
+        "наблюдениях; она не доказывает влияние на выдачу AI."
+    )

@@ -1,13 +1,23 @@
 from contextlib import suppress
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
-from competitor_intelligence.schemas import CompetitorDashboardRead, DailyMonitoringRequest
+from competitor_intelligence.schemas import (
+    CompetitorDashboardRead,
+    DailyMonitoringRequest,
+    SocialDashboardRead,
+    SocialSourceCreate,
+    SocialSourceRead,
+)
 from competitor_intelligence.service import CompetitorIntelligenceService
+from competitor_intelligence.social_monitor import (
+    CompetitorSocialMonitorService,
+    SocialMonitorError,
+)
 from project_monitoring.dependencies import current_user_id
 from project_monitoring.repository import MonitorRepository
 from project_monitoring.schemas import MonitorFrequency, MonitorModel, ProjectMonitorUpsert
@@ -67,8 +77,7 @@ def daily_monitoring(
         raise HTTPException(
             status_code=422,
             detail=(
-                "Сначала выполните хотя бы одно исследование, "
-                "которое станет ежедневным шаблоном."
+                "Сначала выполните хотя бы одно исследование, которое станет ежедневным шаблоном."
             ),
         )
     rows = db.execute(
@@ -98,3 +107,62 @@ def daily_monitoring(
     except (ProjectNotFoundError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     return CompetitorIntelligenceService(db).dashboard(user_id, project_id)
+
+
+@router.get(
+    "/projects/{project_id}/competitors/{competitor_id}/social", response_model=SocialDashboardRead
+)
+def social_dashboard(
+    project_id: int, competitor_id: int, user_id: CurrentUserId, db: DbSession
+) -> SocialDashboardRead:
+    try:
+        return CompetitorSocialMonitorService(db).dashboard(user_id, project_id, competitor_id)
+    except (ProjectNotFoundError, SocialMonitorError) as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post(
+    "/projects/{project_id}/competitors/{competitor_id}/social",
+    response_model=SocialSourceRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_social_source(
+    project_id: int,
+    competitor_id: int,
+    payload: SocialSourceCreate,
+    user_id: CurrentUserId,
+    db: DbSession,
+) -> SocialSourceRead:
+    try:
+        return CompetitorSocialMonitorService(db).create(
+            user_id, project_id, competitor_id, payload
+        )
+    except (ProjectNotFoundError, SocialMonitorError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post(
+    "/projects/{project_id}/competitors/{competitor_id}/social/refresh",
+    response_model=SocialDashboardRead,
+)
+def refresh_social(
+    project_id: int, competitor_id: int, user_id: CurrentUserId, db: DbSession
+) -> SocialDashboardRead:
+    try:
+        return CompetitorSocialMonitorService(db).refresh(user_id, project_id, competitor_id)
+    except (ProjectNotFoundError, SocialMonitorError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.delete(
+    "/projects/{project_id}/competitors/{competitor_id}/social/{source_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_social_source(
+    project_id: int, competitor_id: int, source_id: int, user_id: CurrentUserId, db: DbSession
+) -> Response:
+    try:
+        CompetitorSocialMonitorService(db).delete(user_id, project_id, competitor_id, source_id)
+    except (ProjectNotFoundError, SocialMonitorError) as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

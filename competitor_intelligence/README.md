@@ -15,3 +15,7 @@ API:
 - `POST /competitor-intelligence/projects/{project_id}/refresh`
 - `PUT /competitor-intelligence/projects/{project_id}/daily-monitoring`
 
+Social monitoring uses the same module and the existing worker queue. Telegram public previews
+and YouTube feeds work without credentials. VK and Instagram use official APIs and require an
+encrypted token. Unavailable sources remain visible with an explicit status; no synthetic posts
+or metrics are generated.

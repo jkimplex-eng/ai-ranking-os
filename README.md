@@ -399,6 +399,9 @@ alembic -c backend/alembic.ini revision --autogenerate -m "describe change"
 - `insights/` — deterministic growth, decline, anomaly, leader, and recommendation detection
 - `product_analytics/` — privacy-aware product events, sessions, cached aggregates,
   dashboard metrics, filters, and CSV/JSON/XLSX exports
+- `geo_site_audit/` — evidence-backed 100-point GEO readiness audit for public websites
+- `competitor_intelligence/` — competitor visibility, publication evidence, and daily
+  Telegram, YouTube, VK, and Instagram monitoring
 - `notification_center/` — categorized in-app inbox plus email, Telegram, and
   webhook delivery outbox with read state, archive, priorities, and pagination
 - `organization_workspace/` — organization profiles, membership, invitations,
@@ -416,3 +419,15 @@ hourly, daily, weekly, and monthly periods plus organization, user, provider,
 template, region, language, and date filters. Raw IP addresses are never stored;
 the request instrumentation persists only a salted hash. Exports are available at
 `GET /product-analytics/export/{format_name}` for `csv`, `json`, and `xlsx`.
+
+## GEO site audit and competitor social monitoring
+
+Open **GEO-площадки** to run a website audit. The score is calculated from 23 explicit checks
+across crawlability, entity clarity, content, evidence, and technical readiness. Failed checks
+produce prioritized actions and retain their observed evidence. The audit never claims access to
+closed model ranking algorithms.
+
+Open **Конкуренты**, select a project and expand **Соцсети и ежедневные публикации**. Telegram
+public channels and YouTube feeds can be monitored without credentials. VK and Instagram require
+official API tokens, which are encrypted before storage. The worker refreshes active sources
+daily; unavailable sources display an error instead of fabricated posts or metrics.

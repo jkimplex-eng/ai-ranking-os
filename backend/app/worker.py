@@ -8,6 +8,7 @@ from backend.app.config import get_settings
 from backend.app.database import SessionLocal
 from backend.app.logging import configure_logging
 from competitor_intelligence.service import CompetitorIntelligenceService
+from competitor_intelligence.social_monitor import CompetitorSocialMonitorService
 from provider_connections.crypto import SecretCipher
 from provider_connections.repository import ProviderConnectionRepository
 from provider_connections.service import hydrate_provider_credentials
@@ -50,6 +51,11 @@ async def run_worker() -> None:
                                 )
                         if executions:
                             logger.info("Scheduled research processed count=%s", len(executions))
+                        social_sources = CompetitorSocialMonitorService(db).run_due()
+                        if social_sources:
+                            logger.info(
+                                "Competitor social sources refreshed count=%s", social_sources
+                            )
                     except Exception:  # noqa: BLE001 - worker must survive scheduler failures
                         logger.exception("Scheduled research processing failed")
                     last_scheduler_run = now
@@ -65,4 +71,3 @@ async def run_worker() -> None:
 
 if __name__ == "__main__":
     asyncio.run(run_worker())
-

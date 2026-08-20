@@ -74,6 +74,68 @@ class CompetitorPublicationObservation(Base):
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     excerpt: Mapped[str | None] = mapped_column(Text)
-    evidence_level: Mapped[str] = mapped_column(
-        String(30), default="OBSERVATION", nullable=False
+    evidence_level: Mapped[str] = mapped_column(String(30), default="OBSERVATION", nullable=False)
+
+
+class CompetitorSocialSource(Base):
+    __tablename__ = "competitor_social_sources"
+    __table_args__ = (
+        UniqueConstraint(
+            "competitor_id", "platform", "external_id", name="uq_competitor_social_source"
+        ),
+        Index("ix_competitor_social_sources_due", "active", "next_scan_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    competitor_id: Mapped[int] = mapped_column(
+        ForeignKey("project_competitors.id", ondelete="CASCADE"), nullable=False
+    )
+    platform: Mapped[str] = mapped_column(String(30), nullable=False)
+    profile_url: Mapped[str] = mapped_column(Text, nullable=False)
+    external_id: Mapped[str] = mapped_column(String(300), nullable=False)
+    encrypted_token: Mapped[str | None] = mapped_column(Text)
+    active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="PENDING", nullable=False)
+    last_scanned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_scan_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("CURRENT_TIMESTAMP"),
+        onupdate=text("CURRENT_TIMESTAMP"),
+        nullable=False,
+    )
+
+
+class CompetitorSocialPost(Base):
+    __tablename__ = "competitor_social_posts"
+    __table_args__ = (
+        UniqueConstraint("source_id", "external_post_id", name="uq_competitor_social_post"),
+        Index("ix_competitor_social_posts_source_published", "source_id", "published_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_id: Mapped[int] = mapped_column(
+        ForeignKey("competitor_social_sources.id", ondelete="CASCADE"), nullable=False
+    )
+    external_post_id: Mapped[str] = mapped_column(String(300), nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str | None] = mapped_column(String(500))
+    content: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    views: Mapped[int | None] = mapped_column(Integer)
+    likes: Mapped[int | None] = mapped_column(Integer)
+    comments: Mapped[int | None] = mapped_column(Integer)
+    shares: Mapped[int | None] = mapped_column(Integer)
+    engagement_rate: Mapped[float | None] = mapped_column(Float)
+    significance_score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    raw_metrics: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False
     )

@@ -28,6 +28,7 @@ from execution_engine import models as execution_engine_models  # noqa: F401
 from feedback_center import models as feedback_center_models  # noqa: F401
 from frozen_prompts import models as frozen_prompts_models  # noqa: F401
 from geo_platforms import models as geo_platforms_models  # noqa: F401
+from geo_site_audit import models as geo_site_audit_models  # noqa: F401
 from graph import models as graph_models  # noqa: F401
 from hardening import models as hardening_models  # noqa: F401
 from influence import models as influence_models  # noqa: F401

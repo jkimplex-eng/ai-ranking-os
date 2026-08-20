@@ -102,6 +102,49 @@
 .query-editor textarea { min-height: 72px; resize: vertical; padding: 12px; color: var(--text); background: var(--background); border: 1px solid var(--border); border-radius: 10px; font: inherit; line-height: 1.45; }
 .query-editor button { align-self: stretch; padding: 0 14px; color: #fca5a5; background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.25); border-radius: 10px; }
 @media (max-width: 680px) { .query-editor { grid-template-columns: 1fr; }.query-editor button { padding: 10px; } }
+
+/* Evidence-based GEO site audit */
+.geo-site-audit { display: grid; grid-template-columns: minmax(300px, .8fr) minmax(420px, 1.2fr); gap: 30px; margin: 20px 0; }
+.geo-audit-intro h2 { margin: 8px 0; font-size: 1.7rem; }
+.geo-audit-intro > p, .geo-empty p { color: var(--muted); line-height: 1.6; }
+.geo-audit-intro form { display: grid; gap: 10px; margin-top: 22px; }
+.geo-audit-intro input, .social-source-form input, .social-source-form select { min-width: 0; padding: 12px; color: var(--text); background: var(--background); border: 1px solid var(--border); border-radius: 10px; }
+.geo-audit-result > header { display: flex; justify-content: space-between; align-items: start; gap: 18px; }
+.geo-audit-result > header > div { display: grid; }
+.geo-audit-result > header strong { color: var(--accent); font-size: 3.4rem; line-height: 1; }
+.geo-audit-result > header span { color: var(--muted); }
+.geo-audit-categories { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 20px 0; }
+.geo-audit-categories > div { display: grid; gap: 5px; padding: 11px; background: var(--background); border-radius: 10px; }
+.geo-audit-categories span { color: var(--muted); font-size: 10px; }
+.geo-audit-categories b { font-size: 1.25rem; }
+.geo-audit-action { display: grid; grid-template-columns: auto 1fr; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.geo-audit-action p { margin: 4px 0; }
+.geo-audit-action small { color: var(--muted); }
+.geo-audit-result details { margin-top: 16px; }
+.geo-audit-result summary { color: var(--accent); cursor: pointer; font-weight: 700; }
+.geo-audit-check { display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+.geo-audit-check > span { color: var(--success); font-weight: 900; }
+.geo-audit-check small { display: block; color: var(--muted); }
+.geo-audit-check p { margin: 5px 0 0; color: #f4c86a; }
+
+/* Competitor social monitoring */
+.competitor-social { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border); }
+.competitor-social > summary { color: var(--accent); cursor: pointer; font-weight: 800; }
+.competitor-social > p { color: var(--muted); line-height: 1.5; }
+.social-source-form { display: grid; grid-template-columns: .7fr 1.3fr 1fr auto; gap: 9px; margin: 16px 0; }
+.social-source-list { display: grid; gap: 12px; }
+.social-source-list > article { padding: 15px; background: var(--background); border: 1px solid var(--border); border-radius: 12px; }
+.social-source-list article > header { display: flex; justify-content: space-between; gap: 16px; }
+.social-source-list article > header div { display: grid; gap: 3px; }
+.social-source-list a { color: #8eb4ff; }
+.social-source-list small { color: var(--muted); }
+.social-error { color: #fca5a5; }
+.social-post { display: grid; grid-template-columns: 1fr auto; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.social-post > div { display: grid; gap: 4px; }
+.social-post > strong { display: grid; text-align: right; color: var(--success); font-size: 1.3rem; }
+.social-post > strong span { color: var(--muted); font-size: 9px; font-weight: 500; }
+@media (max-width: 1000px) { .geo-site-audit { grid-template-columns: 1fr; }.social-source-form { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 620px) { .geo-audit-categories, .social-source-form { grid-template-columns: 1fr; }.social-post { grid-template-columns: 1fr; }.social-post > strong { text-align: left; } }
 .wizard-page .model { color: #eaf0fb; text-align: left; }
 .wizard-page .model b { color: #f5f8ff; }
 .wizard-page .model small { color: #9fb0c8; }

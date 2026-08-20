@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from competitor_intelligence.models import (
     CompetitorDailySnapshot,
     CompetitorPublicationObservation,
+    CompetitorSocialPost,
+    CompetitorSocialSource,
 )
 
 
@@ -61,3 +63,55 @@ class CompetitorIntelligenceRepository:
     def commit(self) -> None:
         self.db.commit()
 
+    def add_social_source(self, item: CompetitorSocialSource) -> CompetitorSocialSource:
+        self.db.add(item)
+        self.db.commit()
+        self.db.refresh(item)
+        return item
+
+    def social_source(self, source_id: int) -> CompetitorSocialSource | None:
+        return self.db.get(CompetitorSocialSource, source_id)
+
+    def social_sources(self, competitor_id: int) -> list[CompetitorSocialSource]:
+        return list(
+            self.db.scalars(
+                select(CompetitorSocialSource)
+                .where(CompetitorSocialSource.competitor_id == competitor_id)
+                .order_by(CompetitorSocialSource.created_at)
+            )
+        )
+
+    def due_social_sources(self, now) -> list[CompetitorSocialSource]:
+        return list(
+            self.db.scalars(
+                select(CompetitorSocialSource).where(
+                    CompetitorSocialSource.active.is_(True),
+                    (
+                        CompetitorSocialSource.next_scan_at.is_(None)
+                        | (CompetitorSocialSource.next_scan_at <= now)
+                    ),
+                )
+            )
+        )
+
+    def social_post(self, source_id: int, external_post_id: str) -> CompetitorSocialPost | None:
+        return self.db.scalar(
+            select(CompetitorSocialPost).where(
+                CompetitorSocialPost.source_id == source_id,
+                CompetitorSocialPost.external_post_id == external_post_id,
+            )
+        )
+
+    def social_posts(self, source_id: int, limit: int = 50) -> list[CompetitorSocialPost]:
+        return list(
+            self.db.scalars(
+                select(CompetitorSocialPost)
+                .where(CompetitorSocialPost.source_id == source_id)
+                .order_by(CompetitorSocialPost.published_at.desc())
+                .limit(limit)
+            )
+        )
+
+    def delete_social_source(self, item: CompetitorSocialSource) -> None:
+        self.db.delete(item)
+        self.db.commit()

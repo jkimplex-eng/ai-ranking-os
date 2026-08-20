@@ -39,6 +39,7 @@ from export_engine.router import router as export_router
 from feedback_center.router import router as feedback_center_router
 from frozen_prompts.router import router as frozen_prompts_router
 from geo_platforms.router import router as geo_platforms_router
+from geo_site_audit.router import router as geo_site_audit_router
 from graph.router import router as graph_router
 from graph_search.router import router as graph_search_router
 from hardening.router import router as hardening_router
@@ -146,6 +147,7 @@ app.include_router(project_monitoring_router)
 app.include_router(research_lab_router)
 app.include_router(publication_learning_router)
 app.include_router(geo_platforms_router)
+app.include_router(geo_site_audit_router)
 app.include_router(frozen_prompts_router)
 app.include_router(eis_router)
 app.include_router(research_router)
@@ -230,9 +232,7 @@ async def observe_http(request: Request, call_next):
     )
     if not request.url.path.startswith("/product-analytics"):
         try:
-            principal_user_id = getattr(
-                principal, "user_id", getattr(principal, "id", None)
-            )
+            principal_user_id = getattr(principal, "user_id", getattr(principal, "id", None))
             with SessionLocal() as analytics_db:
                 ProductAnalyticsService(ProductAnalyticsRepository(analytics_db)).record(
                     request_event(

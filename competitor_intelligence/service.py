@@ -81,9 +81,7 @@ class CompetitorIntelligenceService:
         if research is None or research.project_id is None:
             return
         competitors = [
-            item
-            for item in CompetitorRepository(self.db).list(research.project_id)
-            if item.active
+            item for item in CompetitorRepository(self.db).list(research.project_id) if item.active
         ]
         if not competitors:
             return
@@ -170,9 +168,7 @@ class CompetitorIntelligenceService:
             active=competitor.active,
             latest_visibility_score=latest,
             visibility_delta=(
-                round(latest - previous, 2)
-                if latest is not None and previous is not None
-                else None
+                round(latest - previous, 2) if latest is not None and previous is not None else None
             ),
             snapshots=[
                 CompetitorSnapshotRead.model_validate(item, from_attributes=True)
@@ -194,12 +190,7 @@ class CompetitorIntelligenceService:
             provider_coverage = min(len(providers) / 3, 1.0)
             recommendation_share = recommendation_count / len(items)
             score = round(
-                (
-                    recurrence * 0.40
-                    + provider_coverage * 0.30
-                    + recommendation_share * 0.30
-                )
-                * 100,
+                (recurrence * 0.40 + provider_coverage * 0.30 + recommendation_share * 0.30) * 100,
                 1,
             )
             label = "Высокая" if score >= 70 else "Средняя" if score >= 40 else "Предварительная"

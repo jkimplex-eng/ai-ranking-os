@@ -9,6 +9,7 @@ test("login page exposes product entry point", async ({ page }) => {
 test("competitor center adds a brand and shows evidence-based daily analytics", async ({ page }) => {
   let projectCreated = false;
   let competitorCreated = false;
+  let socialConnected = false;
   const dashboard = () => ({
     project_id: 10,
     monitoring_enabled: false,
@@ -68,6 +69,12 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
       competitorCreated = true;
       status = 201;
       json = { id: 22, project_id: 10, name: "Librederm", domains: ["librederm.ru"], brands: [], notes: "", active: true };
+    } else if (path.endsWith("/competitor-intelligence/projects/10/competitors/22/social") && request.method() === "POST") {
+      socialConnected = true;
+      status = 201;
+      json = { id: 70, competitor_id: 22, platform: "TELEGRAM", profile_url: "https://t.me/librederm", external_id: "librederm", configured: true, active: true, status: "CONNECTED", last_scanned_at: "2026-08-20T10:00:00Z", next_scan_at: "2026-08-21T10:00:00Z", last_error: null, posts: [] };
+    } else if (path.endsWith("/competitor-intelligence/projects/10/competitors/22/social")) {
+      json = { competitor_id: 22, total_posts: 0, limitation: "Значимость не доказывает влияние на выдачу AI.", sources: socialConnected ? [{ id: 70, competitor_id: 22, platform: "TELEGRAM", profile_url: "https://t.me/librederm", external_id: "librederm", configured: true, active: true, status: "CONNECTED", last_scanned_at: "2026-08-20T10:00:00Z", next_scan_at: "2026-08-21T10:00:00Z", last_error: null, posts: [] }] : [] };
     } else if (path.includes("/competitor-intelligence/projects/10")) json = dashboard();
     else if (path.endsWith("/research") || path.endsWith("/providers")) json = [];
     else if (path.endsWith("/system/health")) json = { status: "healthy" };
@@ -95,6 +102,11 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
   await expect(page.getByText("66.5")).toBeVisible();
   await expect(page.getByRole("link", { name: "Обзор сывороток" })).toBeVisible();
   await expect(page.getByText(/не доказывает причинное влияние/)).toBeVisible();
+  await page.getByText(/Соцсети и ежедневные публикации/).click();
+  await page.getByLabel("URL профиля").fill("https://t.me/librederm");
+  await page.getByLabel("Идентификатор канала").fill("librederm");
+  await page.getByRole("button", { name: "Добавить канал" }).click();
+  await expect(page.getByText("CONNECTED")).toBeVisible();
 });
 
 test("wizard transparently refreshes an expired access token", async ({ page }) => {
@@ -226,7 +238,7 @@ test("authenticated routes survive refresh and browser history", async ({ page }
           ? { items: [], total: 0 }
         : path.endsWith("/graph")
           ? { id: 1, structure_version: "1.0", node_count: 0, edge_count: 0, nodes: [], edges: [], created_at: new Date().toISOString() }
-        : path.endsWith("/geo/platforms") || path.endsWith("/geo/prompt-sets") || path.endsWith("/publication-learning/influence")
+        : path.endsWith("/geo/platforms") || path.endsWith("/geo/prompt-sets") || path.endsWith("/geo/site-audits") || path.endsWith("/publication-learning/influence")
           ? []
         : path.endsWith("/workspace")
           ? { id: 1, name: "Workspace", settings: {} }
@@ -287,6 +299,7 @@ test("authenticated routes survive refresh and browser history", async ({ page }
 
 test("GEO screen exposes real platform scoring and explainability", async ({ page }) => {
   const platform = { id: "platform-1", name: "Отраслевое СМИ", domain: "media.example", platform_type: "PUBLICATION", category: "BEAUTY", country: "RU", language: "ru", ai_engines: [], domain_trust: 82, topical_authority_score: 76, ai_citation_history: 12, cost_per_placement: 25000, evidence: { source: "USER_INPUT" }, active: true, created_at: "2026-08-19T00:00:00Z", updated_at: "2026-08-19T00:00:00Z" };
+  const audit = { id: 9, project_id: null, brand: "Skinjestique", website_url: "https://skinjestique.ru", final_url: "https://skinjestique.ru/", score: 72, grade: "Хорошая готовность", category_scores: { "Доступность": 20, "Сущность": 12, "Контент": 15, "Доказательность": 10, "Техника": 15 }, checks: [{ code: "entity_schema", category: "Сущность", title: "Разметка организации", passed: false, points: 0, max_points: 8, evidence: "JSON-LD не найден", recommendation: "Добавить Organization/Brand JSON-LD с официальными реквизитами." }], opportunities: [{ priority: "P0", problem: "Разметка организации", affected_metric: "Сущность", action: "Добавить Organization/Brand JSON-LD с официальными реквизитами.", expected_effect: "до +8 баллов GEO-готовности", confidence: "Высокая", effort: "Средняя", verification: "Повторный GEO-аудит" }], evidence: { http_status: 200, robots_status: 200, sitemap_status: 200 }, algorithm_version: "1.0", limitation: "Оценка измеряет публичные GEO-сигналы сайта и не доказывает индексацию.", created_at: "2026-08-20T00:00:00Z" };
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     let json: unknown = {};
@@ -296,6 +309,8 @@ test("GEO screen exposes real platform scoring and explainability", async ({ pag
     else if (path.endsWith("/geo/platforms") && route.request().method() === "POST") { json = platform; status = 201; }
     else if (path.endsWith("/geo/platforms")) json = [platform];
     else if (path.endsWith("/geo/prompt-sets")) json = [{ id: "set-1", code: "beauty-core", version: 1, name: "Beauty Core", category: "BEAUTY", language: "ru", region: "RU", fingerprint: "0123456789abcdef", frozen: true, active: true, templates: [{ key: "category", query_type: "CATEGORY", template: "Какую {category} выбрать?" }], instances: [], created_at: "2026-08-19T00:00:00Z" }];
+    else if (path.endsWith("/geo/site-audits") && route.request().method() === "POST") { json = audit; status = 201; }
+    else if (path.endsWith("/geo/site-audits")) json = [];
     else if (path.endsWith("/publication-learning/influence")) json = [{ id: 7, resource_domain: "media.example", channel: "EARNED", content_type: "ARTICLE", metric: "visibility_score", provider: "ALL", model: "ALL", category: "BEAUTY", language: "ru", region: "RU", sample_size: 3, expected_delta: 12.4, confidence_min: 4.1, confidence_max: 20.7, confidence_score: .71, evidence_grade: "MODERATE", evidence_level: "CORRELATION", positive_experiments: 3, negative_experiments: 0, neutral_experiments: 0, controlled_experiments: 2, effect_method: "MIXED_EVIDENCE_V1", last_observed_at: "2026-08-19T00:00:00Z", limitations: ["Correlation only"], algorithm_version: "1.2" }];
     else if (path.endsWith("/v1/eis/batch-prioritize")) json = { methodology_version: "heuristic_v1.0", limitations: ["Correlation-based estimates; no causal effect is claimed."], items: [{ cost_efficiency: 0.0034, score: { id: "score-1", platform_id: "platform-1", ai_engine: "YandexGPT", eis_value: 84.6, priority: "P1", evidence_status: "PARTIAL", methodology_version: "heuristic_v1.0", weight_set_version: "geo-eis-v1", explanation: {}, calculated_at: "2026-08-19T00:00:00Z", components: { authority: { value: 81, numerator: 81, denominator: 1, inputs: {}, weights: {}, exclusions: [] }, match: { value: 76, numerator: 76, denominator: 1, inputs: {}, weights: {}, exclusions: ["cep_coverage"] }, content: { value: 90, numerator: 90, denominator: 1, inputs: {}, weights: {}, exclusions: [] } } } }] };
     else if (path.endsWith("/research") || path.endsWith("/providers")) json = [];
@@ -312,6 +327,12 @@ test("GEO screen exposes real platform scoring and explainability", async ({ pag
   await expect(page.getByText("Что уже повлияло на ответы ИИ")).toBeVisible();
   await expect(page.getByText("С КОНТРОЛЬНОЙ ГРУППОЙ")).toBeVisible();
   await expect(page.getByText("+12.4")).toBeVisible();
+  await page.getByLabel("Бренд для GEO-аудита").fill("Skinjestique");
+  await page.getByLabel("Сайт для GEO-аудита").fill("https://skinjestique.ru");
+  await page.getByRole("button", { name: "Провести GEO-аудит" }).click();
+  await expect(page.getByText("72.0")).toBeVisible();
+  await page.getByText("Показать все доказательства расчёта").click();
+  await expect(page.getByText("JSON-LD не найден")).toBeVisible();
   await page.getByRole("button", { name: "Рассчитать приоритет" }).click();
   await expect(page.getByText("84.6")).toBeVisible();
   await expect(page.getByText("частичные данные")).toBeVisible();

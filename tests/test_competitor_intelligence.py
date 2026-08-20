@@ -9,6 +9,11 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.database import Base, get_db
 from backend.app.main import app
+from competitor_intelligence.schemas import SocialSourceCreate
+from competitor_intelligence.social_monitor import (
+    CollectedPost,
+    CompetitorSocialMonitorService,
+)
 from research.models import (
     ExtractedCitation,
     ExtractedEntity,
@@ -163,3 +168,49 @@ def test_competitor_intelligence_is_documented_in_openapi(client: TestClient) ->
     assert "/competitor-intelligence/projects/{project_id}" in paths
     assert "/competitor-intelligence/projects/{project_id}/refresh" in paths
     assert "/competitor-intelligence/projects/{project_id}/daily-monitoring" in paths
+    assert (
+        "/competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/social" in paths
+    )
+
+
+class _SocialCollector:
+    def collect(self, source, token):  # noqa: ANN001, ANN201
+        assert source.external_id == "skinjestique"
+        assert token is None
+        return [
+            CollectedPost(
+                external_id="skinjestique/42",
+                url="https://t.me/skinjestique/42",
+                title="Новая сыворотка",
+                content="Разбор увлажняющей сыворотки",
+                published_at=datetime(2026, 8, 20, 8, 0, tzinfo=UTC),
+            )
+        ]
+
+
+def test_social_monitor_saves_real_collector_results(client: TestClient) -> None:
+    project_id, competitor_id = _project_and_competitor(client)
+    with TestingSession() as db:
+        source = CompetitorSocialMonitorService(db, _SocialCollector()).create(
+            1,
+            project_id,
+            competitor_id,
+            SocialSourceCreate(
+                platform="TELEGRAM",
+                profile_url="https://t.me/skinjestique",
+                external_id="skinjestique",
+            ),
+        )
+
+    assert source.status == "CONNECTED"
+    assert source.configured is True
+    assert len(source.posts) == 1
+    assert source.posts[0].url == "https://t.me/skinjestique/42"
+    assert source.posts[0].significance_score == 0
+
+    dashboard = client.get(
+        f"/competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/social"
+    )
+    assert dashboard.status_code == 200
+    assert dashboard.json()["total_posts"] == 1
+    assert "не доказывает влияние" in dashboard.json()["limitation"]

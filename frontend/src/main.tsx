@@ -12,6 +12,7 @@ import {
   type FeedbackItem,
   type GraphSnapshot,
   type GeoPlatform,
+  type GeoSiteAudit,
   type EisPriorityResult,
   type PublicationInfluenceEstimate,
   type FrozenPromptSet,
@@ -29,6 +30,7 @@ import {
   type RouterModel,
   type SimulationItem,
   type SystemProviderItem,
+  type SocialDashboard,
   type WorkspaceProjectItem,
   type WizardPayload,
   type WizardReview,
@@ -442,6 +444,33 @@ function RecordsScreen({ kind, onNewResearch }: { kind: RecordsKind; onNewResear
   </main>;
 }
 
+function CompetitorSocialPanel({ projectId, competitorId }: { projectId: number; competitorId: number }) {
+  const [dashboard, setDashboard] = useState<SocialDashboard>();
+  const [platform, setPlatform] = useState("TELEGRAM");
+  const [profileUrl, setProfileUrl] = useState("");
+  const [externalId, setExternalId] = useState("");
+  const [accessToken, setAccessToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const load = useCallback(() => api.competitorSocial(projectId, competitorId).then(setDashboard), [projectId, competitorId]);
+  useEffect(() => { load().catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить соцсети")); }, [load]);
+  const add = async (event: FormEvent) => {
+    event.preventDefault(); setBusy(true); setError("");
+    try {
+      await api.addCompetitorSocial(projectId, competitorId, { platform, profile_url: profileUrl.trim(), external_id: externalId.trim(), access_token: accessToken.trim() || undefined });
+      setProfileUrl(""); setExternalId(""); setAccessToken(""); await load();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось подключить канал"); }
+    finally { setBusy(false); }
+  };
+  return <details className="competitor-social"><summary>Соцсети и ежедневные публикации · {dashboard?.total_posts ?? 0}</summary>
+    <p>Telegram и YouTube читаются из публичных каналов. Для VK и Instagram требуется официальный API-токен; он хранится зашифрованно.</p>
+    {error ? <div className="error" role="alert">{error}</div> : null}
+    <form onSubmit={add} className="social-source-form"><select aria-label="Социальная сеть" value={platform} onChange={(event) => setPlatform(event.target.value)}><option value="TELEGRAM">Telegram</option><option value="YOUTUBE">YouTube</option><option value="VK">VK</option><option value="INSTAGRAM">Instagram</option></select><input aria-label="URL профиля" type="url" placeholder="https://..." value={profileUrl} onChange={(event) => setProfileUrl(event.target.value)} required /><input aria-label="Идентификатор канала" placeholder={platform === "YOUTUBE" ? "Channel ID" : "username / profile ID"} value={externalId} onChange={(event) => setExternalId(event.target.value)} required />{["VK", "INSTAGRAM"].includes(platform) ? <input aria-label="API-токен соцсети" type="password" placeholder="Официальный API-токен" value={accessToken} onChange={(event) => setAccessToken(event.target.value)} required /> : null}<button className="secondary" disabled={busy}>{busy ? "Подключаем…" : "Добавить канал"}</button></form>
+    {dashboard?.sources.length ? <div className="social-source-list">{dashboard.sources.map((source) => <article key={source.id}><header><div><b>{source.platform}</b><a href={source.profile_url} target="_blank" rel="noreferrer">{source.external_id}</a></div><Badge tone={source.status === "CONNECTED" ? "success" : source.status === "ERROR" ? "danger" : "warning"}>{source.status}</Badge></header>{source.last_error ? <p className="social-error">{source.last_error}</p> : null}<small>Последняя проверка: {source.last_scanned_at ? new Date(source.last_scanned_at).toLocaleString("ru-RU") : "ещё не выполнялась"}</small>{source.posts.slice(0, 5).map((post) => <div className="social-post" key={post.id}><div><a href={post.url} target="_blank" rel="noreferrer">{post.title || post.content.slice(0, 90) || "Публикация"}</a><small>{new Date(post.published_at).toLocaleDateString("ru-RU")} · просмотры {post.views ?? "нет данных"} · реакции {post.likes ?? "нет данных"}</small></div><strong>{post.significance_score.toFixed(0)}<span>значимость</span></strong></div>)}</article>)}</div> : <p className="empty-state">Каналы конкурента ещё не подключены.</p>}
+    {dashboard ? <p className="method-note">{dashboard.limitation}</p> : null}
+  </details>;
+}
+
 function CompetitorsScreen() {
   const [projects, setProjects] = useState<WorkspaceProjectItem[]>([]);
   const [projectId, setProjectId] = useState<number>();
@@ -591,6 +620,7 @@ function CompetitorsScreen() {
           <div className="competitor-metrics"><div><span>Ответы</span><b>{latest?.response_count ?? 0}</b></div><div><span>Упоминания</span><b>{latest?.mention_count ?? 0}</b></div><div><span>Рекомендации</span><b>{latest?.recommendation_count ?? 0}</b></div><div><span>Источники</span><b>{latest?.source_count ?? 0}</b></div></div>
           <div className="competitor-trend"><h3>Динамика по дням</h3>{competitor.snapshots.length ? <div className="trend-bars">{competitor.snapshots.slice(-14).map((snapshot) => <div key={snapshot.snapshot_date} title={`${snapshot.snapshot_date}: ${snapshot.observed_visibility_score}`}><i style={{ height: `${Math.max(snapshot.observed_visibility_score, 3)}%` }} /><span>{new Date(snapshot.snapshot_date).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}</span></div>)}</div> : <p className="empty-state">Снимки появятся после завершённого исследования проекта.</p>}</div>
           <div className="publication-list"><h3>Публикации и площадки</h3>{competitor.publications.length ? competitor.publications.map((publication) => <div className="publication-row" key={publication.url}><div><a href={publication.url} target="_blank" rel="noreferrer">{publication.title || publication.domain}</a><small>{publication.domain} · {publication.explanation}</small></div><div><strong>{publication.significance_score.toFixed(0)}</strong><span>{publication.significance_label} связь</span></div></div>) : <p className="empty-state">В ответах моделей пока не найдено источников, связанных с этим конкурентом. Это честное отсутствие данных, а не нулевая оценка влияния.</p>}</div>
+          <CompetitorSocialPanel projectId={dashboard.project_id} competitorId={competitor.competitor_id} />
         </article>;
       })}<p className="method-note">{dashboard.limitation}</p></section> : <section className="analytics-card empty-state"><h2>Конкурентов пока нет</h2><p>Добавьте бренд выше. После исследования система найдёт его упоминания, рекомендации и связанные источники.</p></section>}
     </>}
@@ -853,17 +883,25 @@ function GeoOpportunitiesScreen() {
   const [promptSets, setPromptSets] = useState<FrozenPromptSet[]>([]);
   const [priorities, setPriorities] = useState<EisPriorityResult>();
   const [learnedInfluence, setLearnedInfluence] = useState<PublicationInfluenceEstimate[]>([]);
+  const [siteAudit, setSiteAudit] = useState<GeoSiteAudit>();
+  const [auditForm, setAuditForm] = useState({ brand: "", website: "" });
   const [engine, setEngine] = useState("YandexGPT");
   const [form, setForm] = useState({ name: "", domain: "", category: "UNIVERSAL", country: "RU", language: "ru", trust: "", authority: "", citations: "", cost: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const load = useCallback(() => Promise.all([
-    api.geoPlatforms(), api.frozenPromptSets(), api.publicationInfluence(),
-  ]).then(([items, sets, estimates]) => {
-    setPlatforms(items); setPromptSets(sets); setLearnedInfluence(estimates);
+    api.geoPlatforms(), api.frozenPromptSets(), api.publicationInfluence(), api.geoSiteAudits(),
+  ]).then(([items, sets, estimates, audits]) => {
+    setPlatforms(items); setPromptSets(sets); setLearnedInfluence(estimates); setSiteAudit(audits[0]);
   }), []);
   useEffect(() => { load().catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить GEO-данные")); }, [load]);
   const numericField = (value: string) => value.trim() === "" ? undefined : Number(value);
+  const auditSite = async (event: FormEvent) => {
+    event.preventDefault(); setBusy(true); setError("");
+    try { setSiteAudit(await api.runGeoSiteAudit({ brand: auditForm.brand.trim(), website_url: auditForm.website.trim() })); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось проверить сайт"); }
+    finally { setBusy(false); }
+  };
   const create = async (event: React.FormEvent) => {
     event.preventDefault(); setBusy(true); setError("");
     try {
@@ -905,6 +943,10 @@ function GeoOpportunitiesScreen() {
         <article className="analytics-card metric"><span>Площадки</span><strong>{platforms.length}</strong><small>реальные записи реестра</small></article>
         <article className="analytics-card metric"><span>Активные наборы запросов</span><strong>{activeSets.length}</strong><small>frozen prompt set</small></article>
         <article className="analytics-card metric"><span>Обученные наблюдения</span><strong>{learnedInfluence.filter((item) => item.metric === "visibility_score" && item.provider === "ALL").reduce((total, item) => total + item.sample_size, 0)}</strong><small>подтверждены обнаружением публикации</small></article>
+      </section>
+      <section className="analytics-card geo-site-audit">
+        <div className="geo-audit-intro"><span className="eyebrow">GEO-АУДИТ САЙТА</span><h2>Готов ли сайт стать источником для ИИ</h2><p>100-балльная проверка доступности для краулеров, сущности бренда, контента, доказательности и технических сигналов. Каждый балл подтверждается наблюдаемым признаком.</p><form onSubmit={auditSite}><input aria-label="Бренд для GEO-аудита" placeholder="Название бренда" value={auditForm.brand} onChange={(event) => setAuditForm({ ...auditForm, brand: event.target.value })} required /><input aria-label="Сайт для GEO-аудита" type="url" placeholder="https://example.ru" value={auditForm.website} onChange={(event) => setAuditForm({ ...auditForm, website: event.target.value })} required /><Button type="submit" disabled={busy}>{busy ? "Проверяем сайт…" : "Провести GEO-аудит"}</Button></form></div>
+        {siteAudit ? <div className="geo-audit-result"><header><div><strong>{siteAudit.score.toFixed(1)}</strong><span>из 100 · {siteAudit.grade}</span></div><Badge tone={siteAudit.score >= 70 ? "success" : siteAudit.score >= 45 ? "warning" : "danger"}>v{siteAudit.algorithm_version}</Badge></header><div className="geo-audit-categories">{Object.entries(siteAudit.category_scores).map(([name, value]) => <div key={name}><span>{name}</span><b>{value.toFixed(0)}</b></div>)}</div><h3>Главные действия</h3>{siteAudit.opportunities.slice(0, 5).map((item) => <article className="geo-audit-action" key={`${item.problem}:${item.affected_metric}`}><Badge tone={item.priority === "P0" ? "danger" : "warning"}>{item.priority}</Badge><div><b>{item.problem}</b><p>{item.action}</p><small>{item.expected_effect} · Проверка: {item.verification}</small></div></article>)}<details><summary>Показать все доказательства расчёта</summary>{siteAudit.checks.map((check) => <div className="geo-audit-check" key={check.code}><span>{check.passed ? "✓" : "×"}</span><div><b>{check.title}</b><small>{check.evidence}</small>{check.recommendation ? <p>{check.recommendation}</p> : null}</div><strong>{check.points}/{check.max_points}</strong></div>)}</details><p className="method-note">{siteAudit.limitation}</p></div> : <div className="geo-empty"><strong>Аудит ещё не выполнялся</strong><p>Введите официальный сайт. Система не подставит оценку без фактического чтения страницы, robots.txt и sitemap.</p></div>}
       </section>
       <section className="geo-layout">
         <form className="analytics-card geo-form" onSubmit={create}>
