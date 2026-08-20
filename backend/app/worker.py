@@ -7,10 +7,12 @@ from redis.exceptions import RedisError
 from backend.app.config import get_settings
 from backend.app.database import SessionLocal
 from backend.app.logging import configure_logging
+from competitor_intelligence.service import CompetitorIntelligenceService
 from provider_connections.crypto import SecretCipher
 from provider_connections.repository import ProviderConnectionRepository
 from provider_connections.service import hydrate_provider_credentials
 from research.queue import process_next
+from scheduler.research_adapter import build_scheduler_engine
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -28,12 +30,29 @@ async def run_worker() -> None:
             SecretCipher(settings.provider_secret_key or settings.auth_jwt_secret),
         )
         logger.info("Restored %s provider connection(s)", restored)
+    last_scheduler_run = 0.0
+    loop = asyncio.get_running_loop()
     try:
         while True:
             with SessionLocal() as db:
                 job = process_next(db)
                 if job is not None:
                     logger.info("Research job processed id=%s state=%s", job.id, job.state)
+                    CompetitorIntelligenceService(db).ingest_research(job.research_id)
+                now = loop.time()
+                if now - last_scheduler_run >= 60:
+                    try:
+                        executions = build_scheduler_engine(db).run_due()
+                        for execution in executions:
+                            if execution.research_id is not None:
+                                CompetitorIntelligenceService(db).ingest_research(
+                                    execution.research_id
+                                )
+                        if executions:
+                            logger.info("Scheduled research processed count=%s", len(executions))
+                    except Exception:  # noqa: BLE001 - worker must survive scheduler failures
+                        logger.exception("Scheduled research processing failed")
+                    last_scheduler_run = now
             try:
                 await client.ping()
                 logger.info("Worker heartbeat: Redis is available")

@@ -28,6 +28,7 @@ from benchmark.router import router as benchmark_router
 from cache.router import router as cache_router
 from change_detection.router import router as change_detection_router
 from closed_beta.router import router as closed_beta_router
+from competitor_intelligence.router import router as competitor_intelligence_router
 from cost_analytics.router import router as cost_analytics_router
 from decision_center.router import router as decision_center_router
 from eis.router import router as eis_router
@@ -131,6 +132,7 @@ app.include_router(organization_workspace_router)
 app.include_router(cache_router)
 app.include_router(change_detection_router)
 app.include_router(closed_beta_router)
+app.include_router(competitor_intelligence_router)
 app.include_router(rate_limit_router)
 app.include_router(hardening_router)
 app.include_router(execution_engine_router)

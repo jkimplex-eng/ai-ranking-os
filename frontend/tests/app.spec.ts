@@ -6,6 +6,82 @@ test("login page exposes product entry point", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Войти" })).toBeVisible();
 });
 
+test("competitor center adds a brand and shows evidence-based daily analytics", async ({ page }) => {
+  let competitorCreated = false;
+  const dashboard = () => ({
+    project_id: 10,
+    monitoring_enabled: false,
+    methodology: "COMPETITOR_OBSERVATION_V1",
+    limitation: "Значимость отражает наблюдаемую связь и не доказывает причинное влияние.",
+    competitors: competitorCreated ? [{
+      competitor_id: 22,
+      name: "Librederm",
+      domains: ["librederm.ru"],
+      active: true,
+      latest_visibility_score: 66.5,
+      visibility_delta: 4.2,
+      snapshots: [{
+        snapshot_date: "2026-08-20",
+        research_count: 1,
+        response_count: 8,
+        mention_count: 5,
+        recommendation_count: 3,
+        citation_count: 2,
+        source_count: 1,
+        observed_visibility_score: 66.5,
+        algorithm_version: "1.0",
+      }],
+      publications: [{
+        url: "https://beauty.example/serums",
+        domain: "beauty.example",
+        title: "Обзор сывороток",
+        observation_count: 3,
+        provider_count: 2,
+        research_count: 2,
+        mention_observations: 3,
+        recommendation_observations: 2,
+        significance_score: 58,
+        significance_label: "Средняя",
+        first_seen_at: "2026-08-19T10:00:00Z",
+        last_seen_at: "2026-08-20T10:00:00Z",
+        evidence_level: "OBSERVATION",
+        explanation: "Источник встречался вместе с конкурентом в 3 ответах.",
+      }],
+    }] : [],
+  });
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    let status = 200;
+    let json: unknown = {};
+    if (path.endsWith("/auth/login")) json = { access_token: "access", refresh_token: "refresh-token-with-valid-length" };
+    else if (path.endsWith("/auth/me")) json = { id: 1, display_name: "Admin", email: "admin@example.com", roles: ["superadmin"] };
+    else if (path.endsWith("/workspace/projects")) json = [{ id: 10, name: "Skinjestique", description: "", research_count: 4 }];
+    else if (path.endsWith("/workspace/projects/10/competitors") && request.method() === "POST") {
+      competitorCreated = true;
+      status = 201;
+      json = { id: 22, project_id: 10, name: "Librederm", domains: ["librederm.ru"], brands: [], notes: "", active: true };
+    } else if (path.includes("/competitor-intelligence/projects/10")) json = dashboard();
+    else if (path.endsWith("/research") || path.endsWith("/providers")) json = [];
+    else if (path.endsWith("/system/health")) json = { status: "healthy" };
+    await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(json) });
+  });
+
+  await page.goto("/");
+  await page.getByLabel("Email").fill("admin@example.com");
+  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByRole("button", { name: "Войти" }).click();
+  await page.getByRole("button", { name: "Конкуренты" }).click();
+  await page.getByLabel("Название").fill("Librederm");
+  await page.getByLabel("Сайт").fill("librederm.ru");
+  await page.getByRole("button", { name: "Добавить конкурента" }).click();
+
+  await expect(page.getByRole("heading", { name: "Librederm" })).toBeVisible();
+  await expect(page.getByText("66.5")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Обзор сывороток" })).toBeVisible();
+  await expect(page.getByText(/не доказывает причинное влияние/)).toBeVisible();
+});
+
 test("wizard transparently refreshes an expired access token", async ({ page }) => {
   let reviewAttempts = 0;
   let refreshed = false;

@@ -68,7 +68,28 @@ export type ResearchItem = { id: number; title: string; status: string; progress
 export type ResearchTaskItem = { id: number; research_id: number; status: string; provider?: string; model?: string; execution_id?: number; created_at: string; updated_at: string; error?: string };
 export type ExecutionItem = { id: number; state: string; started_at?: string; finished_at?: string; duration_ms?: number; attempt_count: number; error?: string };
 export type WorkspaceProjectItem = { id: number; name: string; description: string; research_count: number };
-export type CompetitorItem = { id: number; project_id: number; name: string; domains: string[]; active: boolean };
+export type CompetitorItem = { id: number; project_id: number; name: string; domains: string[]; brands: string[]; notes: string; active: boolean };
+export type CompetitorSnapshot = {
+  snapshot_date: string; research_count: number; response_count: number;
+  mention_count: number; recommendation_count: number; citation_count: number;
+  source_count: number; observed_visibility_score: number; algorithm_version: string;
+};
+export type CompetitorPublication = {
+  url: string; domain: string; title?: string; observation_count: number;
+  provider_count: number; research_count: number; mention_observations: number;
+  recommendation_observations: number; significance_score: number;
+  significance_label: string; first_seen_at: string; last_seen_at: string;
+  evidence_level: string; explanation: string;
+};
+export type CompetitorAnalytics = {
+  competitor_id: number; name: string; domains: string[]; active: boolean;
+  latest_visibility_score?: number; visibility_delta?: number;
+  snapshots: CompetitorSnapshot[]; publications: CompetitorPublication[];
+};
+export type CompetitorDashboard = {
+  project_id: number; monitoring_enabled: boolean; next_run_at?: string;
+  methodology: string; limitation: string; competitors: CompetitorAnalytics[];
+};
 export type ReportCatalogItem = { research_id: number; title: string; status: string; visibility_score?: number; created_at: string };
 export type RecommendationItem = { id: number; recommendation_type: string; priority: string; explanation: string; metric: string; metric_value: number; expected_effect: string };
 export type GraphNode = { id: number; external_id: string; name: string; canonical_name: string; node_type: string; confidence: number; aliases: string[]; properties: Record<string, unknown> };
@@ -285,6 +306,20 @@ export class ApiClient {
   graph() { return this.request<GraphSnapshot>("/graph"); }
   workspaceProjects() { return this.request<WorkspaceProjectItem[]>("/workspace/projects"); }
   projectCompetitors(projectId: number) { return this.request<CompetitorItem[]>(`/workspace/projects/${projectId}/competitors`); }
+  createProjectCompetitor(projectId: number, payload: { name: string; domains: string[]; brands?: string[]; notes?: string }) {
+    return this.request<CompetitorItem>(`/workspace/projects/${projectId}/competitors`, { method: "POST", body: JSON.stringify(payload) });
+  }
+  updateProjectCompetitor(projectId: number, competitorId: number, payload: Partial<CompetitorItem>) {
+    return this.request<CompetitorItem>(`/workspace/projects/${projectId}/competitors/${competitorId}`, { method: "PATCH", body: JSON.stringify(payload) });
+  }
+  deleteProjectCompetitor(projectId: number, competitorId: number) {
+    return this.request<void>(`/workspace/projects/${projectId}/competitors/${competitorId}`, { method: "DELETE" });
+  }
+  competitorDashboard(projectId: number) { return this.request<CompetitorDashboard>(`/competitor-intelligence/projects/${projectId}`); }
+  refreshCompetitorDashboard(projectId: number) { return this.request<CompetitorDashboard>(`/competitor-intelligence/projects/${projectId}/refresh`, { method: "POST" }); }
+  setCompetitorDailyMonitoring(projectId: number, enabled: boolean) {
+    return this.request<CompetitorDashboard>(`/competitor-intelligence/projects/${projectId}/daily-monitoring`, { method: "PUT", body: JSON.stringify({ enabled }) });
+  }
   feedback() { return this.request<FeedbackItem[]>("/feedback"); }
   listProviders() { return this.request<ProviderItem[]>("/providers"); }
   providerConnections() { return this.request<ProviderConnection[]>("/provider-connections"); }

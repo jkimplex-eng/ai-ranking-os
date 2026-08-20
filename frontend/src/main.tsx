@@ -1,4 +1,4 @@
-import { StrictMode, useCallback, useEffect, useMemo, useState } from "react";
+import { StrictMode, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ApiClient,
@@ -7,6 +7,7 @@ import {
   type AdminAudit,
   type AdminFeedback,
   type AdminUser,
+  type CompetitorDashboard,
   type CompetitorItem,
   type FeedbackItem,
   type GraphSnapshot,
@@ -438,6 +439,126 @@ function RecordsScreen({ kind, onNewResearch }: { kind: RecordsKind; onNewResear
   }, [kind]);
   return <main className="analytics-page records-page"><header className="analytics-hero"><div><span className="eyebrow">РЕАЛЬНЫЕ ДАННЫЕ</span><h1>{titles[kind][0]}</h1><p>{titles[kind][1]}</p></div>{kind === "research" && <button className="primary-action" onClick={onNewResearch}>Новое исследование</button>}</header>
     {error ? <div className="error" role="alert">{error}</div> : loading ? <DashboardSkeleton /> : <section className="records-list">{records.length ? records.map((item) => <article className="analytics-card record-card" key={item.id}><div><small>{item.meta}</small><h2>{item.title}</h2><p>{item.detail}</p></div><Badge tone={item.status === "COMPLETED" || item.status === "ACTIVE" ? "success" : item.status === "FAILED" || item.status === "CRITICAL" ? "danger" : "warning"}>{item.status}</Badge></article>) : <div className="analytics-card empty-state">Данных пока нет. Они появятся после первого действия в этом разделе.</div>}</section>}
+  </main>;
+}
+
+function CompetitorsScreen() {
+  const [projects, setProjects] = useState<WorkspaceProjectItem[]>([]);
+  const [projectId, setProjectId] = useState<number>();
+  const [dashboard, setDashboard] = useState<CompetitorDashboard>();
+  const [name, setName] = useState("");
+  const [domain, setDomain] = useState("");
+  const [aliases, setAliases] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadDashboard = useCallback(async (id: number, refresh = false) => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = refresh
+        ? await api.refreshCompetitorDashboard(id)
+        : await api.competitorDashboard(id);
+      setDashboard(result);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Не удалось загрузить конкурентов");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    api.workspaceProjects()
+      .then((items) => {
+        setProjects(items);
+        setProjectId((current) => current ?? items[0]?.id);
+        if (!items.length) setLoading(false);
+      })
+      .catch((reason) => {
+        setError(reason instanceof Error ? reason.message : "Не удалось загрузить проекты");
+        setLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!projectId) return undefined;
+    let active = true;
+    api.competitorDashboard(projectId)
+      .then((result) => {
+        if (active) setDashboard(result);
+      })
+      .catch((reason) => {
+        if (active) {
+          setError(reason instanceof Error ? reason.message : "Не удалось загрузить конкурентов");
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [projectId]);
+
+  const addCompetitor = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!projectId || !name.trim()) return;
+    setSaving(true);
+    setError("");
+    try {
+      await api.createProjectCompetitor(projectId, {
+        name: name.trim(),
+        domains: domain.trim() ? [domain.trim()] : [],
+        brands: aliases.split(",").map((value) => value.trim()).filter(Boolean),
+      });
+      setName("");
+      setDomain("");
+      setAliases("");
+      await loadDashboard(projectId, true);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Не удалось добавить конкурента");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeCompetitor = async (competitor: CompetitorItem | { competitor_id: number }) => {
+    if (!projectId || !window.confirm("Удалить конкурента и его настройки наблюдения?")) return;
+    await api.deleteProjectCompetitor(projectId, "id" in competitor ? competitor.id : competitor.competitor_id);
+    await loadDashboard(projectId);
+  };
+
+  const toggleMonitoring = async () => {
+    if (!projectId || !dashboard) return;
+    setSaving(true);
+    setError("");
+    try {
+      setDashboard(await api.setCompetitorDailyMonitoring(projectId, !dashboard.monitoring_enabled));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Не удалось изменить расписание");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <main className="analytics-page competitor-page">
+    <header className="analytics-hero"><div><span className="eyebrow">КОНКУРЕНТНАЯ РАЗВЕДКА</span><h1>Конкуренты</h1><p>Ежедневно отслеживайте видимость конкурентов и источники, которые встречаются рядом с их рекомендациями.</p></div>
+      {projects.length > 0 && <select value={projectId ?? ""} onChange={(event) => setProjectId(Number(event.target.value))}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select>}
+    </header>
+    {error && <div className="error" role="alert">{error}</div>}
+    {!projects.length ? <section className="analytics-card empty-state"><h2>Сначала создайте проект</h2><p>Конкуренты привязываются к проекту, чтобы сравнение не смешивало разные бренды.</p></section> : <>
+      <section className="competitor-controls">
+        <form className="analytics-card competitor-form" onSubmit={addCompetitor}><div><span className="eyebrow">НОВЫЙ КОНКУРЕНТ</span><h2>Добавить в наблюдение</h2></div><label>Название<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Например, Librederm" required /></label><label>Сайт<input value={domain} onChange={(event) => setDomain(event.target.value)} placeholder="librederm.ru" /></label><label>Другие названия<input value={aliases} onChange={(event) => setAliases(event.target.value)} placeholder="Алиасы через запятую" /></label><button className="primary-action" disabled={saving}>{saving ? "Сохраняем…" : "Добавить конкурента"}</button></form>
+        <article className="analytics-card monitoring-card"><span className="eyebrow">ЕЖЕДНЕВНЫЙ КОНТРОЛЬ</span><h2>{dashboard?.monitoring_enabled ? "Мониторинг включён" : "Мониторинг выключен"}</h2><p>{dashboard?.monitoring_enabled ? `Следующий запуск: ${dashboard.next_run_at ? new Date(dashboard.next_run_at).toLocaleString("ru-RU") : "рассчитывается"}` : "Используется последнее завершённое исследование проекта и те же подключённые модели."}</p><button className={dashboard?.monitoring_enabled ? "secondary" : "primary-action"} onClick={toggleMonitoring} disabled={saving || !dashboard}>{dashboard?.monitoring_enabled ? "Выключить" : "Включить ежедневно"}</button><button className="secondary" onClick={() => projectId && loadDashboard(projectId, true)} disabled={loading}>Пересчитать по реальным данным</button></article>
+      </section>
+      {loading ? <DashboardSkeleton /> : dashboard?.competitors.length ? <section className="competitor-stack">{dashboard.competitors.map((competitor) => {
+        const latest = competitor.snapshots.at(-1);
+        return <article className="analytics-card competitor-analysis" key={competitor.competitor_id}><header><div><small>{competitor.domains.join(", ") || "Сайт не указан"}</small><h2>{competitor.name}</h2></div><div className="competitor-score"><strong>{competitor.latest_visibility_score?.toFixed(1) ?? "—"}</strong><span>наблюдаемая видимость</span>{competitor.visibility_delta != null && <b className={competitor.visibility_delta >= 0 ? "up" : "down"}>{competitor.visibility_delta >= 0 ? "+" : ""}{competitor.visibility_delta.toFixed(1)}</b>}</div><button className="danger-link" onClick={() => removeCompetitor(competitor)}>Удалить</button></header>
+          <div className="competitor-metrics"><div><span>Ответы</span><b>{latest?.response_count ?? 0}</b></div><div><span>Упоминания</span><b>{latest?.mention_count ?? 0}</b></div><div><span>Рекомендации</span><b>{latest?.recommendation_count ?? 0}</b></div><div><span>Источники</span><b>{latest?.source_count ?? 0}</b></div></div>
+          <div className="competitor-trend"><h3>Динамика по дням</h3>{competitor.snapshots.length ? <div className="trend-bars">{competitor.snapshots.slice(-14).map((snapshot) => <div key={snapshot.snapshot_date} title={`${snapshot.snapshot_date}: ${snapshot.observed_visibility_score}`}><i style={{ height: `${Math.max(snapshot.observed_visibility_score, 3)}%` }} /><span>{new Date(snapshot.snapshot_date).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}</span></div>)}</div> : <p className="empty-state">Снимки появятся после завершённого исследования проекта.</p>}</div>
+          <div className="publication-list"><h3>Публикации и площадки</h3>{competitor.publications.length ? competitor.publications.map((publication) => <div className="publication-row" key={publication.url}><div><a href={publication.url} target="_blank" rel="noreferrer">{publication.title || publication.domain}</a><small>{publication.domain} · {publication.explanation}</small></div><div><strong>{publication.significance_score.toFixed(0)}</strong><span>{publication.significance_label} связь</span></div></div>) : <p className="empty-state">В ответах моделей пока не найдено источников, связанных с этим конкурентом. Это честное отсутствие данных, а не нулевая оценка влияния.</p>}</div>
+        </article>;
+      })}<p className="method-note">{dashboard.limitation}</p></section> : <section className="analytics-card empty-state"><h2>Конкурентов пока нет</h2><p>Добавьте бренд выше. После исследования система найдёт его упоминания, рекомендации и связанные источники.</p></section>}
+    </>}
   </main>;
 }
 
@@ -1741,7 +1862,7 @@ function App() {
       ) : screen === "geo" ? (
         <GeoOpportunitiesScreen />
       ) : screen === "competitors" ? (
-        <RecordsScreen key="competitors" kind="competitors" onNewResearch={() => navigate("wizard")} />
+        <CompetitorsScreen />
       ) : screen === "history" ? (
         <RecordsScreen key="history" kind="history" onNewResearch={() => navigate("wizard")} />
       ) : screen === "feedback" ? (
