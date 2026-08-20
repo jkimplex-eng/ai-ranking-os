@@ -447,6 +447,7 @@ function CompetitorsScreen() {
   const [projectId, setProjectId] = useState<number>();
   const [dashboard, setDashboard] = useState<CompetitorDashboard>();
   const [name, setName] = useState("");
+  const [projectName, setProjectName] = useState("");
   const [domain, setDomain] = useState("");
   const [aliases, setAliases] = useState("");
   const [loading, setLoading] = useState(true);
@@ -521,6 +522,23 @@ function CompetitorsScreen() {
     }
   };
 
+  const createProject = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!projectName.trim()) return;
+    setSaving(true);
+    setError("");
+    try {
+      const project = await api.createWorkspaceProject({ name: projectName.trim() });
+      setProjects([project]);
+      setProjectId(project.id);
+      setProjectName("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Не удалось создать проект");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const removeCompetitor = async (competitor: CompetitorItem | { competitor_id: number }) => {
     if (!projectId || !window.confirm("Удалить конкурента и его настройки наблюдения?")) return;
     await api.deleteProjectCompetitor(projectId, "id" in competitor ? competitor.id : competitor.competitor_id);
@@ -545,7 +563,7 @@ function CompetitorsScreen() {
       {projects.length > 0 && <select value={projectId ?? ""} onChange={(event) => setProjectId(Number(event.target.value))}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select>}
     </header>
     {error && <div className="error" role="alert">{error}</div>}
-    {!projects.length ? <section className="analytics-card empty-state"><h2>Сначала создайте проект</h2><p>Конкуренты привязываются к проекту, чтобы сравнение не смешивало разные бренды.</p></section> : <>
+    {!projects.length ? <section className="analytics-card competitor-first-project"><div><span className="eyebrow">ПЕРВЫЙ ШАГ</span><h2>Создайте проект для вашего бренда</h2><p>Проект объединяет ваш бренд, исследования и конкурентов. Например: «Skinjestique».</p></div><form onSubmit={createProject}><label htmlFor="competitor-project-name">Название проекта</label><div><input id="competitor-project-name" value={projectName} onChange={(event) => setProjectName(event.target.value)} placeholder="Название вашего бренда" required autoFocus /><button className="primary-action" disabled={saving}>{saving ? "Создаём…" : "Создать и продолжить"}</button></div></form></section> : <>
       <section className="competitor-controls">
         <form className="analytics-card competitor-form" onSubmit={addCompetitor}><div><span className="eyebrow">НОВЫЙ КОНКУРЕНТ</span><h2>Добавить в наблюдение</h2></div><label>Название<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Например, Librederm" required /></label><label>Сайт<input value={domain} onChange={(event) => setDomain(event.target.value)} placeholder="librederm.ru" /></label><label>Другие названия<input value={aliases} onChange={(event) => setAliases(event.target.value)} placeholder="Алиасы через запятую" /></label><button className="primary-action" disabled={saving}>{saving ? "Сохраняем…" : "Добавить конкурента"}</button></form>
         <article className="analytics-card monitoring-card"><span className="eyebrow">ЕЖЕДНЕВНЫЙ КОНТРОЛЬ</span><h2>{dashboard?.monitoring_enabled ? "Мониторинг включён" : "Мониторинг выключен"}</h2><p>{dashboard?.monitoring_enabled ? `Следующий запуск: ${dashboard.next_run_at ? new Date(dashboard.next_run_at).toLocaleString("ru-RU") : "рассчитывается"}` : "Используется последнее завершённое исследование проекта и те же подключённые модели."}</p><button className={dashboard?.monitoring_enabled ? "secondary" : "primary-action"} onClick={toggleMonitoring} disabled={saving || !dashboard}>{dashboard?.monitoring_enabled ? "Выключить" : "Включить ежедневно"}</button><button className="secondary" onClick={() => projectId && loadDashboard(projectId, true)} disabled={loading}>Пересчитать по реальным данным</button></article>

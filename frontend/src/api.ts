@@ -305,6 +305,12 @@ export class ApiClient {
   simulation(researchId: number) { return this.request<SimulationResult>(`/research/${researchId}/simulation`); }
   graph() { return this.request<GraphSnapshot>("/graph"); }
   workspaceProjects() { return this.request<WorkspaceProjectItem[]>("/workspace/projects"); }
+  createWorkspaceProject(payload: { name: string; description?: string }) {
+    return this.request<WorkspaceProjectItem>("/workspace/projects", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
   projectCompetitors(projectId: number) { return this.request<CompetitorItem[]>(`/workspace/projects/${projectId}/competitors`); }
   createProjectCompetitor(projectId: number, payload: { name: string; domains: string[]; brands?: string[]; notes?: string }) {
     return this.request<CompetitorItem>(`/workspace/projects/${projectId}/competitors`, { method: "POST", body: JSON.stringify(payload) });

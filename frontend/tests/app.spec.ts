@@ -7,6 +7,7 @@ test("login page exposes product entry point", async ({ page }) => {
 });
 
 test("competitor center adds a brand and shows evidence-based daily analytics", async ({ page }) => {
+  let projectCreated = false;
   let competitorCreated = false;
   const dashboard = () => ({
     project_id: 10,
@@ -56,7 +57,13 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
     let json: unknown = {};
     if (path.endsWith("/auth/login")) json = { access_token: "access", refresh_token: "refresh-token-with-valid-length" };
     else if (path.endsWith("/auth/me")) json = { id: 1, display_name: "Admin", email: "admin@example.com", roles: ["superadmin"] };
-    else if (path.endsWith("/workspace/projects")) json = [{ id: 10, name: "Skinjestique", description: "", research_count: 4 }];
+    else if (path.endsWith("/workspace/projects") && request.method() === "POST") {
+      projectCreated = true;
+      status = 201;
+      json = { id: 10, name: "Skinjestique", description: "", research_count: 0 };
+    } else if (path.endsWith("/workspace/projects")) {
+      json = projectCreated ? [{ id: 10, name: "Skinjestique", description: "", research_count: 0 }] : [];
+    }
     else if (path.endsWith("/workspace/projects/10/competitors") && request.method() === "POST") {
       competitorCreated = true;
       status = 201;
@@ -72,6 +79,8 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
   await page.getByLabel("Пароль").fill("strong-password");
   await page.getByRole("button", { name: "Войти" }).click();
   await page.getByRole("button", { name: "Конкуренты" }).click();
+  await page.getByLabel("Название проекта").fill("Skinjestique");
+  await page.getByRole("button", { name: "Создать и продолжить" }).click();
   await page.getByLabel("Название").fill("Librederm");
   await page.getByLabel("Сайт").fill("librederm.ru");
   await page.getByRole("button", { name: "Добавить конкурента" }).click();
