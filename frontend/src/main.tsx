@@ -1,4 +1,4 @@
-import { StrictMode, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { StrictMode, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ApiClient,
@@ -453,19 +453,23 @@ function CompetitorsScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const dashboardRequest = useRef(0);
 
   const loadDashboard = useCallback(async (id: number, refresh = false) => {
+    const requestNumber = ++dashboardRequest.current;
     setLoading(true);
     setError("");
     try {
       const result = refresh
         ? await api.refreshCompetitorDashboard(id)
         : await api.competitorDashboard(id);
-      setDashboard(result);
+      if (requestNumber === dashboardRequest.current) setDashboard(result);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Не удалось загрузить конкурентов");
+      if (requestNumber === dashboardRequest.current) {
+        setError(reason instanceof Error ? reason.message : "Не удалось загрузить конкурентов");
+      }
     } finally {
-      setLoading(false);
+      if (requestNumber === dashboardRequest.current) setLoading(false);
     }
   }, []);
 
@@ -485,17 +489,18 @@ function CompetitorsScreen() {
   useEffect(() => {
     if (!projectId) return undefined;
     let active = true;
+    const requestNumber = ++dashboardRequest.current;
     api.competitorDashboard(projectId)
       .then((result) => {
-        if (active) setDashboard(result);
+        if (active && requestNumber === dashboardRequest.current) setDashboard(result);
       })
       .catch((reason) => {
-        if (active) {
+        if (active && requestNumber === dashboardRequest.current) {
           setError(reason instanceof Error ? reason.message : "Не удалось загрузить конкурентов");
         }
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active && requestNumber === dashboardRequest.current) setLoading(false);
       });
     return () => { active = false; };
   }, [projectId]);
