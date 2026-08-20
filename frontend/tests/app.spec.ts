@@ -81,8 +81,10 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
   await page.getByRole("button", { name: "Конкуренты" }).click();
   await page.getByLabel("Название проекта").fill("Skinjestique");
   await page.getByRole("button", { name: "Создать и продолжить" }).click();
+  await expect(page.getByRole("button", { name: "Пересчитать по реальным данным" })).toBeEnabled();
   await page.getByLabel("Название").fill("Librederm");
   await page.getByLabel("Сайт").fill("librederm.ru");
+  await expect(page.getByRole("button", { name: "Добавить конкурента" })).toBeEnabled();
   const refreshResponse = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/competitor-intelligence/projects/10/refresh"));
   await page.getByRole("button", { name: "Добавить конкурента" }).click();
   expect(await (await refreshResponse).json()).toMatchObject({
