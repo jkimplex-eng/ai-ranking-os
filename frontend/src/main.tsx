@@ -32,6 +32,8 @@ import {
   type SystemProviderItem,
   type SocialDashboard,
   type WorkspaceProjectItem,
+  type YandexWebmasterHost,
+  type YandexWebmasterStatus,
   type WizardPayload,
   type WizardReview,
 } from "./api";
@@ -332,8 +334,12 @@ function SettingsScreen({ user }: { user: string }) {
   const [keys, setKeys] = useState<Array<{ id: number; name: string; prefix: string }>>([]);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [webmaster, setWebmaster] = useState<YandexWebmasterStatus | null>(null);
+  const [webmasterHosts, setWebmasterHosts] = useState<YandexWebmasterHost[]>([]);
+  const [webmasterBusy, setWebmasterBusy] = useState(false);
   useEffect(() => { Promise.all([api.workspace(), api.listProviders(), api.apiKeys()]).then(([workspace, providerItems, apiKeyItems]) => { setSettings((current) => ({ ...current, ...workspace.settings })); setProviders(providerItems); setKeys(apiKeyItems); }).catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки настроек")); }, []);
-  const tabs = [["profile", "Профиль"], ["security", "Безопасность"], ["api", "API Keys"], ["providers", "LLM Providers"], ["preferences", "Язык и регион"], ["notifications", "Уведомления"], ["theme", "Тема"], ["organization", "Организация"]];
+  useEffect(() => { api.yandexWebmasterStatus().then((status) => { setWebmaster(status); if (status.connected) void api.yandexWebmasterHosts().then(setWebmasterHosts); }).catch(() => setWebmaster(null)); }, []);
+  const tabs = [["profile", "Профиль"], ["security", "Безопасность"], ["api", "API Keys"], ["providers", "LLM Providers"], ["integrations", "Интеграции"], ["preferences", "Язык и регион"], ["notifications", "Уведомления"], ["theme", "Тема"], ["organization", "Организация"]];
   const set = (key: string, value: unknown) => { setSaved(false); setSettings((current) => ({ ...current, [key]: value })); };
   return <main className="analytics-page settings-page"><header className="analytics-hero"><div><span className="eyebrow">PREFERENCES</span><h1>Настройки</h1><p>Единый центр персональных и системных настроек.</p></div><button className="primary-action" onClick={() => api.updateWorkspace(settings).then(() => setSaved(true))}>{saved ? "Сохранено ✓" : "Сохранить"}</button></header>
     {error && <div className="error" role="alert">{error}</div>}
@@ -342,6 +348,10 @@ function SettingsScreen({ user }: { user: string }) {
       {tab === "security" && <><h2>Безопасность</h2><div className="setting-row"><span>JWT-сессии и refresh rotation</span><b>Активно</b></div><div className="setting-row"><span>Отзыв токенов при выходе</span><b>Активно</b></div></>}
       {tab === "api" && <><h2>API Keys</h2>{keys.length ? keys.map((key) => <div className="setting-row" key={key.id}><span>{key.name}</span><code>{key.prefix}••••</code></div>) : <p className="empty-state">API-ключи ещё не созданы.</p>}</>}
       {tab === "providers" && <><h2>LLM Providers</h2>{providers.length ? providers.map((provider) => <div className="setting-row" key={provider.id}><span>{provider.display_name}</span><b>{provider.availability}</b></div>) : <p className="empty-state">Провайдеры недоступны.</p>}</>}
+      {tab === "integrations" && <><h2>Яндекс Вебмастер</h2><p>Подключите подтверждённые сайты и реальные поисковые запросы. Доступ выдаётся через Яндекс OAuth; пароль и OAuth-токен не отображаются и не передаются в браузер.</p>
+        <div className="setting-row"><span>Состояние</span><Badge tone={webmaster?.connected ? "success" : "warning"}>{webmaster?.connected ? "ПОДКЛЮЧЕН" : "НЕ ПОДКЛЮЧЕН"}</Badge></div>
+        {webmaster?.connected ? <><label>Сайт<select value={webmaster.selected_host_id ?? ""} onChange={(event) => { const host = webmasterHosts.find((item) => item.host_id === event.target.value); if (host) void api.selectYandexWebmasterHost(host.host_id, host.unicode_host_url || host.ascii_host_url).then(setWebmaster); }}><option value="">Выберите подтверждённый сайт</option>{webmasterHosts.map((host) => <option key={host.host_id} value={host.host_id}>{host.unicode_host_url || host.ascii_host_url}{host.verified ? " · подтверждён" : ""}</option>)}</select></label><button className="secondary" disabled={webmasterBusy} onClick={() => { setWebmasterBusy(true); api.disconnectYandexWebmaster().then(() => { setWebmaster({ connected: false, status: "NOT_CONFIGURED" }); setWebmasterHosts([]); }).finally(() => setWebmasterBusy(false)); }}>Отключить</button></> : <button className="primary-action" disabled={webmasterBusy} onClick={() => { setWebmasterBusy(true); api.authorizeYandexWebmaster().then(({ authorization_url }) => { window.location.assign(authorization_url); }).catch((reason) => { setError(reason instanceof Error ? reason.message : "Не удалось начать подключение"); setWebmasterBusy(false); }); }}>Подключить Яндекс Вебмастер</button>}
+        <p className="empty-state">После выбора сайта система сможет использовать реальные запросы Яндекс Поиска при подготовке карты GEO-исследования. Данные «Видимость в Алисе AI» будут подключены только через официальный API или экспорт — без браузерного скрейпинга.</p></>}
       {tab === "preferences" && <><h2>Язык и регион</h2><label>Язык<select value={String(settings.language)} onChange={(event) => set("language", event.target.value)}><option value="ru">Русский</option><option value="en">English</option></select></label><label>Регион<select value={String(settings.region)} onChange={(event) => set("region", event.target.value)}><option>GLOBAL</option><option>RU</option><option>EU</option><option>US</option></select></label></>}
       {tab === "notifications" && <><h2>Уведомления</h2><label className="toggle-row"><input type="checkbox" checked={Boolean((settings.notifications as Record<string, boolean>)?.in_app)} onChange={(event) => set("notifications", { ...(settings.notifications as object), in_app: event.target.checked })}/>In-app</label><label className="toggle-row"><input type="checkbox" checked={Boolean((settings.notifications as Record<string, boolean>)?.email)} onChange={(event) => set("notifications", { ...(settings.notifications as object), email: event.target.checked })}/>Email</label></>}
       {tab === "theme" && <><h2>Тема</h2><div className="theme-options">{["dark", "light", "system"].map((theme) => <button className={settings.theme === theme ? "active" : ""} onClick={() => set("theme", theme)} key={theme}>{theme}</button>)}</div></>}

@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     admin_password: str | None = None
     admin_display_name: str = "AI Ranking OS Administrator"
     provider_secret_key: str | None = None
+    yandex_webmaster_client_id: str | None = None
+    yandex_webmaster_client_secret: str | None = None
+    yandex_webmaster_redirect_uri: str = (
+        "https://app.разуммаркета.рф/api/integrations/yandex-webmaster/callback"
+    )
 
 
 @lru_cache

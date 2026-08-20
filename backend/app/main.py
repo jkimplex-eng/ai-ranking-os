@@ -81,6 +81,7 @@ from scheduler.router import router as scheduler_router
 from segmentation.router import router as segmentation_router
 from trend.router import router as trend_router
 from workspace.router import router as workspace_router
+from yandex_webmaster.router import router as yandex_webmaster_router
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -158,6 +159,7 @@ app.include_router(query_executor_router)
 app.include_router(llm_router)
 app.include_router(providers_router)
 app.include_router(provider_connections_router)
+app.include_router(yandex_webmaster_router)
 app.include_router(model_benchmark_router)
 app.include_router(model_evaluation_router)
 app.include_router(notification_center_router)

@@ -114,6 +114,8 @@ export type ProviderConnection = {
   last_checked_at?: string; last_success_at?: string; last_error?: string; created_at: string;
 };
 export type ProviderConnectionTest = { provider: string; status: string; latency_ms: number; models: string[]; free_models: string[]; checked_at: string };
+export type YandexWebmasterStatus = { connected: boolean; status: string; selected_host_id?: string; selected_host_url?: string; last_checked_at?: string; last_success_at?: string; last_error?: string };
+export type YandexWebmasterHost = { host_id: string; ascii_host_url: string; unicode_host_url?: string; verified: boolean };
 export type GeoPlatform = {
   id: string; name: string; domain: string; platform_type: string; category: string;
   country: string; language: string; ai_engines: string[]; domain_trust?: number;
@@ -342,6 +344,11 @@ export class ApiClient {
   providerConnections() { return this.request<ProviderConnection[]>("/provider-connections"); }
   connectProvider(apiKey: string, providerHint?: string, folderId?: string) { return this.request<ProviderConnection>("/provider-connections", { method: "POST", body: JSON.stringify({ api_key: apiKey, provider_hint: providerHint || null, folder_id: folderId || null, free_only: true }) }); }
   testProviderConnection(id: number) { return this.request<ProviderConnectionTest>(`/provider-connections/${id}/test`, { method: "POST" }); }
+  yandexWebmasterStatus() { return this.request<YandexWebmasterStatus>("/integrations/yandex-webmaster/status"); }
+  authorizeYandexWebmaster() { return this.request<{ authorization_url: string }>("/integrations/yandex-webmaster/authorize", { method: "POST" }); }
+  yandexWebmasterHosts() { return this.request<YandexWebmasterHost[]>("/integrations/yandex-webmaster/hosts"); }
+  selectYandexWebmasterHost(host_id: string, host_url: string) { return this.request<YandexWebmasterStatus>("/integrations/yandex-webmaster/host", { method: "PUT", body: JSON.stringify({ host_id, host_url }) }); }
+  disconnectYandexWebmaster() { return this.request<void>("/integrations/yandex-webmaster", { method: "DELETE" }); }
   geoPlatforms() { return this.request<GeoPlatform[]>("/geo/platforms"); }
   createGeoPlatform(payload: {
     name: string; domain: string; category: string; country: string; language: string;
