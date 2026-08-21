@@ -906,7 +906,7 @@ function GeoOpportunitiesScreen() {
     api.yandexIntelligence().catch(() => undefined),
   ]).then(([items, sets, estimates, audits, intelligence]) => {
     setPlatforms(items); setPromptSets(sets); setLearnedInfluence(estimates); setSiteAudit(audits[0]);
-    setYandexIntelligence(intelligence);
+    setYandexIntelligence(Array.isArray(intelligence?.query_map) ? intelligence : undefined);
   }), []);
   useEffect(() => { load().catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить GEO-данные")); }, [load]);
   const numericField = (value: string) => value.trim() === "" ? undefined : Number(value);
