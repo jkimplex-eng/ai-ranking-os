@@ -4,6 +4,9 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+import decision_center.models  # noqa: F401
+import execution_engine.models  # noqa: F401
+import workspace.models  # noqa: F401
 from backend.app.config import Settings
 from backend.app.database import Base
 from organization_workspace.models import Organization
@@ -61,6 +64,48 @@ class YandexClient:
             }
         )
 
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: dict | None,
+        json: dict | None,
+        headers: dict,
+    ):
+        assert headers["Authorization"] == "OAuth oauth-access-secret"
+        if url.endswith("query-analytics/list"):
+            assert method == "POST" and json and json["text_indicator"] == "QUERY"
+            return Response(
+                {
+                    "text_indicator_to_statistics": [
+                        {
+                            "text_indicator": {
+                                "type": "QUERY",
+                                "value": "лучшая увлажняющая сыворотка",
+                            },
+                            "popular_complementary_indicator": {
+                                "type": "URL",
+                                "value": "https://example.ru/serum",
+                            },
+                            "statistics": [
+                                {"date": "2026-08-19", "field": "IMPRESSIONS", "value": 120},
+                                {"date": "2026-08-19", "field": "POSITION", "value": 18},
+                            ],
+                        }
+                    ]
+                }
+            )
+        if url.endswith("diagnostics"):
+            return Response({"problems": {}})
+        if url.endswith("indexing/history"):
+            return Response({"indicators": {"HTTP_2XX": [{"value": 10}]}})
+        if url.endswith("links/external/samples"):
+            return Response({"count": 1, "links": [{"source_url": "https://media.ru"}]})
+        if url.endswith("sitemaps"):
+            return Response({"sitemaps": [{"sitemap_url": "https://example.ru/sitemap.xml"}]})
+        raise AssertionError(url)
+
 
 def service() -> tuple[YandexWebmasterService, Session, YandexClient]:
     engine = create_engine("sqlite:///:memory:")
@@ -103,6 +148,10 @@ def test_oauth_connects_encrypts_tokens_and_reads_real_webmaster_data() -> None:
     queries = webmaster.popular_queries(1, 50)
     assert queries[0].query_text == "лучшая увлажняющая сыворотка"
     assert queries[0].indicators["TOTAL_SHOWS"] == 120
+    evidence = webmaster.evidence(1)
+    assert evidence.query_facts[0].position == 18
+    assert evidence.external_links["count"] == 1
+    assert evidence.partial_errors == {}
 
 
 def test_oauth_state_is_single_use() -> None:

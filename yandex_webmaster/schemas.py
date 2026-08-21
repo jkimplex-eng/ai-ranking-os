@@ -33,3 +33,26 @@ class QueryRead(BaseModel):
     query_id: str | None = None
     query_text: str
     indicators: dict[str, float | int | None] = Field(default_factory=dict)
+
+
+class QueryFactRead(BaseModel):
+    query: str
+    url: str | None = None
+    date: str | None = None
+    impressions: float | None = None
+    clicks: float | None = None
+    ctr: float | None = None
+    position: float | None = None
+    demand: float | None = None
+
+
+class WebmasterEvidenceRead(BaseModel):
+    host_id: str
+    host_url: str
+    collected_at: datetime
+    query_facts: list[QueryFactRead] = Field(default_factory=list)
+    diagnostics: dict = Field(default_factory=dict)
+    indexing: dict = Field(default_factory=dict)
+    external_links: dict = Field(default_factory=dict)
+    sitemaps: dict = Field(default_factory=dict)
+    partial_errors: dict[str, str] = Field(default_factory=dict)

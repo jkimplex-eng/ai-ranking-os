@@ -116,6 +116,15 @@ export type ProviderConnection = {
 export type ProviderConnectionTest = { provider: string; status: string; latency_ms: number; models: string[]; free_models: string[]; checked_at: string };
 export type YandexWebmasterStatus = { connected: boolean; status: string; selected_host_id?: string; selected_host_url?: string; last_checked_at?: string; last_success_at?: string; last_error?: string };
 export type YandexWebmasterHost = { host_id: string; ascii_host_url: string; unicode_host_url?: string; verified: boolean };
+export type YandexIntelligence = {
+  id: number; organization_id: number; host_id: string; host_url: string;
+  status: string; evidence_status: string; algorithm_version: string; created_at: string;
+  webmaster: { diagnostics?: { problems?: Record<string, { severity: string; state: string }> }; indexing?: { indicators?: Record<string, Array<{ date: string; value: number }>> }; external_links?: { count?: number; links?: Array<{ source_url: string; destination_url: string }> }; sitemaps?: { sitemaps?: Array<{ sitemap_url: string; errors_count: number; urls_count: number }> }; partial_errors?: Record<string, string> };
+  yandex_ai: Array<{ research_id: number; response_id: number; query: string; brand: string; mentioned: boolean; recommended: boolean; citation_domains: string[]; observed_at: string }>;
+  query_map: Array<{ query: string; url?: string; impressions?: number; clicks?: number; ctr?: number; position?: number; demand?: number; yandex_ai_checked: boolean; brand_mentioned?: boolean; evidence_status: string }>;
+  opportunities: Array<{ priority: string; priority_score: number; query: string; problem: string; evidence: string; affected_metric: string; action: string; target_url?: string; expected_range: string; confidence: string; effort: string; duration: string; verification: string }>;
+  limitations: string[];
+};
 export type GeoPlatform = {
   id: string; name: string; domain: string; platform_type: string; category: string;
   country: string; language: string; ai_engines: string[]; domain_trust?: number;
@@ -349,6 +358,8 @@ export class ApiClient {
   yandexWebmasterHosts() { return this.request<YandexWebmasterHost[]>("/integrations/yandex-webmaster/hosts"); }
   selectYandexWebmasterHost(host_id: string, host_url: string) { return this.request<YandexWebmasterStatus>("/integrations/yandex-webmaster/host", { method: "PUT", body: JSON.stringify({ host_id, host_url }) }); }
   disconnectYandexWebmaster() { return this.request<void>("/integrations/yandex-webmaster", { method: "DELETE" }); }
+  yandexIntelligence() { return this.request<YandexIntelligence>("/yandex-intelligence/dashboard"); }
+  syncYandexIntelligence() { return this.request<YandexIntelligence>("/yandex-intelligence/sync", { method: "POST" }); }
   geoPlatforms() { return this.request<GeoPlatform[]>("/geo/platforms"); }
   createGeoPlatform(payload: {
     name: string; domain: string; category: string; country: string; language: string;

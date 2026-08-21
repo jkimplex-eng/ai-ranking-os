@@ -44,6 +44,7 @@ from product.research_intelligence import (
     ResearchPatternAnalyzer,
 )
 from product.schemas import WizardRequest, WizardReview
+from provider_connections.dependencies import default_organization
 from provider_recommendation.research_adapter import SqlAlchemyResearchUsageSource
 from provider_recommendation.service import SmartProviderRecommendationService
 from publication_learning.service import PublicationLearningService
@@ -56,6 +57,7 @@ from research.schemas import ResearchCreate, ResearchRunRequest
 from research.scoring import SCORING_VERSION, SCORING_WEIGHTS
 from research.service import run_research
 from trend.research_adapter import build_trend_engine
+from yandex_intelligence.service import YandexIntelligenceQuerySource
 
 
 class WizardValidationError(ValueError):
@@ -128,12 +130,14 @@ class ProductPipeline:
         db: Session,
         change_detector: ChangeDetectorPort | None = None,
         notifications: NotificationPort | None = None,
+        user_id: int | None = None,
     ) -> None:
         self.db = db
         self.prompts = PromptService(db)
         self.templates = ResearchTemplateRepository(db)
         self.change_detector = change_detector
         self.notifications = notifications
+        self.user_id = user_id
 
     def review(self, payload: WizardRequest) -> WizardReview:
         brand_profile = (
@@ -188,6 +192,31 @@ class ProductPipeline:
             brand_profile,
             [*competitor_profiles, *payload.competitors],
         )
+        yandex_snapshot_id, yandex_queries = self._yandex_queries(payload)
+        existing = {item["text"].casefold() for item in query_catalog}
+        for index, text in enumerate(yandex_queries):
+            if text.casefold() in existing:
+                continue
+            query_catalog.append(
+                {
+                    "id": str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            f"yandex-webmaster:{yandex_snapshot_id}:{text}",
+                        )
+                    ),
+                    "cluster": "yandex_webmaster_observed",
+                    "intent": "observed_search_demand",
+                    "text": text,
+                    "buyer_stage": "observed",
+                    "brand_mode": (
+                        "branded" if payload.brand.casefold() in text.casefold() else "unbranded"
+                    ),
+                    "rationale": "Реальный запрос выбранного сайта из Яндекс Вебмастера",
+                    "source_snapshot_id": str(yandex_snapshot_id),
+                    "source_rank": str(index + 1),
+                }
+            )
         estimated_cost *= len(query_catalog)
         estimated_time *= len(query_catalog)
         return WizardReview(
@@ -237,6 +266,14 @@ class ProductPipeline:
                     "pipeline": review.pipeline,
                     "query_catalog": review.query_catalog,
                     "query_map_version": QueryMapBuilder.VERSION,
+                    "yandex_intelligence_snapshot_id": next(
+                        (
+                            int(item["source_snapshot_id"])
+                            for item in review.query_catalog
+                            if item.get("source_snapshot_id")
+                        ),
+                        None,
+                    ),
                 },
             )
         )
@@ -384,6 +421,17 @@ class ProductPipeline:
                 competitor_profiles=competitor_profiles,
             )
         ]
+
+    def _yandex_queries(self, payload: WizardRequest) -> tuple[int, list[str]]:
+        if self.user_id is None or payload.custom_queries:
+            return 0, []
+        try:
+            organization_id = default_organization(self.db, self.user_id)
+        except ValueError:
+            return 0, []
+        return YandexIntelligenceQuerySource(self.db).queries(
+            organization_id, payload.website_url, limit=8
+        )
 
 
 class FinalReportService:

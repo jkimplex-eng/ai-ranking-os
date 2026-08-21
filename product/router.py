@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
@@ -155,9 +155,11 @@ def clone_research_template(code: str, db: DbSession) -> ResearchTemplateRead:
 
 
 @router.post("/research/wizard/review", response_model=WizardReview)
-def review_wizard(payload: WizardRequest, db: DbSession) -> WizardReview:
+def review_wizard(payload: WizardRequest, request: Request, db: DbSession) -> WizardReview:
     try:
-        return ProductPipeline(db).review(payload)
+        principal = getattr(request.state, "principal", None)
+        user_id = int(getattr(principal, "user_id", getattr(principal, "id", 1)))
+        return ProductPipeline(db, user_id=user_id).review(payload)
     except (ProductNotFoundError, WizardValidationError) as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
@@ -167,13 +169,16 @@ def review_wizard(payload: WizardRequest, db: DbSession) -> WizardReview:
 @router.post(
     "/research/wizard/run", response_model=WizardRunResult, status_code=status.HTTP_201_CREATED
 )
-def run_wizard(payload: WizardRequest, db: DbSession) -> WizardRunResult:
+def run_wizard(payload: WizardRequest, request: Request, db: DbSession) -> WizardRunResult:
     try:
         notifications = build_notification_service(db)
+        principal = getattr(request.state, "principal", None)
+        user_id = int(getattr(principal, "user_id", getattr(principal, "id", 1)))
         research = ProductPipeline(
             db,
             build_change_detection(db, notifications),
             notifications,
+            user_id,
         ).run(payload)
         if research.status != ResearchStatus.COMPLETED:
             raise HTTPException(

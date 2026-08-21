@@ -34,6 +34,7 @@ import {
   type WorkspaceProjectItem,
   type YandexWebmasterHost,
   type YandexWebmasterStatus,
+  type YandexIntelligence,
   type WizardPayload,
   type WizardReview,
 } from "./api";
@@ -894,6 +895,7 @@ function GeoOpportunitiesScreen() {
   const [priorities, setPriorities] = useState<EisPriorityResult>();
   const [learnedInfluence, setLearnedInfluence] = useState<PublicationInfluenceEstimate[]>([]);
   const [siteAudit, setSiteAudit] = useState<GeoSiteAudit>();
+  const [yandexIntelligence, setYandexIntelligence] = useState<YandexIntelligence>();
   const [auditForm, setAuditForm] = useState({ brand: "", website: "" });
   const [engine, setEngine] = useState("YandexGPT");
   const [form, setForm] = useState({ name: "", domain: "", category: "UNIVERSAL", country: "RU", language: "ru", trust: "", authority: "", citations: "", cost: "" });
@@ -901,8 +903,10 @@ function GeoOpportunitiesScreen() {
   const [error, setError] = useState("");
   const load = useCallback(() => Promise.all([
     api.geoPlatforms(), api.frozenPromptSets(), api.publicationInfluence(), api.geoSiteAudits(),
-  ]).then(([items, sets, estimates, audits]) => {
+    api.yandexIntelligence().catch(() => undefined),
+  ]).then(([items, sets, estimates, audits, intelligence]) => {
     setPlatforms(items); setPromptSets(sets); setLearnedInfluence(estimates); setSiteAudit(audits[0]);
+    setYandexIntelligence(intelligence);
   }), []);
   useEffect(() => { load().catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить GEO-данные")); }, [load]);
   const numericField = (value: string) => value.trim() === "" ? undefined : Number(value);
@@ -940,6 +944,12 @@ function GeoOpportunitiesScreen() {
     catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось удалить площадку"); }
     finally { setBusy(false); }
   };
+  const syncYandex = async () => {
+    setBusy(true); setError("");
+    try { setYandexIntelligence(await api.syncYandexIntelligence()); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось синхронизировать Яндекс Intelligence"); }
+    finally { setBusy(false); }
+  };
   const platformById = new Map(platforms.map((item) => [item.id, item]));
   const activeSets = promptSets.filter((item) => item.active);
   return (
@@ -957,6 +967,14 @@ function GeoOpportunitiesScreen() {
       <section className="analytics-card geo-site-audit">
         <div className="geo-audit-intro"><span className="eyebrow">GEO-АУДИТ САЙТА</span><h2>Готов ли сайт стать источником для ИИ</h2><p>100-балльная проверка доступности для краулеров, сущности бренда, контента, доказательности и технических сигналов. Каждый балл подтверждается наблюдаемым признаком.</p><form onSubmit={auditSite}><input aria-label="Бренд для GEO-аудита" placeholder="Название бренда" value={auditForm.brand} onChange={(event) => setAuditForm({ ...auditForm, brand: event.target.value })} required /><input aria-label="Сайт для GEO-аудита" type="url" placeholder="https://example.ru" value={auditForm.website} onChange={(event) => setAuditForm({ ...auditForm, website: event.target.value })} required /><Button type="submit" disabled={busy}>{busy ? "Проверяем сайт…" : "Провести GEO-аудит"}</Button></form></div>
         {siteAudit ? <div className="geo-audit-result"><header><div><strong>{siteAudit.score.toFixed(1)}</strong><span>из 100 · {siteAudit.grade}</span></div><Badge tone={siteAudit.score >= 70 ? "success" : siteAudit.score >= 45 ? "warning" : "danger"}>v{siteAudit.algorithm_version}</Badge></header><div className="geo-audit-categories">{Object.entries(siteAudit.category_scores).map(([name, value]) => <div key={name}><span>{name}</span><b>{value.toFixed(0)}</b></div>)}</div><h3>Главные действия</h3>{siteAudit.opportunities.slice(0, 5).map((item) => <article className="geo-audit-action" key={`${item.problem}:${item.affected_metric}`}><Badge tone={item.priority === "P0" ? "danger" : "warning"}>{item.priority}</Badge><div><b>{item.problem}</b><p>{item.action}</p><small>{item.expected_effect} · Проверка: {item.verification}</small></div></article>)}<details><summary>Показать все доказательства расчёта</summary>{siteAudit.checks.map((check) => <div className="geo-audit-check" key={check.code}><span>{check.passed ? "✓" : "×"}</span><div><b>{check.title}</b><small>{check.evidence}</small>{check.recommendation ? <p>{check.recommendation}</p> : null}</div><strong>{check.points}/{check.max_points}</strong></div>)}</details><p className="method-note">{siteAudit.limitation}</p></div> : <div className="geo-empty"><strong>Аудит ещё не выполнялся</strong><p>Введите официальный сайт. Система не подставит оценку без фактического чтения страницы, robots.txt и sitemap.</p></div>}
+      </section>
+      <section className="analytics-card geo-site-audit yandex-intelligence">
+        <div className="geo-audit-intro"><span className="eyebrow">YANDEX INTELLIGENCE</span><h2>Поиск Яндекса + ответы YandexGPT</h2><p>Система сопоставляет реальные запросы, URL, показы, позиции и техническое состояние сайта с сохранёнными ответами YandexGPT. Факты Вебмастера не смешиваются с корреляционными выводами.</p><Button onClick={() => void syncYandex()} disabled={busy}>{busy ? "Синхронизируем…" : "Обновить данные Яндекса"}</Button></div>
+        {yandexIntelligence ? <div className="geo-audit-result"><header><div><strong>{yandexIntelligence.query_map.length}</strong><span>измеренных связок запрос → страница</span></div><Badge tone={yandexIntelligence.evidence_status === "MEASURED" ? "success" : "warning"}>{yandexIntelligence.evidence_status}</Badge></header>
+          <div className="geo-audit-categories"><div><span>Ответы YandexGPT</span><b>{yandexIntelligence.yandex_ai.length}</b></div><div><span>Упоминания бренда</span><b>{yandexIntelligence.yandex_ai.filter((item) => item.mentioned).length}</b></div><div><span>Внешние ссылки</span><b>{yandexIntelligence.webmaster.external_links?.count ?? "—"}</b></div><div><span>Проблемы сайта</span><b>{Object.values(yandexIntelligence.webmaster.diagnostics?.problems ?? {}).filter((item) => item.state === "PRESENT").length}</b></div></div>
+          <h3>Приоритетные запросы</h3>{yandexIntelligence.opportunities.slice(0, 8).map((item) => <article className="geo-audit-action" key={item.query}><Badge tone={item.priority === "P0" ? "danger" : "warning"}>{item.priority}</Badge><div><b>{item.query} · {item.priority_score.toFixed(1)}</b><p>{item.problem}</p><small>{item.action}</small><details><summary>Доказательства и проверка</summary><p>{item.evidence}</p><p>{item.verification}</p><p>{item.expected_range} · Уверенность {item.confidence}</p></details></div></article>)}
+          <details><summary>Карта запросов Яндекса</summary>{yandexIntelligence.query_map.slice(0, 30).map((item) => <div className="geo-audit-check" key={`${item.query}:${item.url ?? ""}`}><span>{item.brand_mentioned === true ? "✓" : item.brand_mentioned === false ? "×" : "?"}</span><div><b>{item.query}</b><small>{item.url || "Целевая страница не определена"}</small></div><strong>{item.position !== undefined ? `позиция ${item.position.toFixed(1)}` : "нет позиции"}</strong></div>)}</details>
+          {yandexIntelligence.limitations.map((item) => <p className="method-note" key={item}>{item}</p>)}</div> : <div className="geo-empty"><strong>Данные Яндекса ещё не синхронизированы</strong><p>Подключите Яндекс Вебмастер в Настройках, выберите подтверждённый сайт и нажмите «Обновить данные Яндекса».</p></div>}
       </section>
       <section className="geo-layout">
         <form className="analytics-card geo-form" onSubmit={create}>

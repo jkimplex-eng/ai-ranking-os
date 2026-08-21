@@ -16,6 +16,7 @@ from yandex_webmaster.schemas import (
     HostRead,
     HostSelection,
     QueryRead,
+    WebmasterEvidenceRead,
 )
 from yandex_webmaster.service import YandexWebmasterError, YandexWebmasterService
 
@@ -95,6 +96,15 @@ def queries(request: Request, db: DbSession, limit: int = Query(default=100, ge=
     organization_id, _ = _identity(db, request)
     try:
         return _service(db).popular_queries(organization_id, limit)
+    except YandexWebmasterError as error:
+        raise _error(error) from error
+
+
+@router.get("/evidence", response_model=WebmasterEvidenceRead)
+def evidence(request: Request, db: DbSession):
+    organization_id, _ = _identity(db, request)
+    try:
+        return _service(db).evidence(organization_id)
     except YandexWebmasterError as error:
         raise _error(error) from error
 
