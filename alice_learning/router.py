@@ -4,6 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from alice_learning.adapters import PublicationInfluenceSource, ResearchAliceEvidenceSource
+from alice_learning.automation_adapters import build_alice_automation_service
+from alice_learning.automation_schemas import (
+    AutomationDashboard,
+    AutomationPlanCreate,
+    AutomationPlanRead,
+    AutomationPlanUpdate,
+    AutomationRunRead,
+    RunNowRequest,
+)
+from alice_learning.automation_service import AliceAutomationError
 from alice_learning.integration import rebuild_alice_learning
 from alice_learning.repository import AliceLearningRepository
 from alice_learning.schemas import (
@@ -30,6 +40,11 @@ def _organization(db: Session, request: Request) -> int:
     if OrganizationRepository(db).member(organization_id, user_id) is None:
         raise HTTPException(403, "Нет доступа к организации")
     return organization_id
+
+
+def _user(request: Request) -> int:
+    principal = getattr(request.state, "principal", None)
+    return int(getattr(principal, "user_id", getattr(principal, "id", 1)))
 
 
 def _service(db: Session) -> AliceLearningService:
@@ -84,3 +99,51 @@ def latest_model(request: Request, db: DbSession):
     if item is None:
         raise HTTPException(404, "Модель Алисы ещё не обучена")
     return item
+
+
+@router.post("/automation/plans", response_model=AutomationPlanRead, status_code=201)
+def create_automation_plan(payload: AutomationPlanCreate, request: Request, db: DbSession):
+    try:
+        return build_alice_automation_service(db).create(
+            _organization(db, request), _user(request), payload
+        )
+    except (ValueError, LookupError) as error:
+        raise HTTPException(422, str(error)) from error
+    except PermissionError as error:
+        raise HTTPException(403, str(error)) from error
+
+
+@router.get("/automation/plans", response_model=list[AutomationPlanRead])
+def list_automation_plans(request: Request, db: DbSession):
+    return build_alice_automation_service(db).list(_organization(db, request))
+
+
+@router.patch("/automation/plans/{plan_id}", response_model=AutomationPlanRead)
+def update_automation_plan(
+    plan_id: int, payload: AutomationPlanUpdate, request: Request, db: DbSession
+):
+    try:
+        return build_alice_automation_service(db).update(
+            _organization(db, request), plan_id, payload
+        )
+    except AliceAutomationError as error:
+        raise HTTPException(404 if "не найден" in str(error) else 422, str(error)) from error
+    except PermissionError as error:
+        raise HTTPException(403, str(error)) from error
+
+
+@router.post("/automation/plans/{plan_id}/run", response_model=AutomationRunRead)
+def run_automation_plan(plan_id: int, payload: RunNowRequest, request: Request, db: DbSession):
+    try:
+        return build_alice_automation_service(db).run(
+            _organization(db, request), plan_id, payload.kind
+        )
+    except AliceAutomationError as error:
+        raise HTTPException(409, str(error)) from error
+    except PermissionError as error:
+        raise HTTPException(403, str(error)) from error
+
+
+@router.get("/automation/dashboard", response_model=AutomationDashboard)
+def automation_dashboard(request: Request, db: DbSession):
+    return build_alice_automation_service(db).dashboard(_organization(db, request))

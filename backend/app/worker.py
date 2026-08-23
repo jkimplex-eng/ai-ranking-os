@@ -4,6 +4,7 @@ import logging
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
+from alice_learning.automation_adapters import build_alice_automation_service
 from alice_learning.integration import learn_from_completed_research
 from backend.app.config import get_settings
 from backend.app.database import SessionLocal
@@ -66,6 +67,11 @@ async def run_worker() -> None:
                         if social_sources:
                             logger.info(
                                 "Competitor social sources refreshed count=%s", social_sources
+                            )
+                        alice_runs = build_alice_automation_service(db).run_due()
+                        if alice_runs:
+                            logger.info(
+                                "Alice automated monitoring processed count=%s", len(alice_runs)
                             )
                     except Exception:  # noqa: BLE001 - worker must survive scheduler failures
                         logger.exception("Scheduled research processing failed")

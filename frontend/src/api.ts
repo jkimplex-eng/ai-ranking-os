@@ -150,6 +150,24 @@ export type AliceLearningDashboard = {
   recent_predictions: Array<Record<string, unknown>>;
   limitations: string[];
 };
+export type AliceAutomationPlan = {
+  id: number; organization_id: number; owner_user_id: number; template_research_id: number;
+  brand: string; website_url: string; language: string; region: string;
+  research_profile: string; routing_profile: string; models: ModelSelection[];
+  repetitions: number; daily_query_limit: number; weekly_query_limit: number;
+  daily_budget_usd: number; monthly_budget_usd: number; is_enabled: boolean;
+  next_run_at: string; last_run_at?: string; created_at: string; updated_at: string;
+};
+export type AliceAutomationRun = {
+  id: number; plan_id: number; query_set_id: number; run_kind: string; status: string;
+  research_id?: number; task_count: number; estimated_cost_usd: number;
+  actual_cost_usd?: number; result: Record<string, unknown>; error?: string;
+  scheduled_for: string; started_at: string; finished_at?: string;
+};
+export type AliceAutomationDashboard = {
+  plans: AliceAutomationPlan[]; latest_runs: AliceAutomationRun[];
+  methodology: Record<string, string>;
+};
 export type GeoPlatform = {
   id: string; name: string; domain: string; platform_type: string; category: string;
   country: string; language: string; ai_engines: string[]; domain_trust?: number;
@@ -387,6 +405,15 @@ export class ApiClient {
   syncYandexIntelligence() { return this.request<YandexIntelligence>("/yandex-intelligence/sync", { method: "POST" }); }
   aliceLearningDashboard() { return this.request<AliceLearningDashboard>("/alice-learning/dashboard"); }
   rebuildAliceLearning() { return this.request<AliceLearningDashboard>("/alice-learning/rebuild", { method: "POST" }); }
+  aliceAutomationDashboard() { return this.request<AliceAutomationDashboard>("/alice-learning/automation/dashboard"); }
+  createAliceAutomationPlan(payload: {
+    template_research_id: number; brand: string; website_url: string; language?: string;
+    region?: string; research_profile?: string; routing_profile?: string;
+    models?: ModelSelection[]; repetitions?: number; daily_query_limit?: number;
+    weekly_query_limit?: number; daily_budget_usd?: number; monthly_budget_usd?: number;
+  }) { return this.request<AliceAutomationPlan>("/alice-learning/automation/plans", { method: "POST", body: JSON.stringify(payload) }); }
+  updateAliceAutomationPlan(id: number, payload: { is_enabled?: boolean }) { return this.request<AliceAutomationPlan>(`/alice-learning/automation/plans/${id}`, { method: "PATCH", body: JSON.stringify(payload) }); }
+  runAliceAutomationPlan(id: number, kind: "DAILY" | "WEEKLY" | "MONTHLY" = "DAILY") { return this.request<AliceAutomationRun>(`/alice-learning/automation/plans/${id}/run`, { method: "POST", body: JSON.stringify({ kind }) }); }
   geoPlatforms() { return this.request<GeoPlatform[]>("/geo/platforms"); }
   createGeoPlatform(payload: {
     name: string; domain: string; category: string; country: string; language: string;

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import {
   ApiClient,
   type ActionPlanItem,
+  type AliceAutomationDashboard,
   type AliceLearningDashboard,
   type AuthProfile,
   type AdminAudit,
@@ -908,6 +909,8 @@ function GeoOpportunitiesScreen() {
   const [siteAudit, setSiteAudit] = useState<GeoSiteAudit>();
   const [yandexIntelligence, setYandexIntelligence] = useState<YandexIntelligence>();
   const [aliceLearning, setAliceLearning] = useState<AliceLearningDashboard>();
+  const [aliceAutomation, setAliceAutomation] = useState<AliceAutomationDashboard>();
+  const [researches, setResearches] = useState<ResearchItem[]>([]);
   const [auditForm, setAuditForm] = useState({ brand: "", website: "" });
   const [engine, setEngine] = useState("YandexGPT");
   const [form, setForm] = useState({ name: "", domain: "", category: "UNIVERSAL", country: "RU", language: "ru", trust: "", authority: "", citations: "", cost: "" });
@@ -917,8 +920,11 @@ function GeoOpportunitiesScreen() {
     api.geoPlatforms(), api.frozenPromptSets(), api.publicationInfluence(), api.geoSiteAudits(),
     api.yandexIntelligence().catch(() => undefined),
     api.aliceLearningDashboard().catch(() => undefined),
-  ]).then(([items, sets, estimates, audits, intelligence, learning]) => {
+    api.aliceAutomationDashboard().catch(() => undefined),
+    api.listResearch(),
+  ]).then(([items, sets, estimates, audits, intelligence, learning, automation, researchItems]) => {
     setPlatforms(items); setPromptSets(sets); setLearnedInfluence(estimates); setSiteAudit(audits[0]);
+    setResearches(researchItems);
     setYandexIntelligence(Array.isArray(intelligence?.query_map) ? intelligence : undefined);
     setAliceLearning(
       learning
@@ -927,6 +933,11 @@ function GeoOpportunitiesScreen() {
       && Array.isArray(learning.recommended_actions)
       && Array.isArray(learning.limitations)
         ? learning
+        : undefined,
+    );
+    setAliceAutomation(
+      automation && Array.isArray(automation.plans) && Array.isArray(automation.latest_runs)
+        ? automation
         : undefined,
     );
   }), []);
@@ -978,6 +989,45 @@ function GeoOpportunitiesScreen() {
     catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось обучить модель Алисы"); }
     finally { setBusy(false); }
   };
+  const latestAutomationTemplate = researches.find((item) =>
+    item.status === "COMPLETED"
+    && typeof item.metadata?.website_url === "string"
+    && Array.isArray(item.metadata?.query_catalog),
+  );
+  const enableAliceAutomation = async () => {
+    if (!latestAutomationTemplate) return;
+    const metadata = latestAutomationTemplate.metadata ?? {};
+    setBusy(true); setError("");
+    try {
+      await api.createAliceAutomationPlan({
+        template_research_id: latestAutomationTemplate.id,
+        brand: String(metadata.brand ?? latestAutomationTemplate.title),
+        website_url: String(metadata.website_url),
+        language: String((metadata.languages as string[] | undefined)?.[0] ?? "ru"),
+        region: String((metadata.regions as string[] | undefined)?.[0] ?? "RU"),
+        research_profile: String(metadata.research_profile ?? "UNIVERSAL"),
+        routing_profile: String(metadata.routing_profile ?? "BALANCED"),
+        models: Array.isArray(metadata.selected_models)
+          ? metadata.selected_models as Array<{ provider: string; model: string }>
+          : [],
+        repetitions: 3,
+      });
+      setAliceAutomation(await api.aliceAutomationDashboard());
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось включить автоматизацию"); }
+    finally { setBusy(false); }
+  };
+  const toggleAliceAutomation = async (id: number, enabled: boolean) => {
+    setBusy(true); setError("");
+    try { await api.updateAliceAutomationPlan(id, { is_enabled: enabled }); setAliceAutomation(await api.aliceAutomationDashboard()); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось изменить автоматизацию"); }
+    finally { setBusy(false); }
+  };
+  const runAliceAutomation = async (id: number) => {
+    setBusy(true); setError("");
+    try { await api.runAliceAutomationPlan(id); setAliceAutomation(await api.aliceAutomationDashboard()); await load(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось запустить автоматическую проверку"); }
+    finally { setBusy(false); }
+  };
   const platformById = new Map(platforms.map((item) => [item.id, item]));
   const activeSets = promptSets.filter((item) => item.active);
   return (
@@ -1009,6 +1059,10 @@ function GeoOpportunitiesScreen() {
         {aliceLearning ? <div className="geo-audit-result"><header><div><strong>{aliceLearning.observation_count}</strong><span>наблюдений · {aliceLearning.recommendation_count} рекомендаций</span></div><Badge tone={aliceLearning.status === "READY" ? "success" : "warning"}>{aliceLearning.status}</Badge></header>
           {aliceLearning.model ? <><div className="geo-audit-categories"><div><span>Бренд</span><b>{aliceLearning.brand ?? "—"}</b></div><div><span>Выборка бренда</span><b>{aliceLearning.observation_count}</b></div><div><span>Рекомендован</span><b>{aliceLearning.recommendation_count}</b></div><div><span>Версия</span><b>{aliceLearning.model.algorithm_version}</b></div></div><h3>Что модель предлагает улучшить</h3>{aliceLearning.recommended_actions.length ? aliceLearning.recommended_actions.slice(0, 5).map((item) => <article className="geo-audit-action" key={item.feature}><Badge tone="warning">ПРОГНОЗ</Badge><div><b>{item.action}</b><p>{aliceFeatureLabels[item.feature] ?? item.feature}: {Math.round(item.current_value * 100)}% → целевой сигнал 100%</p><small>Расчётное изменение вероятности: +{(item.predicted_delta * 100).toFixed(1)} п.п. · Требует контрольного эксперимента</small></div></article>) : <div className="geo-empty"><strong>Действия пока не рассчитаны</strong><p>Нужны минимум 12 наблюдений, включая рекомендации и отказы.</p></div>}<details><summary>Показать коэффициенты модели</summary>{aliceLearning.top_factors.filter((item) => item.feature).slice(0, 8).map((item) => <div className="geo-audit-check" key={item.feature}><span>{item.direction === "POSITIVE" ? "↑" : item.direction === "NEGATIVE" ? "↓" : "?"}</span><div><b>{aliceFeatureLabels[item.feature ?? ""] ?? item.feature}</b><small>Ассоциация модели — не доказанная причина</small></div><strong>{item.coefficient?.toFixed(3) ?? "—"}</strong></div>)}</details></> : <div className="geo-empty"><strong>Модель ещё не обучена</strong><p>Запустите исследования через Яндекс и пересоберите модель на истории.</p></div>}
           {aliceLearning.limitations.map((item) => <p className="method-note" key={item}>{item}</p>)}</div> : <div className="geo-empty"><strong>Нет обучающих наблюдений</strong><p>После завершённых исследований YandexGPT наблюдения будут добавляться автоматически.</p></div>}
+      </section>
+      <section className="analytics-card geo-site-audit alice-automation">
+        <div className="geo-audit-intro"><span className="eyebrow">АВТОМАТИЧЕСКИЙ МОНИТОРИНГ</span><h2>Алиса проверяется сама</h2><p>Ежедневно система повторяет неизменные контрольные вопросы по три раза. По понедельникам добавляет адаптивные покупательские, конкурентные и реальные запросы из Вебмастера. Каждый набор имеет версию и fingerprint.</p>{aliceAutomation?.plans.length ? null : <Button onClick={() => void enableAliceAutomation()} disabled={busy || !latestAutomationTemplate}>{busy ? "Настраиваем…" : "Включить ежедневное обучение"}</Button>}{!latestAutomationTemplate && !aliceAutomation?.plans.length ? <small>Сначала завершите хотя бы одно исследование с картой запросов.</small> : null}</div>
+        {aliceAutomation?.plans.length ? <div className="geo-audit-result">{aliceAutomation.plans.map((plan) => { const latestRun = aliceAutomation.latest_runs.find((item) => item.plan_id === plan.id); return <article className="geo-audit-action" key={plan.id}><Badge tone={plan.is_enabled ? "success" : "neutral"}>{plan.is_enabled ? "АКТИВЕН" : "ПАУЗА"}</Badge><div><b>{plan.brand} · {plan.repetitions} прогона каждого вопроса</b><p>Следующая проверка: {new Date(plan.next_run_at).toLocaleString("ru-RU")} · дневной лимит ${plan.daily_budget_usd.toFixed(2)} · месячный ${plan.monthly_budget_usd.toFixed(2)}</p><small>{latestRun ? `Последний запуск: ${latestRun.status}, ${latestRun.task_count} проверок, $${(latestRun.actual_cost_usd ?? 0).toFixed(4)}` : "Автоматических запусков ещё не было"}</small><div className="button-row"><Button onClick={() => void runAliceAutomation(plan.id)} disabled={busy || !plan.is_enabled}>Проверить сейчас</Button><button className="secondary" onClick={() => void toggleAliceAutomation(plan.id, !plan.is_enabled)} disabled={busy}>{plan.is_enabled ? "Поставить на паузу" : "Возобновить"}</button></div></div></article>; })}<p className="method-note">Закономерности считаются гипотезами. Причинный эффект публикации подтверждается только отдельным зафиксированным экспериментом до/после или с контрольной группой.</p></div> : <div className="geo-empty"><strong>Автоматизация ещё не включена</strong><p>Система возьмёт последнее завершённое исследование как шаблон и не будет незаметно менять контрольные вопросы.</p></div>}
       </section>
       <section className="geo-layout">
         <form className="analytics-card geo-form" onSubmit={create}>

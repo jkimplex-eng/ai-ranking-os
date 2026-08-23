@@ -3,10 +3,18 @@ from datetime import UTC, datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+import authentication.models  # noqa: F401
 import decision_center.models  # noqa: F401
 import execution_engine.models  # noqa: F401
 import research.models  # noqa: F401
 import workspace.models  # noqa: F401
+from alice_learning.automation_ports import (
+    AutomationLaunchResult,
+    AutomationTemplateContext,
+)
+from alice_learning.automation_repository import AliceAutomationRepository
+from alice_learning.automation_schemas import AutomationPlanCreate
+from alice_learning.automation_service import AliceAutomationService
 from alice_learning.ports import AliceEvidenceRecord
 from alice_learning.repository import AliceLearningRepository
 from alice_learning.schemas import FEATURE_NAMES, PredictRequest, TrainRequest
@@ -157,3 +165,104 @@ def test_alice_learning_openapi_contract() -> None:
     assert "/alice-learning/dashboard" in paths
     assert "/alice-learning/rebuild" in paths
     assert "/alice-learning/models/latest" in paths
+    assert "/alice-learning/automation/plans" in paths
+    assert "/alice-learning/automation/plans/{plan_id}/run" in paths
+    assert "/alice-learning/automation/dashboard" in paths
+
+
+class AutomationTemplate:
+    def context(self, organization_id: int, template_research_id: int, website_url: str):
+        return AutomationTemplateContext(
+            queries=tuple(
+                {"id": str(index), "cluster": cluster, "text": text}
+                for index, (cluster, text) in enumerate(
+                    [
+                        ("category_discovery", "какая сыворотка лучше для сухой кожи"),
+                        ("problem_solution", "что помогает при обезвоженной коже"),
+                        ("brand_control", "стоит ли покупать Skinjestique"),
+                        ("price_comparison", "сыворотки до 3000 рублей"),
+                    ]
+                )
+            ),
+            metadata={"query_map_version": "2.0"},
+        )
+
+
+class AutomationLauncher:
+    def __init__(self) -> None:
+        self.requests = []
+
+    def launch(self, request):
+        self.requests.append(request)
+        return AutomationLaunchResult(
+            research_id=99,
+            succeeded=True,
+            actual_cost_usd=0.12,
+            result={"responses": len(request.queries)},
+        )
+
+
+class AutomationNotifications:
+    def __init__(self) -> None:
+        self.events = []
+
+    def emit(self, event_type, title, message, **kwargs):
+        self.events.append((event_type, title, message, kwargs))
+
+
+def test_automation_freezes_queries_repeats_three_times_and_records_run() -> None:
+    db = database()
+    launcher = AutomationLauncher()
+    notifications = AutomationNotifications()
+    automation = AliceAutomationService(
+        AliceAutomationRepository(db), launcher, AutomationTemplate(), notifications
+    )
+    plan = automation.create(
+        1,
+        1,
+        AutomationPlanCreate(
+            template_research_id=10,
+            brand="Skinjestique",
+            website_url="https://skinjestique.example",
+            models=[{"provider": "yandex", "model": "yandexgpt/latest"}],
+            daily_budget_usd=10,
+            monthly_budget_usd=100,
+        ),
+    )
+
+    run = automation.run(1, plan.id, "DAILY")
+
+    assert run.status == "COMPLETED"
+    assert run.task_count == 12
+    assert len(launcher.requests[0].queries) == 12
+    assert launcher.requests[0].queries.count("какая сыворотка лучше для сухой кожи") == 3
+    assert run.actual_cost_usd == 0.12
+    assert notifications.events[-1][0] == "RESEARCH_COMPLETED"
+    dashboard = automation.dashboard(1)
+    assert dashboard.plans[0].repetitions == 3
+    assert "causality" in dashboard.methodology
+
+
+def test_automation_hard_budget_blocks_provider_call() -> None:
+    db = database()
+    launcher = AutomationLauncher()
+    automation = AliceAutomationService(
+        AliceAutomationRepository(db), launcher, AutomationTemplate(), AutomationNotifications()
+    )
+    plan = automation.create(
+        1,
+        1,
+        AutomationPlanCreate(
+            template_research_id=10,
+            brand="Skinjestique",
+            website_url="https://skinjestique.example",
+            models=[{"provider": "yandex", "model": "yandexgpt/latest"}],
+            daily_budget_usd=0.01,
+            monthly_budget_usd=1,
+        ),
+    )
+
+    run = automation.run(1, plan.id, "DAILY")
+
+    assert run.status == "BUDGET_BLOCKED"
+    assert launcher.requests == []

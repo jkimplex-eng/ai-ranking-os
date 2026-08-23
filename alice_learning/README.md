@@ -16,6 +16,28 @@ behaviour. It does **not** claim access to Yandex's private ranking or recommend
 5. `POST /alice-learning/rebuild` safely imports all historical Yandex researches visible to the
    active organization and retrains the model.
 
+## Automated monitoring
+
+`POST /alice-learning/automation/plans` turns a completed Research Wizard run into a monitored,
+versioned experiment plan. The background worker executes due plans without creating another queue:
+
+- daily: a frozen control subset, three exact repetitions per query by default;
+- weekly: the adaptive buyer/competitor map plus observed Yandex Webmaster demand;
+- monthly: a full checkpoint for long-window comparison;
+- every execution: hard daily/monthly budget gate, single-running guard, persisted query-set
+  fingerprint, actual cost, result and UI notification.
+
+Public endpoints:
+
+- `GET /alice-learning/automation/dashboard`
+- `GET|POST /alice-learning/automation/plans`
+- `PATCH /alice-learning/automation/plans/{id}`
+- `POST /alice-learning/automation/plans/{id}/run`
+
+The automation never rewrites a frozen control version. New adaptive evidence creates a new query
+set version. Repeated observations remain correlations; a publication is marked causal only after
+a pre-registered controlled or fixed before/after experiment.
+
 The model requires at least 12 observations, including at least three recommendations and three
 non-recommendations. Below that threshold it is stored as `INSUFFICIENT_SAMPLE`; no improvement
 counterfactuals are produced.

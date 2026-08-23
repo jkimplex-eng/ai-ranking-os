@@ -277,17 +277,7 @@ class ProductPipeline:
                 },
             )
         )
-        agents = decision_service.list_agents(self.db)
-        if not any(
-            agent.is_enabled
-            and agent.agent_type == AgentType.CODEX
-            and agent.specialization is None
-            for agent in agents
-        ):
-            decision_service.create_agent(
-                self.db,
-                AgentCreate(name=f"product-research-runner-{len(agents) + 1}"),
-            )
+        self.ensure_research_runner()
         research = run_research(
             self.db,
             research.id,
@@ -310,6 +300,26 @@ class ProductPipeline:
             )
         self.db.refresh(research)
         return research
+
+    def complete_existing(self, research: Research) -> None:
+        """Complete the public product pipeline for an externally orchestrated research."""
+        if research.status != ResearchStatus.COMPLETED:
+            raise WizardValidationError("Only completed research can enter the product pipeline")
+        self._complete_product_pipeline(research)
+
+    def ensure_research_runner(self) -> None:
+        """Idempotently provision the generic execution agent used by product research."""
+        agents = decision_service.list_agents(self.db)
+        if not any(
+            agent.is_enabled
+            and agent.agent_type == AgentType.CODEX
+            and agent.specialization is None
+            for agent in agents
+        ):
+            decision_service.create_agent(
+                self.db,
+                AgentCreate(name=f"product-research-runner-{len(agents) + 1}"),
+            )
 
     def _complete_product_pipeline(self, research: Research) -> None:
         artifacts: dict[str, Any] = {}
