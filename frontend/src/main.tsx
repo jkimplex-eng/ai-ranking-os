@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import {
   ApiClient,
   type ActionPlanItem,
+  type AliceLearningDashboard,
   type AuthProfile,
   type AdminAudit,
   type AdminFeedback,
@@ -890,12 +891,23 @@ function ProvidersDashboard() {
 }
 
 function GeoOpportunitiesScreen() {
+  const aliceFeatureLabels: Record<string, string> = {
+    search_visibility: "Видимость в Яндекс Поиске",
+    landing_page_match: "Страница под конкретный запрос",
+    independent_source_support: "Независимые подтверждения",
+    content_completeness: "Полнота содержания",
+    expertise_evidence: "Доказательства экспертности",
+    freshness: "Актуальность информации",
+    availability_clarity: "Цена, наличие и регион",
+    technical_health: "Техническое состояние сайта",
+  };
   const [platforms, setPlatforms] = useState<GeoPlatform[]>([]);
   const [promptSets, setPromptSets] = useState<FrozenPromptSet[]>([]);
   const [priorities, setPriorities] = useState<EisPriorityResult>();
   const [learnedInfluence, setLearnedInfluence] = useState<PublicationInfluenceEstimate[]>([]);
   const [siteAudit, setSiteAudit] = useState<GeoSiteAudit>();
   const [yandexIntelligence, setYandexIntelligence] = useState<YandexIntelligence>();
+  const [aliceLearning, setAliceLearning] = useState<AliceLearningDashboard>();
   const [auditForm, setAuditForm] = useState({ brand: "", website: "" });
   const [engine, setEngine] = useState("YandexGPT");
   const [form, setForm] = useState({ name: "", domain: "", category: "UNIVERSAL", country: "RU", language: "ru", trust: "", authority: "", citations: "", cost: "" });
@@ -904,9 +916,19 @@ function GeoOpportunitiesScreen() {
   const load = useCallback(() => Promise.all([
     api.geoPlatforms(), api.frozenPromptSets(), api.publicationInfluence(), api.geoSiteAudits(),
     api.yandexIntelligence().catch(() => undefined),
-  ]).then(([items, sets, estimates, audits, intelligence]) => {
+    api.aliceLearningDashboard().catch(() => undefined),
+  ]).then(([items, sets, estimates, audits, intelligence, learning]) => {
     setPlatforms(items); setPromptSets(sets); setLearnedInfluence(estimates); setSiteAudit(audits[0]);
     setYandexIntelligence(Array.isArray(intelligence?.query_map) ? intelligence : undefined);
+    setAliceLearning(
+      learning
+      && typeof learning.observation_count === "number"
+      && Array.isArray(learning.top_factors)
+      && Array.isArray(learning.recommended_actions)
+      && Array.isArray(learning.limitations)
+        ? learning
+        : undefined,
+    );
   }), []);
   useEffect(() => { load().catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить GEO-данные")); }, [load]);
   const numericField = (value: string) => value.trim() === "" ? undefined : Number(value);
@@ -950,6 +972,12 @@ function GeoOpportunitiesScreen() {
     catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось синхронизировать Яндекс Intelligence"); }
     finally { setBusy(false); }
   };
+  const rebuildAlice = async () => {
+    setBusy(true); setError("");
+    try { setAliceLearning(await api.rebuildAliceLearning()); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось обучить модель Алисы"); }
+    finally { setBusy(false); }
+  };
   const platformById = new Map(platforms.map((item) => [item.id, item]));
   const activeSets = promptSets.filter((item) => item.active);
   return (
@@ -975,6 +1003,12 @@ function GeoOpportunitiesScreen() {
           <h3>Приоритетные запросы</h3>{yandexIntelligence.opportunities.slice(0, 8).map((item) => <article className="geo-audit-action" key={item.query}><Badge tone={item.priority === "P0" ? "danger" : "warning"}>{item.priority}</Badge><div><b>{item.query} · {item.priority_score.toFixed(1)}</b><p>{item.problem}</p><small>{item.action}</small><details><summary>Доказательства и проверка</summary><p>{item.evidence}</p><p>{item.verification}</p><p>{item.expected_range} · Уверенность {item.confidence}</p></details></div></article>)}
           <details><summary>Карта запросов Яндекса</summary>{yandexIntelligence.query_map.slice(0, 30).map((item) => <div className="geo-audit-check" key={`${item.query}:${item.url ?? ""}`}><span>{item.brand_mentioned === true ? "✓" : item.brand_mentioned === false ? "×" : "?"}</span><div><b>{item.query}</b><small>{item.url || "Целевая страница не определена"}</small></div><strong>{item.position !== undefined ? `позиция ${item.position.toFixed(1)}` : "нет позиции"}</strong></div>)}</details>
           {yandexIntelligence.limitations.map((item) => <p className="method-note" key={item}>{item}</p>)}</div> : <div className="geo-empty"><strong>Данные Яндекса ещё не синхронизированы</strong><p>Подключите Яндекс Вебмастер в Настройках, выберите подтверждённый сайт и нажмите «Обновить данные Яндекса».</p></div>}
+      </section>
+      <section className="analytics-card geo-site-audit alice-learning">
+        <div className="geo-audit-intro"><span className="eyebrow">ALICE LEARNING ENGINE</span><h2>Чему система научилась о рекомендациях Алисы</h2><p>Локальная модель сопоставляет реальные ответы, позиции в Поиске, страницы и независимые источники. Коэффициенты показывают наблюдаемую связь; причинный эффект подтверждается только контролируемым экспериментом.</p><Button onClick={() => void rebuildAlice()} disabled={busy}>{busy ? "Обучаем…" : "Пересобрать модель на истории"}</Button></div>
+        {aliceLearning ? <div className="geo-audit-result"><header><div><strong>{aliceLearning.observation_count}</strong><span>наблюдений · {aliceLearning.recommendation_count} рекомендаций</span></div><Badge tone={aliceLearning.status === "READY" ? "success" : "warning"}>{aliceLearning.status}</Badge></header>
+          {aliceLearning.model ? <><div className="geo-audit-categories"><div><span>Бренд</span><b>{aliceLearning.brand ?? "—"}</b></div><div><span>Выборка бренда</span><b>{aliceLearning.observation_count}</b></div><div><span>Рекомендован</span><b>{aliceLearning.recommendation_count}</b></div><div><span>Версия</span><b>{aliceLearning.model.algorithm_version}</b></div></div><h3>Что модель предлагает улучшить</h3>{aliceLearning.recommended_actions.length ? aliceLearning.recommended_actions.slice(0, 5).map((item) => <article className="geo-audit-action" key={item.feature}><Badge tone="warning">ПРОГНОЗ</Badge><div><b>{item.action}</b><p>{aliceFeatureLabels[item.feature] ?? item.feature}: {Math.round(item.current_value * 100)}% → целевой сигнал 100%</p><small>Расчётное изменение вероятности: +{(item.predicted_delta * 100).toFixed(1)} п.п. · Требует контрольного эксперимента</small></div></article>) : <div className="geo-empty"><strong>Действия пока не рассчитаны</strong><p>Нужны минимум 12 наблюдений, включая рекомендации и отказы.</p></div>}<details><summary>Показать коэффициенты модели</summary>{aliceLearning.top_factors.filter((item) => item.feature).slice(0, 8).map((item) => <div className="geo-audit-check" key={item.feature}><span>{item.direction === "POSITIVE" ? "↑" : item.direction === "NEGATIVE" ? "↓" : "?"}</span><div><b>{aliceFeatureLabels[item.feature ?? ""] ?? item.feature}</b><small>Ассоциация модели — не доказанная причина</small></div><strong>{item.coefficient?.toFixed(3) ?? "—"}</strong></div>)}</details></> : <div className="geo-empty"><strong>Модель ещё не обучена</strong><p>Запустите исследования через Яндекс и пересоберите модель на истории.</p></div>}
+          {aliceLearning.limitations.map((item) => <p className="method-note" key={item}>{item}</p>)}</div> : <div className="geo-empty"><strong>Нет обучающих наблюдений</strong><p>После завершённых исследований YandexGPT наблюдения будут добавляться автоматически.</p></div>}
       </section>
       <section className="geo-layout">
         <form className="analytics-card geo-form" onSubmit={create}>

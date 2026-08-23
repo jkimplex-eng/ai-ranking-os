@@ -4,6 +4,7 @@ import logging
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
+from alice_learning.integration import learn_from_completed_research
 from backend.app.config import get_settings
 from backend.app.database import SessionLocal
 from backend.app.logging import configure_logging
@@ -40,6 +41,16 @@ async def run_worker() -> None:
                 if job is not None:
                     logger.info("Research job processed id=%s state=%s", job.id, job.state)
                     CompetitorIntelligenceService(db).ingest_research(job.research_id)
+                    try:
+                        learned = learn_from_completed_research(db, job.research_id)
+                        if learned:
+                            logger.info(
+                                "Alice learning observations ingested research_id=%s count=%s",
+                                job.research_id,
+                                learned,
+                            )
+                    except Exception:  # noqa: BLE001 - learning cannot fail completed research
+                        logger.exception("Alice learning failed research_id=%s", job.research_id)
                 now = loop.time()
                 if now - last_scheduler_run >= 60:
                     try:

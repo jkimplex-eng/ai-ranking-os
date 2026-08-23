@@ -125,6 +125,31 @@ export type YandexIntelligence = {
   opportunities: Array<{ priority: string; priority_score: number; query: string; problem: string; evidence: string; affected_metric: string; action: string; target_url?: string; expected_range: string; confidence: string; effort: string; duration: string; verification: string }>;
   limitations: string[];
 };
+export type AliceLearningDashboard = {
+  status: string;
+  brand?: string;
+  observation_count: number;
+  recommendation_count: number;
+  baseline_probability?: number;
+  model?: {
+    id: number; status: string; model_type: string; sample_size: number;
+    positive_samples: number; negative_samples: number; coefficients: Record<string, number>;
+    validation: Record<string, number | string | null>; limitations: string[];
+    algorithm_version: string; trained_at: string;
+  };
+  top_factors: Array<{
+    feature?: string; coefficient?: number; direction?: string; evidence_level: string;
+    resource_domain?: string; expected_delta?: number; confidence_score?: number;
+    sample_size?: number; controlled_experiments?: number;
+  }>;
+  recommended_actions: Array<{
+    feature: string; current_value: number; target_value: number;
+    current_probability: number; predicted_probability: number; predicted_delta: number;
+    action: string; evidence_level: string;
+  }>;
+  recent_predictions: Array<Record<string, unknown>>;
+  limitations: string[];
+};
 export type GeoPlatform = {
   id: string; name: string; domain: string; platform_type: string; category: string;
   country: string; language: string; ai_engines: string[]; domain_trust?: number;
@@ -360,6 +385,8 @@ export class ApiClient {
   disconnectYandexWebmaster() { return this.request<void>("/integrations/yandex-webmaster", { method: "DELETE" }); }
   yandexIntelligence() { return this.request<YandexIntelligence>("/yandex-intelligence/dashboard"); }
   syncYandexIntelligence() { return this.request<YandexIntelligence>("/yandex-intelligence/sync", { method: "POST" }); }
+  aliceLearningDashboard() { return this.request<AliceLearningDashboard>("/alice-learning/dashboard"); }
+  rebuildAliceLearning() { return this.request<AliceLearningDashboard>("/alice-learning/rebuild", { method: "POST" }); }
   geoPlatforms() { return this.request<GeoPlatform[]>("/geo/platforms"); }
   createGeoPlatform(payload: {
     name: string; domain: string; category: string; country: string; language: string;

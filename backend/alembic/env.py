@@ -5,6 +5,7 @@ from sqlalchemy import engine_from_config, pool
 
 from ai_visibility import models as ai_visibility_models  # noqa: F401
 from alert import models as alert_models  # noqa: F401
+from alice_learning import models as alice_learning_models  # noqa: F401
 from analytics import models as analytics_models  # noqa: F401
 from apikeys import models as api_key_models  # noqa: F401
 from audit import models as audit_models  # noqa: F401

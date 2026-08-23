@@ -10,6 +10,7 @@ from sqlalchemy import inspect
 
 from ai_visibility.router import router as ai_visibility_router
 from alert.router import router as alert_router
+from alice_learning.router import router as alice_learning_router
 from analytics.router import router as analytics_router
 from apikeys.router import router as api_keys_router
 from audit.router import router as audit_router
@@ -141,6 +142,7 @@ app.include_router(hardening_router)
 app.include_router(execution_engine_router)
 app.include_router(feedback_center_router)
 app.include_router(ai_visibility_router)
+app.include_router(alice_learning_router)
 app.include_router(entity_extraction_router)
 app.include_router(query_intent_router)
 app.include_router(product_router)
