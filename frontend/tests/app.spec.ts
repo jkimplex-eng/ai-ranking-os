@@ -6,6 +6,30 @@ test("login page exposes product entry point", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Войти" })).toBeVisible();
 });
 
+test("mobile navigation keeps the four core user actions reachable", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const json = path.endsWith("/auth/login")
+      ? { access_token: "access", refresh_token: "refresh-token-with-valid-length" }
+      : path.endsWith("/auth/me")
+        ? { id: 1, display_name: "User", email: "user@example.com", roles: ["analyst"] }
+        : path.endsWith("/system/health")
+          ? { status: "healthy" }
+          : [];
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(json) });
+  });
+  await page.goto("/");
+  await page.getByLabel("Email").fill("user@example.com");
+  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByRole("button", { name: "Войти" }).click();
+  const mobileNav = page.getByRole("navigation", { name: "Мобильная навигация" });
+  await expect(mobileNav).toBeVisible();
+  await expect(mobileNav.getByRole("button")).toHaveCount(4);
+  await mobileNav.getByRole("button", { name: /Результаты/ }).click();
+  await expect(page).toHaveURL(/\/reports$/);
+});
+
 test("competitor center adds a brand and shows evidence-based daily analytics", async ({ page }) => {
   let projectCreated = false;
   let competitorCreated = false;
@@ -259,6 +283,7 @@ test("authenticated routes survive refresh and browser history", async ({ page }
   await page.getByLabel("Email").fill("admin@example.com");
   await page.getByLabel("Пароль").fill("strong-password");
   await page.getByRole("button", { name: "Войти" }).click();
+  await page.getByText("Рабочее пространство", { exact: true }).click();
   await page.getByRole("button", { name: "Настройки" }).click();
   await expect(page).toHaveURL(/\/settings$/);
   await expect(page.getByRole("heading", { name: "Настройки" })).toBeVisible();
@@ -272,19 +297,21 @@ test("authenticated routes survive refresh and browser history", async ({ page }
   await page.goForward();
   await expect(page).toHaveURL(/\/$/);
 
+  await page.getByText("Рабочее пространство", { exact: true }).click();
+  await page.getByText("Для экспертов", { exact: true }).click();
   const routes = [
-    ["Начало работы", "/getting-started", "Начните с первого результата"],
-    ["Исследования", "/research", "Исследования"],
-    ["Отчёты", "/reports", "Отчёты"],
-    ["Рекомендации", "/recommendations", "Рекомендации"],
-    ["Граф знаний", "/knowledge-graph", "Граф знаний"],
-    ["GEO-площадки", "/geo-opportunities", "Где публиковаться, чтобы вас рекомендовали ИИ"],
+    ["Как начать", "/getting-started", "Начните с первого результата"],
+    ["Все исследования", "/research", "Исследования"],
+    ["Результаты", "/reports", "Отчёты"],
+    ["План действий", "/recommendations", "Рекомендации"],
+    ["Связи и источники", "/knowledge-graph", "Граф знаний"],
+    ["Где публиковаться", "/geo-opportunities", "Где публиковаться, чтобы вас рекомендовали ИИ"],
     ["Конкуренты", "/competitors", "Конкуренты"],
-    ["История", "/history", "История"],
-    ["Провайдеры ИИ", "/providers", "Провайдеры ИИ"],
+    ["История изменений", "/history", "История"],
+    ["Подключения ИИ", "/providers", "Провайдеры ИИ"],
     ["Аналитика продукта", "/product-analytics", "Product Analytics"],
     ["Уведомления", "/notifications", "Уведомления"],
-    ["Организации", "/organizations", "Организация"],
+    ["Организация", "/organizations", "Организация"],
     ["Обратная связь", "/feedback", "Обратная связь"],
     ["Профиль", "/profile", "Профиль"],
     ["Настройки", "/settings", "Настройки"],

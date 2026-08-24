@@ -263,18 +263,28 @@ function Shell({
   const [systemReady, setSystemReady] = useState<boolean>();
   useEffect(() => { api.systemHealth().then((health) => setSystemReady(health.status === "healthy" || health.status === "ready")).catch(() => setSystemReady(false)); }, []);
   const isAdmin = roles.some((role) => ["superadmin", "admin", "organization_admin", "SUPERADMIN", "ADMIN", "ORGANIZATION_ADMIN"].includes(role));
-  const navSource = [
-    ["⌂", "Обзор", "home"], ["→", "Начало работы", "onboarding"],
-    ["◉", "Исследования", "research"], ["▤", "Отчёты", "reports"],
-    ["✓", "Рекомендации", "recommendations"], ["⌘", "Граф знаний", "graph"],
-    ["◈", "GEO-площадки", "geo"],
-    ["◇", "Конкуренты", "competitors"], ["↗", "История", "history"],
-    ["✦", "Провайдеры ИИ", "providers"], ["◫", "Аналитика продукта", "analytics"],
-    ["♢", "Уведомления", "notifications"], ["◎", "Организации", "organization"],
-    ["◌", "Обратная связь", "feedback"], ["♙", "Профиль", "profile"],
-    ["⚙", "Настройки", "settings"], ["▦", "Администрирование", "admin"],
+  const primaryNav = [
+    ["⌂", "Обзор", "home"], ["＋", "Новое исследование", "wizard"],
+    ["▤", "Результаты", "reports"], ["✓", "План действий", "recommendations"],
+    ["◇", "Конкуренты", "competitors"],
   ] as const;
-  const nav = navSource.filter(([, , target]) => isAdmin || (target !== "admin" && target !== "analytics"));
+  const expertNavSource = [
+    ["◉", "Все исследования", "research"], ["↗", "История изменений", "history"],
+    ["⌘", "Связи и источники", "graph"], ["◈", "Где публиковаться", "geo"],
+    ["✦", "Подключения ИИ", "providers"], ["◫", "Аналитика продукта", "analytics"],
+  ] as const;
+  const workspaceNavSource = [
+    ["♢", "Уведомления", "notifications"], ["◎", "Организация", "organization"],
+    ["♙", "Профиль", "profile"], ["⚙", "Настройки", "settings"], ["◌", "Обратная связь", "feedback"],
+    ["→", "Как начать", "onboarding"], ["▦", "Администрирование", "admin"],
+  ] as const;
+  const visible = (items: readonly (readonly [string, string, Screen])[]) =>
+    items.filter(([, , target]) => isAdmin || (target !== "admin" && target !== "analytics"));
+  const renderNav = (items: readonly (readonly [string, string, Screen])[]) => items.map(([icon, label, target]) => (
+    <button key={target} className={active === target ? "active" : ""} onClick={() => onNavigate(target)}>
+      <span>{icon}</span><span className="nav-label">{label}</span>
+    </button>
+  ));
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -282,17 +292,11 @@ function Shell({
           <span className="logo-mark small">AR</span>
           <span>AI Ranking OS</span>
         </button>
-        <nav>
-          {nav.map(([icon, label, target]) => (
-            <button
-              key={label}
-              className={active === target ? "active" : ""}
-              onClick={() => onNavigate(target)}
-            >
-              <span>{icon}</span>
-              {label}
-            </button>
-          ))}
+        <nav aria-label="Основная навигация">
+          <span className="nav-section-label">Главное</span>
+          {renderNav(primaryNav)}
+          <details className="nav-group"><summary><span>⋯</span><span className="nav-label">Для экспертов</span></summary>{renderNav(visible(expertNavSource))}</details>
+          <details className="nav-group"><summary><span>⚙</span><span className="nav-label">Рабочее пространство</span></summary>{renderNav(visible(workspaceNavSource))}</details>
         </nav>
         <div className="sidebar-foot">
           <span className="avatar">{user.slice(0, 1).toUpperCase()}</span>
@@ -325,6 +329,11 @@ function Shell({
           </div>
         </header>
         {children}
+        <nav className="mobile-nav" aria-label="Мобильная навигация">
+          {primaryNav.slice(0, 4).map(([icon, label, target]) => (
+            <button key={target} className={active === target ? "active" : ""} onClick={() => onNavigate(target)}><span>{icon}</span><small>{label === "Новое исследование" ? "Проверить" : label}</small></button>
+          ))}
+        </nav>
       </div>
     </div>
   );
@@ -1193,6 +1202,11 @@ function Dashboard({
         </div>
         <Button onClick={onStart}>Новое исследование</Button>
       </div>
+      <section className="decision-strip" aria-label="Что важно сейчас">
+        <div><span>Текущий результат</span><strong>{healthLabel(visibility)}</strong><small>Видимость {visibility.toFixed(1)} из 100</small></div>
+        <div><span>Главное ограничение</span><strong>{weakest.label}</strong><small>Оценка {weakest.value.toFixed(1)} из 100</small></div>
+        <button onClick={() => onNavigate("recommendations")}><span>Следующий шаг</span><strong>Открыть план улучшений</strong><small>Конкретные действия и ожидаемый эффект →</small></button>
+      </section>
       <section className="dashboard-grid">
         <article className="hero-score panel">
           <div className="score-label">AI Visibility</div>
@@ -1246,7 +1260,10 @@ function Dashboard({
           />
         )})}
       </section>
-      <section className="analytics-grid">
+      <ActionCenter recommendations={data.recommendations ?? []} />
+      <details className="dashboard-details">
+        <summary><span>Подробная аналитика</span><small>Тренды, баланс сигналов, pipeline и benchmark</small></summary>
+        <section className="analytics-grid">
         <ChartContainer
           title="Динамика AI Visibility"
           caption="TREND"
@@ -1277,8 +1294,8 @@ function Dashboard({
         </ChartContainer>
         <Benchmark brand={research.title.replace(/^AI Visibility:\s*/, "")} entry={data.benchmark?.entries?.[0]} entityCount={data.benchmark?.entity_count} />
         <Trend metric={visibilityTrend} />
-      </section>
-      <ActionCenter recommendations={data.recommendations ?? []} />
+        </section>
+      </details>
       <Drawer
         open={Boolean(detail)}
         title={detail ?? "Метрика"}
