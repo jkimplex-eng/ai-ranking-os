@@ -97,6 +97,8 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
       socialConnected = true;
       status = 201;
       json = { id: 70, competitor_id: 22, platform: "TELEGRAM", profile_url: "https://t.me/librederm", external_id: "librederm", configured: true, active: true, status: "CONNECTED", last_scanned_at: "2026-08-20T10:00:00Z", next_scan_at: "2026-08-21T10:00:00Z", last_error: null, posts: [] };
+    } else if (path.endsWith("/competitor-intelligence/projects/10/competitors/22/social/discover")) {
+      json = { competitor_id: 22, total_posts: 0, limitation: "Значимость не доказывает влияние на выдачу AI.", sources: [] };
     } else if (path.endsWith("/competitor-intelligence/projects/10/competitors/22/social")) {
       json = { competitor_id: 22, total_posts: 0, limitation: "Значимость не доказывает влияние на выдачу AI.", sources: socialConnected ? [{ id: 70, competitor_id: 22, platform: "TELEGRAM", profile_url: "https://t.me/librederm", external_id: "librederm", configured: true, active: true, status: "CONNECTED", last_scanned_at: "2026-08-20T10:00:00Z", next_scan_at: "2026-08-21T10:00:00Z", last_error: null, posts: [] }] : [] };
     } else if (path.includes("/competitor-intelligence/projects/10")) json = dashboard();

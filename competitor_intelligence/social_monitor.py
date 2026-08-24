@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import html
+import ipaddress
 import re
+import socket
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from html.parser import HTMLParser
 from typing import Protocol
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from sqlalchemy.orm import Session
@@ -42,8 +45,111 @@ class CollectedPost:
     shares: int | None = None
 
 
+@dataclass(frozen=True)
+class DiscoveredSource:
+    platform: SocialPlatform
+    profile_url: str
+    external_id: str
+
+
+class _LinkParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.links: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.casefold() != "a":
+            return
+        href = dict(attrs).get("href")
+        if href:
+            self.links.append(href)
+
+
 class SocialCollectorPort(Protocol):
     def collect(self, source: CompetitorSocialSource, token: str | None) -> list[CollectedPost]: ...
+
+
+class SocialDiscoveryPort(Protocol):
+    def discover(self, domains: list[str]) -> list[DiscoveredSource]: ...
+
+
+class WebsiteSocialDiscovery:
+    """Discover only social profiles explicitly linked by the competitor's own website."""
+
+    _hosts = {
+        "t.me": SocialPlatform.TELEGRAM,
+        "telegram.me": SocialPlatform.TELEGRAM,
+        "youtube.com": SocialPlatform.YOUTUBE,
+        "www.youtube.com": SocialPlatform.YOUTUBE,
+        "youtu.be": SocialPlatform.YOUTUBE,
+        "vk.com": SocialPlatform.VK,
+        "www.vk.com": SocialPlatform.VK,
+        "instagram.com": SocialPlatform.INSTAGRAM,
+        "www.instagram.com": SocialPlatform.INSTAGRAM,
+    }
+
+    def discover(self, domains: list[str]) -> list[DiscoveredSource]:
+        found: dict[tuple[SocialPlatform, str], DiscoveredSource] = {}
+        for raw_domain in domains[:5]:
+            try:
+                page_url = self._website_url(raw_domain)
+                response = HttpSocialCollector._get(page_url)
+            except (SocialMonitorError, httpx.HTTPError):
+                continue
+            parser = _LinkParser()
+            parser.feed(response.text)
+            for href in parser.links:
+                candidate = self._source(urljoin(str(response.url), href))
+                if candidate:
+                    found[(candidate.platform, candidate.external_id.casefold())] = candidate
+        return list(found.values())
+
+    @staticmethod
+    def _website_url(raw_domain: str) -> str:
+        value = raw_domain.strip()
+        url = value if value.startswith(("http://", "https://")) else f"https://{value}"
+        parsed = urlparse(url)
+        host = parsed.hostname or ""
+        if parsed.scheme not in {"http", "https"} or not host:
+            raise SocialMonitorError("Некорректный домен конкурента")
+        try:
+            addresses = {
+                item[4][0] for item in socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+            }
+        except socket.gaierror as error:
+            raise SocialMonitorError("Домен конкурента не разрешается") from error
+        if any(
+            ipaddress.ip_address(address).is_private
+            or ipaddress.ip_address(address).is_loopback
+            or ipaddress.ip_address(address).is_link_local
+            for address in addresses
+        ):
+            raise SocialMonitorError("Локальные адреса нельзя использовать для автообнаружения")
+        return url
+
+    @classmethod
+    def _source(cls, url: str) -> DiscoveredSource | None:
+        parsed = urlparse(url)
+        platform = cls._hosts.get((parsed.hostname or "").casefold())
+        parts = [part for part in parsed.path.split("/") if part]
+        if platform is None or not parts:
+            return None
+        if (parsed.hostname or "").casefold() == "youtu.be":
+            return None
+        ignored = {"share", "intent", "watch", "results", "reel", "reels", "stories", "p"}
+        if parts[0].casefold() in ignored:
+            return None
+        is_youtube_path = (
+            platform == SocialPlatform.YOUTUBE
+            and parts[0] in {"channel", "c", "user"}
+            and len(parts) > 1
+        )
+        external_id = parts[1] if is_youtube_path else parts[0]
+        external_id = external_id.lstrip("@").strip()
+        if not external_id:
+            return None
+        profile_url = f"{parsed.scheme}://{parsed.netloc}/{'/'.join(parts[:2])}"
+        return DiscoveredSource(platform, profile_url, external_id)
 
 
 class HttpSocialCollector:
@@ -71,6 +177,12 @@ class HttpSocialCollector:
         return response
 
     def _youtube(self, channel_id: str) -> list[CollectedPost]:
+        if not channel_id.startswith("UC"):
+            profile = self._get(f"https://www.youtube.com/@{channel_id.lstrip('@')}").text
+            match = re.search(r'"channelId":"(UC[\w-]+)"', profile)
+            if not match:
+                raise SocialMonitorError("YouTube Channel ID не найден")
+            channel_id = match.group(1)
         response = self._get("https://www.youtube.com/feeds/videos.xml", {"channel_id": channel_id})
         root = ET.fromstring(response.text)
         ns = {
@@ -175,10 +287,16 @@ class HttpSocialCollector:
 
 
 class CompetitorSocialMonitorService:
-    def __init__(self, db: Session, collector: SocialCollectorPort | None = None) -> None:
+    def __init__(
+        self,
+        db: Session,
+        collector: SocialCollectorPort | None = None,
+        discovery: SocialDiscoveryPort | None = None,
+    ) -> None:
         self.db = db
         self.repository = CompetitorIntelligenceRepository(db)
         self.collector = collector or HttpSocialCollector()
+        self.discovery = discovery or WebsiteSocialDiscovery()
         settings = get_settings()
         secret = settings.provider_secret_key or settings.auth_jwt_secret
         self.cipher = SecretCipher(secret) if len(secret) >= 32 else None
@@ -223,6 +341,30 @@ class CompetitorSocialMonitorService:
         for source in self.repository.social_sources(competitor_id):
             if source.active:
                 self.refresh_source(source)
+        return self.dashboard(user_id, project_id, competitor_id)
+
+    def discover(self, user_id: int, project_id: int, competitor_id: int) -> SocialDashboardRead:
+        competitor = self._authorize(user_id, project_id, competitor_id)
+        existing = {
+            (item.platform, item.external_id.casefold())
+            for item in self.repository.social_sources(competitor_id)
+        }
+        for candidate in self.discovery.discover(competitor.domains):
+            key = (candidate.platform.value, candidate.external_id.casefold())
+            if key in existing:
+                continue
+            source = self.repository.add_social_source(
+                CompetitorSocialSource(
+                    competitor_id=competitor_id,
+                    platform=candidate.platform.value,
+                    profile_url=candidate.profile_url,
+                    external_id=candidate.external_id,
+                    status="DISCOVERED",
+                    next_scan_at=datetime.now(UTC),
+                )
+            )
+            self.refresh_source(source)
+            existing.add(key)
         return self.dashboard(user_id, project_id, competitor_id)
 
     def delete(self, user_id: int, project_id: int, competitor_id: int, source_id: int) -> None:
@@ -317,10 +459,10 @@ class CompetitorSocialMonitorService:
             ],
         )
 
-    def _authorize(self, user_id: int, project_id: int, competitor_id: int) -> None:
+    def _authorize(self, user_id: int, project_id: int, competitor_id: int):
         workspace = WorkspaceRepository(self.db).get_or_create(user_id)
         ProjectRepository(self.db).get(workspace.id, project_id)
-        CompetitorRepository(self.db).get(project_id, competitor_id)
+        return CompetitorRepository(self.db).get(project_id, competitor_id)
 
     @staticmethod
     def _validate_host(platform: SocialPlatform, url: str) -> None:

@@ -154,6 +154,19 @@ def refresh_social(
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
+@router.post(
+    "/projects/{project_id}/competitors/{competitor_id}/social/discover",
+    response_model=SocialDashboardRead,
+)
+def discover_social(
+    project_id: int, competitor_id: int, user_id: CurrentUserId, db: DbSession
+) -> SocialDashboardRead:
+    try:
+        return CompetitorSocialMonitorService(db).discover(user_id, project_id, competitor_id)
+    except (ProjectNotFoundError, SocialMonitorError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
 @router.delete(
     "/projects/{project_id}/competitors/{competitor_id}/social/{source_id}",
     status_code=status.HTTP_204_NO_CONTENT,

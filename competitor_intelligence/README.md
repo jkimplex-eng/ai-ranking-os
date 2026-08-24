@@ -14,8 +14,14 @@ API:
 - `GET /competitor-intelligence/projects/{project_id}`
 - `POST /competitor-intelligence/projects/{project_id}/refresh`
 - `PUT /competitor-intelligence/projects/{project_id}/daily-monitoring`
+- `POST /competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/social/discover`
 
 Social monitoring uses the same module and the existing worker queue. Telegram public previews
 and YouTube feeds work without credentials. VK and Instagram use official APIs and require an
 encrypted token. Unavailable sources remain visible with an explicit status; no synthetic posts
 or metrics are generated.
+
+Auto-discovery reads only competitor-owned public websites, extracts explicit social profile links,
+deduplicates them, and starts the existing collectors. It blocks private and loopback addresses to
+prevent SSRF. Global brand search is intentionally not simulated: YouTube, VK, Instagram, and
+Telegram-wide search require their respective official credentials and quota.

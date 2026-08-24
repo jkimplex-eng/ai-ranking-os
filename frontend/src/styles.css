@@ -139,12 +139,14 @@
 .social-source-list a { color: #8eb4ff; }
 .social-source-list small { color: var(--muted); }
 .social-error { color: #fca5a5; }
+.social-discovery{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:14px 0;padding:16px;border:1px solid #2e4f78;border-radius:13px;background:#10223b}.social-discovery b{color:#dceaff}.social-discovery p{margin:5px 0 0}.social-discovery button{flex:0 0 auto;margin:0}
 .social-post { display: grid; grid-template-columns: 1fr auto; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--border); }
 .social-post > div { display: grid; gap: 4px; }
 .social-post > strong { display: grid; text-align: right; color: var(--success); font-size: 1.3rem; }
 .social-post > strong span { color: var(--muted); font-size: 9px; font-weight: 500; }
 @media (max-width: 1000px) { .geo-site-audit { grid-template-columns: 1fr; }.social-source-form { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 620px) { .geo-audit-categories, .social-source-form { grid-template-columns: 1fr; }.social-post { grid-template-columns: 1fr; }.social-post > strong { text-align: left; } }
+@media (max-width: 620px) { .social-discovery { align-items:stretch; flex-direction:column; } }
 .wizard-page .model { color: #eaf0fb; text-align: left; }
 .wizard-page .model b { color: #f5f8ff; }
 .wizard-page .model small { color: #9fb0c8; }

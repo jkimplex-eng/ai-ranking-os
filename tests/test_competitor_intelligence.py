@@ -1,6 +1,7 @@
 from collections.abc import Generator
 from datetime import UTC, datetime
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -9,10 +10,13 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.database import Base, get_db
 from backend.app.main import app
-from competitor_intelligence.schemas import SocialSourceCreate
+from competitor_intelligence.schemas import SocialPlatform, SocialSourceCreate
 from competitor_intelligence.social_monitor import (
     CollectedPost,
     CompetitorSocialMonitorService,
+    DiscoveredSource,
+    HttpSocialCollector,
+    WebsiteSocialDiscovery,
 )
 from research.models import (
     ExtractedCitation,
@@ -171,6 +175,10 @@ def test_competitor_intelligence_is_documented_in_openapi(client: TestClient) ->
     assert (
         "/competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/social" in paths
     )
+    assert (
+        "/competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/social/discover"
+        in paths
+    )
 
 
 class _SocialCollector:
@@ -186,6 +194,65 @@ class _SocialCollector:
                 published_at=datetime(2026, 8, 20, 8, 0, tzinfo=UTC),
             )
         ]
+
+
+class _SocialDiscovery:
+    def discover(self, domains):  # noqa: ANN001, ANN201
+        assert domains
+        return [
+            DiscoveredSource(
+                platform=SocialPlatform.TELEGRAM,
+                profile_url="https://t.me/skinjestique",
+                external_id="skinjestique",
+            )
+        ]
+
+
+def test_website_discovery_extracts_only_explicit_social_profiles(monkeypatch) -> None:
+    markup = """
+    <a href="https://t.me/skinjestique">Telegram</a>
+    <a href="https://www.youtube.com/@skinjestique">YouTube</a>
+    <a href="https://instagram.com/skinjestique/">Instagram</a>
+    <a href="https://t.me/share/url?url=example.org">Share</a>
+    """
+    monkeypatch.setattr(
+        "competitor_intelligence.social_monitor.socket.getaddrinfo",
+        lambda *args, **kwargs: [(None, None, None, None, ("93.184.216.34", 443))],
+    )
+    monkeypatch.setattr(
+        HttpSocialCollector,
+        "_get",
+        staticmethod(
+            lambda url, params=None: httpx.Response(
+                200,
+                text=markup,
+                request=httpx.Request("GET", url),
+            )
+        ),
+    )
+
+    sources = WebsiteSocialDiscovery().discover(["example.com"])
+
+    assert {(item.platform, item.external_id) for item in sources} == {
+        (SocialPlatform.TELEGRAM, "skinjestique"),
+        (SocialPlatform.YOUTUBE, "skinjestique"),
+        (SocialPlatform.INSTAGRAM, "skinjestique"),
+    }
+
+
+def test_social_monitor_discovers_and_deduplicates_official_profiles(
+    client: TestClient,
+) -> None:
+    project_id, competitor_id = _project_and_competitor(client)
+    with TestingSession() as db:
+        service = CompetitorSocialMonitorService(db, _SocialCollector(), _SocialDiscovery())
+        first = service.discover(1, project_id, competitor_id)
+        second = service.discover(1, project_id, competitor_id)
+
+    assert first.total_posts == 1
+    assert len(first.sources) == 1
+    assert len(second.sources) == 1
+    assert first.sources[0].status == "CONNECTED"
 
 
 def test_social_monitor_saves_real_collector_results(client: TestClient) -> None:

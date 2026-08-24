@@ -388,6 +388,7 @@ export class ApiClient {
   competitorSocial(projectId: number, competitorId: number) { return this.request<SocialDashboard>(`/competitor-intelligence/projects/${projectId}/competitors/${competitorId}/social`); }
   addCompetitorSocial(projectId: number, competitorId: number, payload: { platform: string; profile_url: string; external_id: string; access_token?: string }) { return this.request<SocialSource>(`/competitor-intelligence/projects/${projectId}/competitors/${competitorId}/social`, { method: "POST", body: JSON.stringify(payload) }); }
   refreshCompetitorSocial(projectId: number, competitorId: number) { return this.request<SocialDashboard>(`/competitor-intelligence/projects/${projectId}/competitors/${competitorId}/social/refresh`, { method: "POST" }); }
+  discoverCompetitorSocial(projectId: number, competitorId: number) { return this.request<SocialDashboard>(`/competitor-intelligence/projects/${projectId}/competitors/${competitorId}/social/discover`, { method: "POST" }); }
   deleteCompetitorSocial(projectId: number, competitorId: number, sourceId: number) { return this.request<void>(`/competitor-intelligence/projects/${projectId}/competitors/${competitorId}/social/${sourceId}`, { method: "DELETE" }); }
   runGeoSiteAudit(payload: { brand: string; website_url: string; project_id?: number }) { return this.request<GeoSiteAudit>("/geo/site-audits", { method: "POST", body: JSON.stringify(payload) }); }
   geoSiteAudits(projectId?: number) { return this.request<GeoSiteAudit[]>(`/geo/site-audits${projectId ? `?project_id=${projectId}` : ""}`); }

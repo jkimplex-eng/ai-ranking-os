@@ -476,8 +476,20 @@ function CompetitorSocialPanel({ projectId, competitorId }: { projectId: number;
   const [accessToken, setAccessToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const load = useCallback(() => api.competitorSocial(projectId, competitorId).then(setDashboard), [projectId, competitorId]);
-  useEffect(() => { load().catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить соцсети")); }, [load]);
+  const autoDiscoveryStarted = useRef(false);
+  const load = useCallback(async () => { const result = await api.competitorSocial(projectId, competitorId); setDashboard(result); return result; }, [projectId, competitorId]);
+  useEffect(() => {
+    let active = true;
+    api.competitorSocial(projectId, competitorId).then((result) => {
+      if (!active) return;
+      setDashboard(result);
+      if (!result.sources.length && !autoDiscoveryStarted.current) {
+        autoDiscoveryStarted.current = true; setBusy(true);
+        api.discoverCompetitorSocial(projectId, competitorId).then((discovered) => { if (active) setDashboard(discovered); }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Автопоиск соцсетей недоступен"); }).finally(() => { if (active) setBusy(false); });
+      }
+    }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Не удалось загрузить соцсети"); });
+    return () => { active = false; };
+  }, [projectId, competitorId]);
   const add = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setError("");
     try {
@@ -486,8 +498,10 @@ function CompetitorSocialPanel({ projectId, competitorId }: { projectId: number;
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось подключить канал"); }
     finally { setBusy(false); }
   };
+  const discover = async () => { setBusy(true); setError(""); try { setDashboard(await api.discoverCompetitorSocial(projectId, competitorId)); } catch (reason) { setError(reason instanceof Error ? reason.message : "Автопоиск соцсетей недоступен"); } finally { setBusy(false); } };
   return <details className="competitor-social"><summary>Соцсети и ежедневные публикации · {dashboard?.total_posts ?? 0}</summary>
-    <p>Telegram и YouTube читаются из публичных каналов. Для VK и Instagram требуется официальный API-токен; он хранится зашифрованно.</p>
+    <div className="social-discovery"><div><b>{busy ? "Ищем профили и публикации…" : "Автоматический поиск по бренду"}</b><p>Система находит официальные соцсети на подтверждённом сайте конкурента, исключает дубли и ежедневно читает новые публичные публикации.</p></div><button className="secondary" onClick={discover} disabled={busy}>{busy ? "Поиск…" : "Найти автоматически"}</button></div>
+    <p>Telegram и YouTube читаются из публичных каналов. Для глобального поиска и данных VK/Instagram нужны официальные API-доступы; приложение не имитирует их работу.</p>
     {error ? <div className="error" role="alert">{error}</div> : null}
     <form onSubmit={add} className="social-source-form"><select aria-label="Социальная сеть" value={platform} onChange={(event) => setPlatform(event.target.value)}><option value="TELEGRAM">Telegram</option><option value="YOUTUBE">YouTube</option><option value="VK">VK</option><option value="INSTAGRAM">Instagram</option></select><input aria-label="URL профиля" type="url" placeholder="https://..." value={profileUrl} onChange={(event) => setProfileUrl(event.target.value)} required /><input aria-label="Идентификатор канала" placeholder={platform === "YOUTUBE" ? "Channel ID" : "username / profile ID"} value={externalId} onChange={(event) => setExternalId(event.target.value)} required />{["VK", "INSTAGRAM"].includes(platform) ? <input aria-label="API-токен соцсети" type="password" placeholder="Официальный API-токен" value={accessToken} onChange={(event) => setAccessToken(event.target.value)} required /> : null}<button className="secondary" disabled={busy}>{busy ? "Подключаем…" : "Добавить канал"}</button></form>
     {dashboard?.sources.length ? <div className="social-source-list">{dashboard.sources.map((source) => <article key={source.id}><header><div><b>{source.platform}</b><a href={source.profile_url} target="_blank" rel="noreferrer">{source.external_id}</a></div><Badge tone={source.status === "CONNECTED" ? "success" : source.status === "ERROR" ? "danger" : "warning"}>{source.status}</Badge></header>{source.last_error ? <p className="social-error">{source.last_error}</p> : null}<small>Последняя проверка: {source.last_scanned_at ? new Date(source.last_scanned_at).toLocaleString("ru-RU") : "ещё не выполнялась"}</small>{source.posts.slice(0, 5).map((post) => <div className="social-post" key={post.id}><div><a href={post.url} target="_blank" rel="noreferrer">{post.title || post.content.slice(0, 90) || "Публикация"}</a><small>{new Date(post.published_at).toLocaleDateString("ru-RU")} · просмотры {post.views ?? "нет данных"} · реакции {post.likes ?? "нет данных"}</small></div><strong>{post.significance_score.toFixed(0)}<span>значимость</span></strong></div>)}</article>)}</div> : <p className="empty-state">Каналы конкурента ещё не подключены.</p>}
