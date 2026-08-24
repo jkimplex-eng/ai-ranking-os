@@ -11,6 +11,7 @@ from backend.app.database import SessionLocal
 from backend.app.logging import configure_logging
 from competitor_intelligence.service import CompetitorIntelligenceService
 from competitor_intelligence.social_monitor import CompetitorSocialMonitorService
+from competitor_intelligence.telegram_connector import TelegramConnectionService
 from provider_connections.crypto import SecretCipher
 from provider_connections.repository import ProviderConnectionRepository
 from provider_connections.service import hydrate_provider_credentials
@@ -67,6 +68,11 @@ async def run_worker() -> None:
                         if social_sources:
                             logger.info(
                                 "Competitor social sources refreshed count=%s", social_sources
+                            )
+                        telegram_searches = TelegramConnectionService(db).run_due()
+                        if telegram_searches:
+                            logger.info(
+                                "Telegram brand searches processed count=%s", telegram_searches
                             )
                         alice_runs = build_alice_automation_service(db).run_due()
                         if alice_runs:

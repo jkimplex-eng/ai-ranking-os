@@ -33,6 +33,7 @@ import {
   type SimulationItem,
   type SystemProviderItem,
   type SocialDashboard,
+  type TelegramConnection,
   type WorkspaceProjectItem,
   type YandexWebmasterHost,
   type YandexWebmasterStatus,
@@ -476,6 +477,13 @@ function CompetitorSocialPanel({ projectId, competitorId }: { projectId: number;
   const [accessToken, setAccessToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [telegram, setTelegram] = useState<TelegramConnection>();
+  const [apiId, setApiId] = useState("");
+  const [apiHash, setApiHash] = useState("");
+  const [phone, setPhone] = useState("");
+  const [telegramCode, setTelegramCode] = useState("");
+  const [telegramPassword, setTelegramPassword] = useState("");
+  const [telegramQuery, setTelegramQuery] = useState("");
   const autoDiscoveryStarted = useRef(false);
   const load = useCallback(async () => { const result = await api.competitorSocial(projectId, competitorId); setDashboard(result); return result; }, [projectId, competitorId]);
   useEffect(() => {
@@ -490,6 +498,7 @@ function CompetitorSocialPanel({ projectId, competitorId }: { projectId: number;
     }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Не удалось загрузить соцсети"); });
     return () => { active = false; };
   }, [projectId, competitorId]);
+  useEffect(() => { api.telegramConnection().then(setTelegram).catch(() => setTelegram({ configured: false, status: "NOT_CONFIGURED" })); }, []);
   const add = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setError("");
     try {
@@ -499,9 +508,18 @@ function CompetitorSocialPanel({ projectId, competitorId }: { projectId: number;
     finally { setBusy(false); }
   };
   const discover = async () => { setBusy(true); setError(""); try { setDashboard(await api.discoverCompetitorSocial(projectId, competitorId)); } catch (reason) { setError(reason instanceof Error ? reason.message : "Автопоиск соцсетей недоступен"); } finally { setBusy(false); } };
+  const sendTelegramCode = async (event: FormEvent) => { event.preventDefault(); setBusy(true); setError(""); try { setTelegram(await api.telegramSendCode({ api_id: Number(apiId), api_hash: apiHash, phone_number: phone })); } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось запросить код Telegram"); } finally { setApiHash(""); setBusy(false); } };
+  const verifyTelegram = async (event: FormEvent) => { event.preventDefault(); setBusy(true); setError(""); try { setTelegram(await api.telegramVerify({ code: telegramCode, password: telegramPassword || undefined })); } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось подтвердить Telegram"); } finally { setTelegramCode(""); setTelegramPassword(""); setBusy(false); } };
+  const searchTelegram = async () => { setBusy(true); setError(""); try { setDashboard(await api.searchCompetitorTelegram(projectId, competitorId, telegramQuery)); } catch (reason) { setError(reason instanceof Error ? reason.message : "Поиск Telegram не выполнен"); } finally { setBusy(false); } };
   return <details className="competitor-social"><summary>Соцсети и ежедневные публикации · {dashboard?.total_posts ?? 0}</summary>
+    <section className="telegram-connection"><div className="telegram-connection__header"><div><span className="eyebrow">ПОИСК В ПУБЛИКАЦИЯХ</span><h3>Telegram</h3><p>Подключите служебный аккаунт один раз. API Hash, номер, сессия и 2FA не отображаются и не записываются в логи.</p></div><Badge tone={telegram?.configured ? "success" : telegram?.status === "PENDING_CODE" ? "warning" : "neutral"}>{telegram?.configured ? "ПОДКЛЮЧЕНО" : telegram?.status === "PENDING_CODE" ? "ОЖИДАЕТ КОД" : "НЕ ПОДКЛЮЧЕНО"}</Badge></div>
+      {!telegram?.configured && telegram?.status !== "PENDING_CODE" ? <form className="telegram-connect-form" onSubmit={sendTelegramCode}><input inputMode="numeric" aria-label="Telegram API ID" placeholder="API ID" value={apiId} onChange={(event) => setApiId(event.target.value.replace(/\D/g, ""))} required /><input type="password" autoComplete="off" aria-label="Telegram API Hash" placeholder="API Hash" value={apiHash} onChange={(event) => setApiHash(event.target.value)} required /><input type="tel" aria-label="Номер Telegram" placeholder="+79991234567" value={phone} onChange={(event) => setPhone(event.target.value)} required /><button className="secondary" disabled={busy}>Получить код</button></form> : null}
+      {!telegram?.configured && telegram?.status === "PENDING_CODE" ? <form className="telegram-connect-form" onSubmit={verifyTelegram}><p>Код отправлен на {telegram.phone_hint}. Введите его и пароль 2FA, если он включён.</p><input inputMode="numeric" aria-label="Код Telegram" placeholder="Код из Telegram" value={telegramCode} onChange={(event) => setTelegramCode(event.target.value.replace(/\D/g, ""))} required /><input type="password" autoComplete="one-time-code" aria-label="Пароль 2FA Telegram" placeholder="Пароль 2FA — если требуется" value={telegramPassword} onChange={(event) => setTelegramPassword(event.target.value)} /><button className="secondary" disabled={busy}>Подтвердить</button></form> : null}
+      {telegram?.configured ? <div className="telegram-search"><input aria-label="Поиск Telegram" placeholder="Оставьте пустым для поиска по бренду и алиасам" value={telegramQuery} onChange={(event) => setTelegramQuery(event.target.value)} /><button className="secondary" type="button" onClick={searchTelegram} disabled={busy}>{busy ? "Ищем…" : "Найти упоминания"}</button><small>Поиск выполняется по тексту сообщений доступных публичных каналов и чатов.</small></div> : null}
+      {telegram?.last_error ? <p className="social-error">{telegram.last_error}</p> : null}
+    </section>
     <div className="social-discovery"><div><b>{busy ? "Ищем профили и публикации…" : "Автоматический поиск по бренду"}</b><p>Система находит официальные соцсети на подтверждённом сайте конкурента, исключает дубли и ежедневно читает новые публичные публикации.</p></div><button className="secondary" onClick={discover} disabled={busy}>{busy ? "Поиск…" : "Найти автоматически"}</button></div>
-    <p>Telegram и YouTube читаются из публичных каналов. Для глобального поиска и данных VK/Instagram нужны официальные API-доступы; приложение не имитирует их работу.</p>
+    <p>Telegram ищет упоминания внутри доступных публичных сообщений после подключения MTProto. Для данных VK/Instagram нужны их официальные API-доступы; приложение не имитирует их работу.</p>
     {error ? <div className="error" role="alert">{error}</div> : null}
     <form onSubmit={add} className="social-source-form"><select aria-label="Социальная сеть" value={platform} onChange={(event) => setPlatform(event.target.value)}><option value="TELEGRAM">Telegram</option><option value="YOUTUBE">YouTube</option><option value="VK">VK</option><option value="INSTAGRAM">Instagram</option></select><input aria-label="URL профиля" type="url" placeholder="https://..." value={profileUrl} onChange={(event) => setProfileUrl(event.target.value)} required /><input aria-label="Идентификатор канала" placeholder={platform === "YOUTUBE" ? "Channel ID" : "username / profile ID"} value={externalId} onChange={(event) => setExternalId(event.target.value)} required />{["VK", "INSTAGRAM"].includes(platform) ? <input aria-label="API-токен соцсети" type="password" placeholder="Официальный API-токен" value={accessToken} onChange={(event) => setAccessToken(event.target.value)} required /> : null}<button className="secondary" disabled={busy}>{busy ? "Подключаем…" : "Добавить канал"}</button></form>
     {dashboard?.sources.length ? <div className="social-source-list">{dashboard.sources.map((source) => <article key={source.id}><header><div><b>{source.platform}</b><a href={source.profile_url} target="_blank" rel="noreferrer">{source.external_id}</a></div><Badge tone={source.status === "CONNECTED" ? "success" : source.status === "ERROR" ? "danger" : "warning"}>{source.status}</Badge></header>{source.last_error ? <p className="social-error">{source.last_error}</p> : null}<small>Последняя проверка: {source.last_scanned_at ? new Date(source.last_scanned_at).toLocaleString("ru-RU") : "ещё не выполнялась"}</small>{source.posts.slice(0, 5).map((post) => <div className="social-post" key={post.id}><div><a href={post.url} target="_blank" rel="noreferrer">{post.title || post.content.slice(0, 90) || "Публикация"}</a><small>{new Date(post.published_at).toLocaleDateString("ru-RU")} · просмотры {post.views ?? "нет данных"} · реакции {post.likes ?? "нет данных"}</small></div><strong>{post.significance_score.toFixed(0)}<span>значимость</span></strong></div>)}</article>)}</div> : <p className="empty-state">Каналы конкурента ещё не подключены.</p>}

@@ -4,19 +4,31 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend.app.database import Base, get_db
 from backend.app.main import app
-from competitor_intelligence.schemas import SocialPlatform, SocialSourceCreate
+from competitor_intelligence.models import TelegramConnection
+from competitor_intelligence.schemas import (
+    SocialPlatform,
+    SocialSourceCreate,
+    TelegramCodeVerify,
+    TelegramConnectionStart,
+    TelegramSearchRequest,
+)
 from competitor_intelligence.social_monitor import (
     CollectedPost,
     CompetitorSocialMonitorService,
     DiscoveredSource,
     HttpSocialCollector,
     WebsiteSocialDiscovery,
+)
+from competitor_intelligence.telegram_connector import (
+    TelegramChallenge,
+    TelegramConnectionService,
+    TelegramMessage,
 )
 from research.models import (
     ExtractedCitation,
@@ -64,6 +76,35 @@ def _project_and_competitor(client: TestClient) -> tuple[int, int]:
         },
     )
     return project_id, competitor.json()["id"]
+
+
+class _TelegramGateway:
+    def send_code(self, api_id, api_hash, phone, proxy):
+        assert api_id == 12345
+        assert api_hash == "a" * 32
+        assert phone == "+79991234567"
+        return TelegramChallenge("pending-session", "code-hash")
+
+    def verify(self, api_id, api_hash, phone, session, code_hash, code, password, proxy):
+        assert session == "pending-session"
+        assert code_hash == "code-hash"
+        assert code == "12345"
+        return "authorized-session"
+
+    def search(self, api_id, api_hash, session, query, limit, proxy):
+        assert session == "authorized-session"
+        return [
+            TelegramMessage(
+                channel_id="777",
+                channel_title="Beauty News",
+                channel_username="beauty_news",
+                message_id=42,
+                content=f"Публикация про {query}",
+                published_at=datetime(2026, 8, 24, tzinfo=UTC),
+                views=1500,
+                forwards=12,
+            )
+        ]
 
 
 def _completed_research(project_id: int) -> int:
@@ -179,6 +220,12 @@ def test_competitor_intelligence_is_documented_in_openapi(client: TestClient) ->
         "/competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/social/discover"
         in paths
     )
+    assert "/competitor-intelligence/telegram/connection/send-code" in paths
+    assert "/competitor-intelligence/telegram/connection/verify" in paths
+    assert (
+        "/competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/telegram/search"
+        in paths
+    )
 
 
 class _SocialCollector:
@@ -281,3 +328,44 @@ def test_social_monitor_saves_real_collector_results(client: TestClient) -> None
     assert dashboard.status_code == 200
     assert dashboard.json()["total_posts"] == 1
     assert "не доказывает влияние" in dashboard.json()["limitation"]
+
+
+def test_telegram_connection_encrypts_credentials_and_searches_message_content(
+    client: TestClient, monkeypatch
+) -> None:
+    project_id, competitor_id = _project_and_competitor(client)
+    settings = type(
+        "Settings",
+        (),
+        {"provider_secret_key": "t" * 32, "auth_jwt_secret": "j" * 32},
+    )()
+    monkeypatch.setattr("competitor_intelligence.telegram_connector.get_settings", lambda: settings)
+    with TestingSession() as db:
+        service = TelegramConnectionService(db, _TelegramGateway())
+        pending = service.start(
+            1,
+            TelegramConnectionStart(
+                api_id=12345,
+                api_hash="a" * 32,
+                phone_number="+79991234567",
+            ),
+        )
+        assert pending.status == "PENDING_CODE"
+        connected = service.verify(1, TelegramCodeVerify(code="12345"))
+        assert connected.configured is True
+        count = service.search_competitor(
+            1, project_id, competitor_id, TelegramSearchRequest(limit=20)
+        )
+        stored = service.db.scalar(
+            select(TelegramConnection).where(TelegramConnection.user_id == 1)
+        )
+
+    assert count == 1
+    assert stored is not None
+    assert "aaaaaaaa" not in stored.encrypted_api_hash
+    assert "+7999" not in stored.encrypted_phone
+    dashboard = client.get(
+        f"/competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/social"
+    ).json()
+    assert dashboard["total_posts"] == 1
+    assert all("Публикация про" in post["content"] for post in dashboard["sources"][0]["posts"])

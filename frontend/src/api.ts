@@ -93,6 +93,7 @@ export type CompetitorDashboard = {
 export type SocialPost = { id: number; external_post_id: string; url: string; title?: string; content: string; published_at: string; views?: number; likes?: number; comments?: number; shares?: number; engagement_rate?: number; significance_score: number };
 export type SocialSource = { id: number; competitor_id: number; platform: "TELEGRAM" | "INSTAGRAM" | "YOUTUBE" | "VK"; profile_url: string; external_id: string; configured: boolean; active: boolean; status: string; last_scanned_at?: string; next_scan_at?: string; last_error?: string; posts: SocialPost[] };
 export type SocialDashboard = { competitor_id: number; sources: SocialSource[]; total_posts: number; limitation: string };
+export type TelegramConnection = { configured: boolean; status: string; phone_hint?: string; last_connected_at?: string; last_error?: string };
 export type GeoAuditCheck = { code: string; category: string; title: string; passed: boolean; points: number; max_points: number; evidence: string; recommendation?: string };
 export type GeoSiteAudit = { id: number; project_id?: number; brand: string; website_url: string; final_url: string; score: number; grade: string; category_scores: Record<string, number>; checks: GeoAuditCheck[]; opportunities: Array<{ priority: string; problem: string; affected_metric: string; action: string; expected_effect: string; confidence: string; effort: string; verification: string }>; evidence: Record<string, unknown>; algorithm_version: string; limitation: string; created_at: string };
 export type ReportCatalogItem = { research_id: number; title: string; status: string; visibility_score?: number; created_at: string };
@@ -390,6 +391,11 @@ export class ApiClient {
   refreshCompetitorSocial(projectId: number, competitorId: number) { return this.request<SocialDashboard>(`/competitor-intelligence/projects/${projectId}/competitors/${competitorId}/social/refresh`, { method: "POST" }); }
   discoverCompetitorSocial(projectId: number, competitorId: number) { return this.request<SocialDashboard>(`/competitor-intelligence/projects/${projectId}/competitors/${competitorId}/social/discover`, { method: "POST" }); }
   deleteCompetitorSocial(projectId: number, competitorId: number, sourceId: number) { return this.request<void>(`/competitor-intelligence/projects/${projectId}/competitors/${competitorId}/social/${sourceId}`, { method: "DELETE" }); }
+  telegramConnection() { return this.request<TelegramConnection>("/competitor-intelligence/telegram/connection"); }
+  telegramSendCode(payload: { api_id: number; api_hash: string; phone_number: string; proxy?: { host: string; port: number; username?: string; password?: string } }) { return this.request<TelegramConnection>("/competitor-intelligence/telegram/connection/send-code", { method: "POST", body: JSON.stringify(payload) }); }
+  telegramVerify(payload: { code: string; password?: string }) { return this.request<TelegramConnection>("/competitor-intelligence/telegram/connection/verify", { method: "POST", body: JSON.stringify(payload) }); }
+  telegramDisconnect() { return this.request<void>("/competitor-intelligence/telegram/connection", { method: "DELETE" }); }
+  searchCompetitorTelegram(projectId: number, competitorId: number, query?: string) { return this.request<SocialDashboard>(`/competitor-intelligence/projects/${projectId}/competitors/${competitorId}/telegram/search`, { method: "POST", body: JSON.stringify({ query: query?.trim() || null, limit: 50 }) }); }
   runGeoSiteAudit(payload: { brand: string; website_url: string; project_id?: number }) { return this.request<GeoSiteAudit>("/geo/site-audits", { method: "POST", body: JSON.stringify(payload) }); }
   geoSiteAudits(projectId?: number) { return this.request<GeoSiteAudit[]>(`/geo/site-audits${projectId ? `?project_id=${projectId}` : ""}`); }
   feedback() { return this.request<FeedbackItem[]>("/feedback"); }

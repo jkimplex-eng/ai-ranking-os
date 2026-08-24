@@ -12,12 +12,17 @@ from competitor_intelligence.schemas import (
     SocialDashboardRead,
     SocialSourceCreate,
     SocialSourceRead,
+    TelegramCodeVerify,
+    TelegramConnectionRead,
+    TelegramConnectionStart,
+    TelegramSearchRequest,
 )
 from competitor_intelligence.service import CompetitorIntelligenceService
 from competitor_intelligence.social_monitor import (
     CompetitorSocialMonitorService,
     SocialMonitorError,
 )
+from competitor_intelligence.telegram_connector import TelegramConnectionService
 from project_monitoring.dependencies import current_user_id
 from project_monitoring.repository import MonitorRepository
 from project_monitoring.schemas import MonitorFrequency, MonitorModel, ProjectMonitorUpsert
@@ -29,6 +34,37 @@ from workspace.repository import ProjectNotFoundError, ProjectRepository, Worksp
 router = APIRouter(prefix="/competitor-intelligence", tags=["competitor-intelligence"])
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentUserId = Annotated[int, Depends(current_user_id)]
+
+
+@router.get("/telegram/connection", response_model=TelegramConnectionRead)
+def telegram_connection(user_id: CurrentUserId, db: DbSession) -> TelegramConnectionRead:
+    return TelegramConnectionService(db).status(user_id)
+
+
+@router.post("/telegram/connection/send-code", response_model=TelegramConnectionRead)
+def telegram_send_code(
+    payload: TelegramConnectionStart, user_id: CurrentUserId, db: DbSession
+) -> TelegramConnectionRead:
+    try:
+        return TelegramConnectionService(db).start(user_id, payload)
+    except SocialMonitorError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/telegram/connection/verify", response_model=TelegramConnectionRead)
+def telegram_verify(
+    payload: TelegramCodeVerify, user_id: CurrentUserId, db: DbSession
+) -> TelegramConnectionRead:
+    try:
+        return TelegramConnectionService(db).verify(user_id, payload)
+    except SocialMonitorError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.delete("/telegram/connection", status_code=status.HTTP_204_NO_CONTENT)
+def telegram_disconnect(user_id: CurrentUserId, db: DbSession) -> Response:
+    TelegramConnectionService(db).disconnect(user_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/projects/{project_id}", response_model=CompetitorDashboardRead)
@@ -163,6 +199,24 @@ def discover_social(
 ) -> SocialDashboardRead:
     try:
         return CompetitorSocialMonitorService(db).discover(user_id, project_id, competitor_id)
+    except (ProjectNotFoundError, SocialMonitorError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post(
+    "/projects/{project_id}/competitors/{competitor_id}/telegram/search",
+    response_model=SocialDashboardRead,
+)
+def search_telegram_mentions(
+    project_id: int,
+    competitor_id: int,
+    payload: TelegramSearchRequest,
+    user_id: CurrentUserId,
+    db: DbSession,
+) -> SocialDashboardRead:
+    try:
+        TelegramConnectionService(db).search_competitor(user_id, project_id, competitor_id, payload)
+        return CompetitorSocialMonitorService(db).dashboard(user_id, project_id, competitor_id)
     except (ProjectNotFoundError, SocialMonitorError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 

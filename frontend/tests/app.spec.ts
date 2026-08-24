@@ -34,6 +34,7 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
   let projectCreated = false;
   let competitorCreated = false;
   let socialConnected = false;
+  let telegramStatus = "NOT_CONFIGURED";
   const dashboard = () => ({
     project_id: 10,
     monitoring_enabled: false,
@@ -82,6 +83,9 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
     let json: unknown = {};
     if (path.endsWith("/auth/login")) json = { access_token: "access", refresh_token: "refresh-token-with-valid-length" };
     else if (path.endsWith("/auth/me")) json = { id: 1, display_name: "Admin", email: "admin@example.com", roles: ["superadmin"] };
+    else if (path.endsWith("/competitor-intelligence/telegram/connection/send-code")) { telegramStatus = "PENDING_CODE"; json = { configured: false, status: telegramStatus, phone_hint: "+79***67" }; }
+    else if (path.endsWith("/competitor-intelligence/telegram/connection/verify")) { telegramStatus = "CONNECTED"; json = { configured: true, status: telegramStatus, phone_hint: "+79***67" }; }
+    else if (path.endsWith("/competitor-intelligence/telegram/connection")) json = { configured: telegramStatus === "CONNECTED", status: telegramStatus, phone_hint: telegramStatus === "NOT_CONFIGURED" ? null : "+79***67" };
     else if (path.endsWith("/workspace/projects") && request.method() === "POST") {
       projectCreated = true;
       status = 201;
@@ -129,6 +133,13 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
   await expect(page.getByRole("link", { name: "Обзор сывороток" })).toBeVisible();
   await expect(page.getByText(/не доказывает причинное влияние/)).toBeVisible();
   await page.getByText(/Соцсети и ежедневные публикации/).click();
+  await page.getByLabel("Telegram API ID").fill("12345");
+  await page.getByLabel("Telegram API Hash").fill("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+  await page.getByLabel("Номер Telegram").fill("+79991234567");
+  await page.getByRole("button", { name: "Получить код" }).click();
+  await page.getByLabel("Код Telegram").fill("12345");
+  await page.getByRole("button", { name: "Подтвердить" }).click();
+  await expect(page.getByText("ПОДКЛЮЧЕНО")).toBeVisible();
   await page.getByLabel("URL профиля").fill("https://t.me/librederm");
   await page.getByLabel("Идентификатор канала").fill("librederm");
   await page.getByRole("button", { name: "Добавить канал" }).click();

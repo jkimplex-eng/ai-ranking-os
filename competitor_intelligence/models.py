@@ -139,3 +139,31 @@ class CompetitorSocialPost(Base):
     last_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False
     )
+
+
+class TelegramConnection(Base):
+    __tablename__ = "telegram_connections"
+    __table_args__ = (UniqueConstraint("user_id", name="uq_telegram_connections_user"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    api_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    encrypted_api_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    encrypted_phone: Mapped[str] = mapped_column(Text, nullable=False)
+    encrypted_session: Mapped[str | None] = mapped_column(Text)
+    encrypted_code_hash: Mapped[str | None] = mapped_column(Text)
+    encrypted_proxy: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="PENDING_CODE", nullable=False)
+    phone_hint: Mapped[str] = mapped_column(String(30), nullable=False)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    last_connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_search_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("CURRENT_TIMESTAMP"),
+        onupdate=text("CURRENT_TIMESTAMP"),
+        nullable=False,
+    )

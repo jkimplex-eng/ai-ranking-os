@@ -15,6 +15,11 @@ API:
 - `POST /competitor-intelligence/projects/{project_id}/refresh`
 - `PUT /competitor-intelligence/projects/{project_id}/daily-monitoring`
 - `POST /competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/social/discover`
+- `GET /competitor-intelligence/telegram/connection`
+- `POST /competitor-intelligence/telegram/connection/send-code`
+- `POST /competitor-intelligence/telegram/connection/verify`
+- `DELETE /competitor-intelligence/telegram/connection`
+- `POST /competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/telegram/search`
 
 Social monitoring uses the same module and the existing worker queue. Telegram public previews
 and YouTube feeds work without credentials. VK and Instagram use official APIs and require an
@@ -25,3 +30,13 @@ Auto-discovery reads only competitor-owned public websites, extracts explicit so
 deduplicates them, and starts the existing collectors. It blocks private and loopback addresses to
 prevent SSRF. Global brand search is intentionally not simulated: YouTube, VK, Instagram, and
 Telegram-wide search require their respective official credentials and quota.
+
+## Telegram MTProto
+
+The connection wizard stores `api_hash`, phone, optional SOCKS5 configuration, code challenge and
+the resulting Telethon string session encrypted with the platform provider secret. Verification
+codes and 2FA passwords are never persisted. Once connected, the service searches message content
+for the competitor name and aliases, saves evidence under the existing social source/post model,
+and repeats searches daily through the existing worker. Only messages visible to the authorized
+service account can be collected. Telegram content is evidence for deterministic analytics and is
+not used to train or fine-tune an ML/LLM model.

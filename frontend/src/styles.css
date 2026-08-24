@@ -140,13 +140,14 @@
 .social-source-list small { color: var(--muted); }
 .social-error { color: #fca5a5; }
 .social-discovery{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:14px 0;padding:16px;border:1px solid #2e4f78;border-radius:13px;background:#10223b}.social-discovery b{color:#dceaff}.social-discovery p{margin:5px 0 0}.social-discovery button{flex:0 0 auto;margin:0}
+.telegram-connection{margin:18px 0;padding:20px;border:1px solid #315f97;border-radius:16px;background:linear-gradient(135deg,#102846,#0c192b)}.telegram-connection__header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.telegram-connection h3{margin:4px 0;font-size:24px}.telegram-connection p{margin:5px 0;color:#9fbee5}.telegram-connect-form,.telegram-search{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:10px;align-items:center;margin-top:16px}.telegram-connect-form p,.telegram-search small{grid-column:1/-1}.telegram-search{grid-template-columns:minmax(0,1fr) auto}.telegram-connect-form input,.telegram-search input{min-width:0}
 .social-post { display: grid; grid-template-columns: 1fr auto; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--border); }
 .social-post > div { display: grid; gap: 4px; }
 .social-post > strong { display: grid; text-align: right; color: var(--success); font-size: 1.3rem; }
 .social-post > strong span { color: var(--muted); font-size: 9px; font-weight: 500; }
 @media (max-width: 1000px) { .geo-site-audit { grid-template-columns: 1fr; }.social-source-form { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 620px) { .geo-audit-categories, .social-source-form { grid-template-columns: 1fr; }.social-post { grid-template-columns: 1fr; }.social-post > strong { text-align: left; } }
-@media (max-width: 620px) { .social-discovery { align-items:stretch; flex-direction:column; } }
+@media (max-width: 620px) { .social-discovery,.telegram-connection__header { align-items:stretch; flex-direction:column; } .telegram-connect-form,.telegram-search{grid-template-columns:1fr} }
 .wizard-page .model { color: #eaf0fb; text-align: left; }
 .wizard-page .model b { color: #f5f8ff; }
 .wizard-page .model small { color: #9fb0c8; }

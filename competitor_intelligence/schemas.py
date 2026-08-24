@@ -116,3 +116,35 @@ class SocialDashboardRead(BaseModel):
         "Значимость публикации основана на доступных публичных метриках и повторных "
         "наблюдениях; она не доказывает влияние на выдачу AI."
     )
+
+
+class TelegramProxyInput(BaseModel):
+    host: str = Field(min_length=1, max_length=253)
+    port: int = Field(ge=1, le=65535)
+    username: str | None = Field(default=None, max_length=300)
+    password: str | None = Field(default=None, max_length=1000)
+
+
+class TelegramConnectionStart(BaseModel):
+    api_id: int = Field(gt=0)
+    api_hash: str = Field(min_length=20, max_length=200)
+    phone_number: str = Field(pattern=r"^\+[1-9]\d{7,14}$")
+    proxy: TelegramProxyInput | None = None
+
+
+class TelegramCodeVerify(BaseModel):
+    code: str = Field(pattern=r"^\d{3,10}$")
+    password: str | None = Field(default=None, min_length=1, max_length=1000)
+
+
+class TelegramConnectionRead(BaseModel):
+    configured: bool
+    status: str
+    phone_hint: str | None = None
+    last_connected_at: datetime | None = None
+    last_error: str | None = None
+
+
+class TelegramSearchRequest(BaseModel):
+    query: str | None = Field(default=None, min_length=2, max_length=300)
+    limit: int = Field(default=50, ge=1, le=100)
