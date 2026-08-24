@@ -29,6 +29,7 @@ test("all production navigation routes use the real backend", async ({ page }) =
   await page.getByText("Для экспертов", { exact: true }).click();
   await page.getByText("Рабочее пространство", { exact: true }).click();
   const routes = [
+    ["Как пользоваться", "/expert-guide", "Инструменты для глубокого анализа"],
     ["Как начать", "/getting-started", "Начните с первого результата"],
     ["Все исследования", "/research", "Исследования"],
     ["Результаты", "/reports", "Отчёты"],

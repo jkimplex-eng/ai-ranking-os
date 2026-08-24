@@ -58,6 +58,7 @@ import "./styles.css";
 const api = new ApiClient();
 const screenPaths: Record<Screen, string> = {
   home: "/",
+  expert: "/expert-guide",
   onboarding: "/getting-started",
   research: "/research",
   wizard: "/research/new",
@@ -96,7 +97,7 @@ const metricMeta = [
   ["Достоверность", "confidence_score"],
 ] as const;
 
-type Screen = "home" | "research" | "wizard" | "reports" | "report" | "recommendations" | "graph" | "geo" | "competitors" | "history" | "providers" | "analytics" | "notifications" | "organization" | "settings" | "feedback" | "profile" | "admin" | "onboarding";
+type Screen = "home" | "expert" | "research" | "wizard" | "reports" | "report" | "recommendations" | "graph" | "geo" | "competitors" | "history" | "providers" | "analytics" | "notifications" | "organization" | "settings" | "feedback" | "profile" | "admin" | "onboarding";
 type ReportShape = {
   executive_summary?: string;
   research?: ResearchItem;
@@ -269,6 +270,7 @@ function Shell({
     ["◇", "Конкуренты", "competitors"],
   ] as const;
   const expertNavSource = [
+    ["?", "Как пользоваться", "expert"],
     ["◉", "Все исследования", "research"], ["↗", "История изменений", "history"],
     ["⌘", "Связи и источники", "graph"], ["◈", "Где публиковаться", "geo"],
     ["✦", "Подключения ИИ", "providers"], ["◫", "Аналитика продукта", "analytics"],
@@ -717,6 +719,23 @@ function OrganizationScreen() {
     <section className="analytics-kpis"><article className="analytics-card metric"><span>Участники</span><strong>{members.length}</strong><small>из {current?.limits.members ?? "—"}</small></article><article className="analytics-card metric"><span>Проекты</span><strong>{current?.limits.projects ?? "—"}</strong><small>доступный лимит</small></article><article className="analytics-card metric"><span>Часовой пояс</span><strong className="small-value">{current?.timezone ?? "UTC"}</strong><small>{current?.country ?? "GLOBAL"}</small></article></section>
     <section className="analytics-grid"><article className="analytics-card"><h3>Команда</h3>{members.map((member) => <div className="rank-row" key={member.id}><span>User {member.user_id}</span><b>{member.role}</b></div>)}<form className="invite-form" onSubmit={(event) => { event.preventDefault(); if (selected) api.inviteOrganizationMember(selected, email).then(() => setEmail("")); }}><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="email нового участника" required/><button>Пригласить</button></form></article><article className="analytics-card"><h3>Журнал активности</h3>{activity.slice(0, 8).map((item) => <div className="activity-row" key={item.id}><span>{item.action.replaceAll("_", " ")}</span><small>{new Date(item.created_at).toLocaleString("ru-RU")}</small></div>)}</article></section>
     </>}
+  </main>;
+}
+
+function ExpertGuideScreen({ onNavigate }: { onNavigate: (screen: Screen) => void }) {
+  const tools = [
+    { icon: "▤", title: "Разобраться в оценке", text: "Посмотрите, из каких ответов, упоминаний и источников сложилась видимость бренда.", action: "Открыть результаты", target: "reports" as Screen },
+    { icon: "◈", title: "Понять, где публиковаться", text: "Сравните площадки по найденным доказательствам и получите приоритеты для размещений.", action: "Открыть площадки", target: "geo" as Screen },
+    { icon: "◇", title: "Понять успех конкурентов", text: "Узнайте, где конкурентов упоминают, какие публикации совпадают с ростом их видимости.", action: "Открыть конкурентов", target: "competitors" as Screen },
+    { icon: "⌘", title: "Проверить связи и источники", text: "Граф показывает реальные сущности, сайты и связи, найденные в ответах моделей.", action: "Открыть связи", target: "graph" as Screen },
+    { icon: "↗", title: "Увидеть изменения", text: "Сравните повторные исследования и проверьте, дали ли выполненные действия результат.", action: "Открыть историю", target: "history" as Screen },
+    { icon: "✦", title: "Подключить модели", text: "Проверьте доступность своих API-подключений. Исследования используют только реально подключённые модели.", action: "Открыть подключения", target: "providers" as Screen },
+  ];
+  return <main className="analytics-page expert-guide-page">
+    <header className="analytics-hero"><div><span className="eyebrow">ПУТЕВОДИТЕЛЬ</span><h1>Инструменты для глубокого анализа</h1><p>Не нужно изучать всю платформу. Выберите задачу — мы покажем только нужный инструмент и ожидаемый результат.</p></div><button className="primary-action" onClick={() => onNavigate("wizard")}>Начать исследование</button></header>
+    <section className="expert-route analytics-card"><div><span>1</span><b>Проведите исследование</b><small>Одинаковый набор запросов</small></div><i>→</i><div><span>2</span><b>Изучите доказательства</b><small>Ответы, источники, конкуренты</small></div><i>→</i><div><span>3</span><b>Выполните план</b><small>Публикации и улучшения</small></div><i>→</i><div><span>4</span><b>Повторите проверку</b><small>Подтвердите изменение</small></div></section>
+    <section className="expert-tool-grid">{tools.map((tool) => <article className="analytics-card expert-tool" key={tool.title}><span className="expert-tool-icon">{tool.icon}</span><div><h2>{tool.title}</h2><p>{tool.text}</p></div><button onClick={() => onNavigate(tool.target)}>{tool.action} →</button></article>)}</section>
+    <section className="analytics-card expert-language"><div><span className="eyebrow">БЕЗ ТЕХНИЧЕСКИХ ТЕРМИНОВ</span><h2>Как читать данные</h2></div><dl><div><dt>Видимость</dt><dd>Как часто и насколько заметно модели называют и рекомендуют бренд.</dd></div><div><dt>Цитирование</dt><dd>Есть ли в ответах внешние ссылки, подтверждающие информацию о бренде.</dd></div><div><dt>Влияние площадки</dt><dd>Наблюдаемая связь между публикациями на ресурсе и изменением выдачи. Не гарантия результата.</dd></div><div><dt>Граф знаний</dt><dd>Карта брендов, продуктов, людей, сайтов и найденных между ними связей.</dd></div></dl></section>
   </main>;
 }
 
@@ -2095,6 +2114,8 @@ function App() {
         <main className="analytics-page"><div className="error" role="alert">Недостаточно прав для просмотра этого раздела.</div></main>
       ) : screen === "onboarding" ? (
         <OnboardingScreen onResearch={() => navigate("wizard")} onOrganization={() => navigate("organization")} />
+      ) : screen === "expert" ? (
+        <ExpertGuideScreen onNavigate={navigate} />
       ) : screen === "report" && report ? (
         <Report result={report} onHome={() => navigate("home")} />
       ) : loading ? (
