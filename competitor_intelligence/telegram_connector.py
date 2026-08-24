@@ -164,6 +164,8 @@ class TelethonGateway:
         async def run() -> list[TelegramMessage]:
             from telethon import TelegramClient
             from telethon.sessions import StringSession
+            from telethon.tl.functions.channels import SearchPostsRequest
+            from telethon.tl.types import InputPeerEmpty
 
             client = TelegramClient(
                 StringSession(session), api_id, api_hash, proxy=self._proxy(proxy)
@@ -173,31 +175,55 @@ class TelethonGateway:
                 await client.connect()
                 if not await client.is_user_authorized():
                     raise SocialMonitorError("Telegram-сессия истекла; подключите аккаунт повторно")
-                async for message in client.iter_messages(None, search=query, limit=limit):
-                    if not message.message or not message.peer_id:
-                        continue
-                    chat = await message.get_chat()
-                    username = getattr(chat, "username", None)
-                    channel_id = str(getattr(chat, "id", ""))
-                    if not channel_id:
-                        continue
-                    found.append(
-                        TelegramMessage(
-                            channel_id=channel_id,
-                            channel_title=getattr(chat, "title", username or channel_id),
-                            channel_username=username,
-                            message_id=message.id,
-                            content=message.message,
-                            published_at=message.date,
-                            views=message.views,
-                            forwards=message.forwards,
-                        )
+                # This raw method searches Telegram's global index of public channel
+                # posts, including channels which the account has not joined.
+                result = await client(
+                    SearchPostsRequest(
+                        query=query,
+                        offset_rate=0,
+                        offset_peer=InputPeerEmpty(),
+                        offset_id=0,
+                        limit=min(limit, 100),
                     )
+                )
+                found.extend(self._messages(result))
                 return found
             finally:
                 await client.disconnect()
 
         return self._run(run())
+
+    @staticmethod
+    def _messages(result: object) -> list[TelegramMessage]:
+        chats = {
+            int(chat.id): chat
+            for chat in getattr(result, "chats", [])
+            if getattr(chat, "id", None) is not None
+        }
+        found: list[TelegramMessage] = []
+        for message in getattr(result, "messages", []):
+            content = getattr(message, "message", None)
+            peer = getattr(message, "peer_id", None)
+            channel_id = getattr(peer, "channel_id", None)
+            if not content or channel_id is None:
+                continue
+            chat = chats.get(int(channel_id))
+            username = getattr(chat, "username", None) if chat else None
+            if not username:
+                continue
+            found.append(
+                TelegramMessage(
+                    channel_id=str(channel_id),
+                    channel_title=getattr(chat, "title", username),
+                    channel_username=username,
+                    message_id=int(message.id),
+                    content=content,
+                    published_at=message.date,
+                    views=getattr(message, "views", None),
+                    forwards=getattr(message, "forwards", None),
+                )
+            )
+        return found
 
 
 class TelegramConnectionService:
@@ -435,6 +461,10 @@ class TelegramConnectionService:
             "PhoneCodeExpiredError": "Код Telegram истёк; запросите новый",
             "PasswordHashInvalidError": "Неверный пароль 2FA",
             "FloodWaitError": "Telegram временно ограничил запросы; повторите позже",
+            "PremiumAccountRequiredError": (
+                "Глобальный поиск по публичным каналам требует Telegram Premium "
+                "для подключённого аккаунта"
+            ),
         }
         return safe.get(name, str(error)[:500] or "Ошибка соединения с Telegram")
 

@@ -1,5 +1,6 @@
 from collections.abc import Generator
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -29,6 +30,7 @@ from competitor_intelligence.telegram_connector import (
     TelegramChallenge,
     TelegramConnectionService,
     TelegramMessage,
+    TelethonGateway,
 )
 from research.models import (
     ExtractedCitation,
@@ -48,6 +50,40 @@ engine = create_engine(
     poolclass=StaticPool,
 )
 TestingSession = sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def test_telegram_global_search_maps_only_public_channel_posts() -> None:
+    published = datetime(2026, 8, 24, tzinfo=UTC)
+    result = SimpleNamespace(
+        chats=[
+            SimpleNamespace(id=100, title="Public Beauty", username="public_beauty"),
+            SimpleNamespace(id=200, title="Private Beauty", username=None),
+        ],
+        messages=[
+            SimpleNamespace(
+                id=10,
+                peer_id=SimpleNamespace(channel_id=100),
+                message="Skinjestique serum",
+                date=published,
+                views=500,
+                forwards=5,
+            ),
+            SimpleNamespace(
+                id=20,
+                peer_id=SimpleNamespace(channel_id=200),
+                message="Not publicly addressable",
+                date=published,
+                views=None,
+                forwards=None,
+            ),
+        ],
+    )
+
+    messages = TelethonGateway._messages(result)
+
+    assert len(messages) == 1
+    assert messages[0].channel_username == "public_beauty"
+    assert messages[0].content == "Skinjestique serum"
 
 
 @pytest.fixture
