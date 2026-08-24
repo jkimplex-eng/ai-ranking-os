@@ -110,8 +110,12 @@ class TelethonGateway:
                 super().set_dc(dc_id, server_address, 80)
 
         string_session = StringSession(session) if proxy else DirectStringSession(session)
-        if not proxy and not string_session.server_address:
-            string_session.set_dc(2, "149.154.167.51", 80)
+        if not proxy:
+            string_session.set_dc(
+                string_session.dc_id or 2,
+                string_session.server_address or "149.154.167.51",
+                80,
+            )
         client = TelegramClient(
             string_session,
             api_id,

@@ -92,6 +92,18 @@ def test_telegram_direct_connection_uses_reachable_mtproto_port() -> None:
     assert client.session.port == 80
 
 
+def test_telegram_existing_session_is_moved_from_blocked_port() -> None:
+    from telethon.sessions import StringSession
+
+    stored = StringSession()
+    stored.set_dc(2, "149.154.167.51", 443)
+
+    client = TelethonGateway._client(stored.save(), 12345, "a" * 32, None)
+
+    assert client.session.server_address == "149.154.167.51"
+    assert client.session.port == 80
+
+
 @pytest.fixture
 def client() -> Generator[TestClient]:
     Base.metadata.create_all(engine)
