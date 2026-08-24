@@ -100,14 +100,36 @@ class TelethonGateway:
             value.get("password"),
         )
 
+    @classmethod
+    def _client(cls, session: str, api_id: int, api_hash: str, proxy: dict | None):
+        from telethon import TelegramClient
+        from telethon.sessions import StringSession
+
+        class DirectStringSession(StringSession):
+            def set_dc(self, dc_id: int, server_address: str, port: int) -> None:
+                super().set_dc(dc_id, server_address, 80)
+
+        string_session = StringSession(session) if proxy else DirectStringSession(session)
+        if not proxy and not string_session.server_address:
+            string_session.set_dc(2, "149.154.167.51", 80)
+        client = TelegramClient(
+            string_session,
+            api_id,
+            api_hash,
+            proxy=cls._proxy(proxy),
+            connection_retries=2,
+            timeout=15,
+        )
+        # Telegram supports MTProto on ports 80 and 443. Timeweb currently drops
+        # outbound Telegram traffic on 443 while port 80 remains reachable. A
+        # configured SOCKS proxy owns its destination routing and is left intact.
+        return client
+
     def send_code(
         self, api_id: int, api_hash: str, phone: str, proxy: dict | None
     ) -> TelegramChallenge:
         async def run() -> TelegramChallenge:
-            from telethon import TelegramClient
-            from telethon.sessions import StringSession
-
-            client = TelegramClient(StringSession(), api_id, api_hash, proxy=self._proxy(proxy))
+            client = self._client("", api_id, api_hash, proxy)
             try:
                 await client.connect()
                 sent = await client.send_code_request(phone)
@@ -129,13 +151,9 @@ class TelethonGateway:
         proxy: dict | None,
     ) -> str:
         async def run() -> str:
-            from telethon import TelegramClient
             from telethon.errors import SessionPasswordNeededError
-            from telethon.sessions import StringSession
 
-            client = TelegramClient(
-                StringSession(session), api_id, api_hash, proxy=self._proxy(proxy)
-            )
+            client = self._client(session, api_id, api_hash, proxy)
             try:
                 await client.connect()
                 try:
@@ -162,14 +180,10 @@ class TelethonGateway:
         proxy: dict | None,
     ) -> list[TelegramMessage]:
         async def run() -> list[TelegramMessage]:
-            from telethon import TelegramClient
-            from telethon.sessions import StringSession
             from telethon.tl.functions.channels import SearchPostsRequest
             from telethon.tl.types import InputPeerEmpty
 
-            client = TelegramClient(
-                StringSession(session), api_id, api_hash, proxy=self._proxy(proxy)
-            )
+            client = self._client(session, api_id, api_hash, proxy)
             found: list[TelegramMessage] = []
             try:
                 await client.connect()
@@ -461,6 +475,9 @@ class TelegramConnectionService:
             "PhoneCodeExpiredError": "Код Telegram истёк; запросите новый",
             "PasswordHashInvalidError": "Неверный пароль 2FA",
             "FloodWaitError": "Telegram временно ограничил запросы; повторите позже",
+            "ConnectionError": (
+                "VPS не может установить соединение с Telegram; повторите через минуту"
+            ),
             "PremiumAccountRequiredError": (
                 "Глобальный поиск по публичным каналам требует Telegram Premium "
                 "для подключённого аккаунта"

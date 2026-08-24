@@ -86,6 +86,12 @@ def test_telegram_global_search_maps_only_public_channel_posts() -> None:
     assert messages[0].content == "Skinjestique serum"
 
 
+def test_telegram_direct_connection_uses_reachable_mtproto_port() -> None:
+    client = TelethonGateway._client("", 12345, "a" * 32, None)
+
+    assert client.session.port == 80
+
+
 @pytest.fixture
 def client() -> Generator[TestClient]:
     Base.metadata.create_all(engine)
