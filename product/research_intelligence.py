@@ -35,7 +35,46 @@ class QueryScenario:
 class QueryMapBuilder:
     """Build natural buyer questions from verified brand and product context."""
 
-    VERSION = "2.0"
+    VERSION = "2.1"
+    CURATED_QUERY_SETS: dict[str, tuple[tuple[str, str], ...]] = {
+        "skillbox": (
+            ("design", "Где учиться дизайну с нуля онлайн?"),
+            ("design", "Какой курс графического дизайна выбрать для смены профессии?"),
+            ("design", "Посоветуй обучение UX/UI-дизайну с практикой и портфолио."),
+            ("design", "Какую онлайн-школу дизайна выбрать работающему человеку?"),
+            ("design", "Где учиться дизайну, чтобы искать работу в Москве?"),
+            ("generative_ai", "Где научиться пользоваться нейросетями для работы с нуля?"),
+            (
+                "generative_ai",
+                "Какой практический курс по генеративному ИИ выбрать маркетологу?",
+            ),
+            (
+                "generative_ai",
+                "Посоветуй обучение нейросетям для создания текста, изображений и видео.",
+            ),
+            (
+                "generative_ai",
+                "Какой онлайн-курс по ИИ подойдёт без технического образования?",
+            ),
+            ("generative_ai", "Где в России учиться применению нейросетей в бизнесе?"),
+            ("programming", "Какую онлайн-школу программирования выбрать новичку?"),
+            ("programming", "Где учиться Python с нуля для смены профессии?"),
+            ("programming", "Какой курс веб-разработки выбрать работающему человеку?"),
+            (
+                "programming",
+                "Посоветуй обучение программированию с проектами и карьерной поддержкой.",
+            ),
+            ("programming", "Где учиться разработке, чтобы искать первую работу в Москве?"),
+            ("marketing", "Где учиться интернет-маркетингу с нуля?"),
+            ("marketing", "Какой онлайн-курс выбрать для перехода в digital-маркетинг?"),
+            (
+                "marketing",
+                "Посоветуй обучение performance-маркетингу с практическими заданиями.",
+            ),
+            ("marketing", "Какую школу выбрать для изучения SMM, рекламы и аналитики?"),
+            ("marketing", "Где учиться маркетингу для работы с российскими компаниями?"),
+        ),
+    }
 
     def build(
         self,
@@ -49,6 +88,25 @@ class QueryMapBuilder:
         competitor_profiles: list[dict[str, Any]] | None = None,
     ) -> list[QueryScenario]:
         is_english = language.casefold().startswith("en")
+        curated = self.CURATED_QUERY_SETS.get(brand.casefold().strip())
+        if curated and not is_english:
+            return [
+                QueryScenario(
+                    id=str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            f"ai-ranking-query:{brand}:{region}:{cluster}:{text}",
+                        )
+                    ),
+                    cluster=cluster,
+                    intent="recommendation",
+                    text=text,
+                    buyer_stage="consideration",
+                    brand_mode="unbranded",
+                    rationale="Проверяет естественный покупательский спрос в направлении обучения.",
+                )
+                for cluster, text in curated
+            ]
         profile_data = brand_profile or {}
         detected_categories = [
             str(item).strip() for item in profile_data.get("categories", []) if item

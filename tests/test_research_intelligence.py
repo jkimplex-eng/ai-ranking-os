@@ -109,6 +109,30 @@ def test_universal_education_queries_never_use_beauty_vocabulary() -> None:
     assert all(word not in combined for word in ("космет", "сыворот", "кож", "skincare"))
 
 
+def test_skillbox_uses_curated_buyer_query_set() -> None:
+    catalog = QueryMapBuilder().build(
+        brand="skillbox",
+        language="ru",
+        region="RU-MOW",
+        profile="UNIVERSAL",
+        variables={},
+        brand_profile={"categories": ["Онлайн-образование"]},
+    )
+
+    assert len(catalog) == 20
+    assert {item.cluster for item in catalog} == {
+        "design",
+        "generative_ai",
+        "programming",
+        "marketing",
+    }
+    assert catalog[0].text == "Где учиться дизайну с нуля онлайн?"
+    assert catalog[-1].text == (
+        "Где учиться маркетингу для работы с российскими компаниями?"
+    )
+    assert all(item.brand_mode == "unbranded" for item in catalog)
+
+
 def test_query_map_uses_brand_context_for_narrow_buyer_queries() -> None:
     catalog = QueryMapBuilder().build(
         brand="Skinjestique",
