@@ -1585,7 +1585,7 @@ function Wizard({
     ["RU-PER", "Пермь"],
     ["RU-VGG", "Волгоград"],
   ] as const;
-  const saved = useMemo(() => { try { return JSON.parse(sessionStorage.getItem("research-wizard") ?? "{}") as Partial<{ step: number; brand: string; websiteUrl: string; brandProfile: BrandProfile; region: string; language: string; profile: WizardPayload["routing_profile"]; scope: WizardPayload["research_scope"]; researchProfile: WizardPayload["research_profile"]; selectedModels: string[]; customQueries: string[] }>; } catch { return {}; } }, []);
+  const saved = useMemo(() => { try { return JSON.parse(sessionStorage.getItem("research-wizard-v2") ?? "{}") as Partial<{ step: number; brand: string; websiteUrl: string; brandProfile: BrandProfile; region: string; language: string; profile: WizardPayload["routing_profile"]; scope: WizardPayload["research_scope"]; researchProfile: WizardPayload["research_profile"]; selectedModels: string[]; customQueries: string[] }>; } catch { return {}; } }, []);
   const [step, setStep] = useState(saved.step && saved.step >= 1 && saved.step <= 8 ? saved.step : 1);
   const [brand, setBrand] = useState(saved.brand ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(saved.websiteUrl ?? "");
@@ -1615,7 +1615,7 @@ function Wizard({
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось проверить подключение моделей"));
   }, []);
-  useEffect(() => { sessionStorage.setItem("research-wizard", JSON.stringify({ step, brand, websiteUrl, brandProfile, region, language, profile, scope, researchProfile, selectedModels, customQueries })); }, [step, brand, websiteUrl, brandProfile, region, language, profile, scope, researchProfile, selectedModels, customQueries]);
+  useEffect(() => { sessionStorage.setItem("research-wizard-v2", JSON.stringify({ step, brand, websiteUrl, brandProfile, region, language, profile, scope, researchProfile, selectedModels, customQueries })); }, [step, brand, websiteUrl, brandProfile, region, language, profile, scope, researchProfile, selectedModels, customQueries]);
   const scopedModels = () => {
     const ready = models.filter((item) => modelIsReady(item));
     if (scope === "ALL") return ready;
@@ -1693,7 +1693,7 @@ function Wizard({
         result = await recoverResearchResult(knownResearchIds, brand);
       }
       if (result.research.status !== "COMPLETED") throw new Error("Исследование завершилось с ошибкой. Подробности доступны в разделе Research.");
-      sessionStorage.removeItem("research-wizard");
+      sessionStorage.removeItem("research-wizard-v2");
       onComplete(result);
     } catch (e) {
       setError(
@@ -1738,7 +1738,7 @@ function Wizard({
     <main className="wizard-page">
       <button
         className="back-link"
-        onClick={step === 1 ? () => { sessionStorage.removeItem("research-wizard"); onCancel(); } : () => setStep(step - 1)}
+        onClick={step === 1 ? () => { sessionStorage.removeItem("research-wizard-v2"); onCancel(); } : () => setStep(step - 1)}
       >
         ← {step === 1 ? "На главную" : "Назад"}
       </button>
