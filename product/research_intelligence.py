@@ -7,6 +7,8 @@ from typing import Any
 from urllib.parse import urlparse
 from uuid import NAMESPACE_URL, uuid5
 
+from product.geography import query_context
+
 
 @dataclass(frozen=True)
 class QueryScenario:
@@ -231,6 +233,12 @@ class QueryMapBuilder:
                 ),
             ]
         templates = self._deduplicate(templates)
+        location = query_context(region, english=is_english)
+        if location:
+            templates = [
+                (cluster, intent, self._with_location(text, location), buyer_stage, brand_mode)
+                for cluster, intent, text, buyer_stage, brand_mode in templates
+            ]
         return [
             QueryScenario(
                 id=str(uuid5(NAMESPACE_URL, f"ai-ranking-query:{brand}:{region}:{cluster}:{text}")),
@@ -243,6 +251,17 @@ class QueryMapBuilder:
             )
             for cluster, intent, text, buyer_stage, brand_mode in templates
         ]
+
+    @staticmethod
+    def _with_location(text: str, location: str) -> str:
+        """Add geography to a natural question without changing its intent."""
+
+        stripped = text.rstrip()
+        if not stripped:
+            return stripped
+        natural_text = f"{stripped[0].lower()}{stripped[1:]}"
+        natural_location = f"{location[0].upper()}{location[1:]}"
+        return f"{natural_location}, {natural_text}"
 
     @staticmethod
     def _price_context(products: list[dict[str, Any]], *, english: bool) -> str:

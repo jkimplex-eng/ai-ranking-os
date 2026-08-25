@@ -216,6 +216,36 @@ def test_wizard_accepts_user_edited_buyer_queries() -> None:
     assert all(item["brand_mode"] == "unbranded" for item in catalog)
 
 
+def test_query_map_applies_city_to_every_generated_buyer_query() -> None:
+    payload = WizardRequest(
+        brand="Skinjestique",
+        website_url="https://skinjestique.example",
+        languages=["ru"],
+        regions=["RU-MOW"],
+        research_profile="BEAUTY",
+    )
+
+    catalog = ProductPipeline._query_catalog(
+        payload,
+        {"categories": ["Сыворотки"], "products": [], "attributes": ["увлажнение"]},
+    )
+
+    assert catalog
+    assert all(item["text"].startswith("В Москве, ") for item in catalog)
+    assert len({item["id"] for item in catalog}) == len(catalog)
+
+
+def test_prompt_values_use_human_readable_geography() -> None:
+    payload = WizardRequest(
+        brand="Skinjestique",
+        website_url="https://skinjestique.example",
+        languages=["ru"],
+        regions=["RU-SPE"],
+    )
+
+    assert ProductPipeline._values(payload)["region"] == "Санкт-Петербург"
+
+
 def test_query_map_uses_manual_competitor_without_website() -> None:
     payload = WizardRequest(
         brand="Skinjestique",

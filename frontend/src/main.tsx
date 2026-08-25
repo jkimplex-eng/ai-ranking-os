@@ -1553,6 +1553,25 @@ function Wizard({
   onComplete: (result: ReportResult) => void;
   onCancel: () => void;
 }) {
+  const researchRegions = [
+    ["RU", "Вся Россия"],
+    ["RU-MOW", "Москва"],
+    ["RU-SPE", "Санкт-Петербург"],
+    ["RU-NVS", "Новосибирск"],
+    ["RU-SVE", "Екатеринбург"],
+    ["RU-TA", "Казань"],
+    ["RU-KYA", "Красноярск"],
+    ["RU-NIZ", "Нижний Новгород"],
+    ["RU-CHE", "Челябинск"],
+    ["RU-BA", "Уфа"],
+    ["RU-SAM", "Самара"],
+    ["RU-ROS", "Ростов-на-Дону"],
+    ["RU-KDA", "Краснодар"],
+    ["RU-OMS", "Омск"],
+    ["RU-VOR", "Воронеж"],
+    ["RU-PER", "Пермь"],
+    ["RU-VGG", "Волгоград"],
+  ] as const;
   const saved = useMemo(() => { try { return JSON.parse(sessionStorage.getItem("research-wizard") ?? "{}") as Partial<{ step: number; brand: string; websiteUrl: string; brandProfile: BrandProfile; region: string; language: string; profile: WizardPayload["routing_profile"]; scope: WizardPayload["research_scope"]; researchProfile: WizardPayload["research_profile"]; selectedModels: string[]; customQueries: string[] }>; } catch { return {}; } }, []);
   const [step, setStep] = useState(saved.step && saved.step >= 1 && saved.step <= 8 ? saved.step : 1);
   const [brand, setBrand] = useState(saved.brand ?? "");
@@ -1561,7 +1580,7 @@ function Wizard({
   const [competitorName, setCompetitorName] = useState("");
   const [competitorWebsite, setCompetitorWebsite] = useState("");
   const [competitors, setCompetitors] = useState<Array<{ name: string; website_url?: string }>>([]);
-  const [region, setRegion] = useState(saved.region ?? "GLOBAL");
+  const [region, setRegion] = useState(saved.region ?? "RU");
   const [language, setLanguage] = useState(saved.language ?? "ru");
   const [profile, setProfile] = useState<WizardPayload["routing_profile"]>(saved.profile ?? "BALANCED");
   const [scope, setScope] = useState<NonNullable<WizardPayload["research_scope"]>>(saved.scope ?? "SELECTED");
@@ -1763,22 +1782,23 @@ function Wizard({
           </div>
         )}
         {step === 2 && (
-          <div className="option-list">
-            {[
-              ["GLOBAL", "Весь мир"],
-              ["RU", "Россия"],
-              ["EU", "Европа"],
-              ["US", "США"],
-            ].map(([value, label]) => (
-              <button
-                className={region === value ? "selected" : ""}
-                onClick={() => setRegion(value)}
-                key={value}
+          <div className="panel">
+            <label className="hero-field">
+              География анализа
+              <select
+                aria-label="Регион исследования"
+                value={region}
+                onChange={(event) => setRegion(event.target.value)}
               >
-                <span>{label}</span>
-                <small>{value}</small>
-              </button>
-            ))}
+                {researchRegions.map(([value, label]) => (
+                  <option value={value} key={value}>{label}</option>
+                ))}
+              </select>
+            </label>
+            <p className="muted">
+              «Вся Россия» измеряет федеральную выдачу. Город добавляется в каждый
+              покупательский запрос и показывает локальные рекомендации ИИ.
+            </p>
           </div>
         )}
         {step === 3 && (
@@ -1837,7 +1857,7 @@ function Wizard({
             </div>
             <div>
               <span>Регион</span>
-              <b>{region}</b>
+              <b>{researchRegions.find(([value]) => value === region)?.[1] ?? region}</b>
             </div>
             <div>
               <span>Язык</span>

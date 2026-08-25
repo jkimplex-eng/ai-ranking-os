@@ -36,6 +36,7 @@ from insights.schemas import InsightRequest
 from insights.service import InsightService
 from notification_center.ports import NotificationPort
 from product.brand_intelligence import brand_intelligence_engine
+from product.geography import geography_label
 from product.repository import ProductNotFoundError, PromptRepository, ResearchTemplateRepository
 from product.research_intelligence import (
     CompetitiveInfluenceEngine,
@@ -389,7 +390,7 @@ class ProductPipeline:
         return {
             "brand": payload.brand,
             "language": ", ".join(payload.languages),
-            "region": ", ".join(payload.regions),
+            "region": ", ".join(geography_label(item) for item in payload.regions),
             "research_profile": payload.research_profile,
             **payload.variables,
         }

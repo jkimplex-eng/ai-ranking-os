@@ -188,10 +188,11 @@ test("wizard transparently refreshes an expired access token", async ({ page }) 
         json = { detail: "Authentication required" };
       } else {
         expect(request.headers()["authorization"]).toBe("Bearer renewed-access");
+        expect(request.postDataJSON().regions).toEqual(["RU-MOW"]);
         json = {
           valid: true, title: "AI Visibility", prompt: "Analyze Acme",
           provider_models: ["ollama/qwen2.5:3b"], selected_models: ["ollama/qwen2.5:3b"],
-          languages: ["ru"], regions: ["GLOBAL"], pipeline: [],
+          languages: ["ru"], regions: ["RU-MOW"], pipeline: [],
           estimated_cost_usd: 0, estimated_time_ms: 20000,
           query_catalog: [{ id: "q-1", cluster: "category", intent: "buyer", text: "Какую увлажняющую сыворотку выбрать?" }],
           task_count: 1,
@@ -219,6 +220,7 @@ test("wizard transparently refreshes an expired access token", async ({ page }) 
   await page.getByLabel("Название бренда").fill("Acme");
   await page.getByLabel("Официальный сайт").fill("https://acme.example");
   await page.getByRole("button", { name: /Продолжить/ }).click();
+  await page.getByLabel("Регион исследования").selectOption("RU-MOW");
   await page.getByRole("button", { name: /Продолжить/ }).click();
   await page.getByRole("button", { name: /Продолжить/ }).click();
   await page.getByRole("button", { name: /Qwen/ }).click();
