@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import socket
 from concurrent.futures import ThreadPoolExecutor
@@ -86,6 +87,26 @@ class TelegramGatewayPort(Protocol):
 
 
 class TelethonGateway:
+    @staticmethod
+    def _mtproxy_secret(secret: str) -> bytes:
+        """Decode Telegram's hexadecimal or URL-safe base64 proxy secret."""
+        value = secret.strip()
+        try:
+            return bytes.fromhex(value)
+        except ValueError:
+            try:
+                return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+            except (ValueError, TypeError) as error:
+                raise SocialMonitorError("Некорректный secret MTProxy.") from error
+
+    @classmethod
+    def _is_fake_tls_proxy(cls, proxy: dict | None) -> bool:
+        return bool(
+            proxy
+            and proxy.get("protocol") == "MTPROXY"
+            and cls._mtproxy_secret(proxy["secret"]).startswith(b"\xee")
+        )
+
     @staticmethod
     def _run(awaitable):
         try:
@@ -209,7 +230,37 @@ class TelethonGateway:
             "connection_retries": 2,
             "timeout": 15,
         }
-        if proxy and proxy.get("protocol") == "MTPROXY":
+        if cls._is_fake_tls_proxy(proxy):
+            from tgnet.connection.faketls import TgNetConnectionTls
+
+            secret = cls._mtproxy_secret(proxy["secret"])
+
+            class TelethonFakeTlsConnection(TgNetConnectionTls):
+                """Adapt tgnet's explicit Fake-TLS secret to Telethon's proxy contract."""
+
+                def __init__(
+                    self,
+                    ip,
+                    port,
+                    dc_id,
+                    *,
+                    loggers,
+                    proxy=None,
+                    local_addr=None,
+                ):
+                    proxy_host, proxy_port, _proxy_secret = proxy
+                    super().__init__(
+                        proxy_host,
+                        proxy_port,
+                        dc_id,
+                        loggers=loggers,
+                        proxy=None,
+                        local_addr=local_addr,
+                        secret=secret,
+                    )
+
+            options["connection"] = TelethonFakeTlsConnection
+        elif proxy and proxy.get("protocol") == "MTPROXY":
             options["connection"] = ConnectionTcpMTProxyRandomizedIntermediate
         client = TelegramClient(string_session, api_id, api_hash, **options)
         # Telegram supports MTProto on ports 80 and 443. Timeweb currently drops

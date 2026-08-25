@@ -226,6 +226,27 @@ def test_telegram_mtproxy_uses_native_telethon_transport() -> None:
     assert client.session.port == 443
 
 
+def test_telegram_faketls_mtproxy_uses_tgnet_transport() -> None:
+    from telethon.sessions import StringSession
+    from tgnet.connection.faketls import TgNetConnectionTls
+
+    stored = StringSession()
+    stored.set_dc(2, "149.154.167.51", 80)
+    proxy = {
+        "protocol": "MTPROXY",
+        "host": "proxy.example.com",
+        "port": 8443,
+        "secret": "7iVzxL2VgpVP1pd962HLwKtwZXRyb3ZpY2gucnU",
+    }
+
+    client = TelethonGateway._client(stored.save(), 12345, "a" * 32, proxy)
+
+    assert issubclass(client._connection, TgNetConnectionTls)
+    assert TelethonGateway._mtproxy_secret(proxy["secret"]).hex() == (
+        "ee2573c4bd9582954fd6977deb61cbc0ab706574726f766963682e7275"
+    )
+
+
 def test_telegram_mtproxy_requires_secret() -> None:
     from pydantic import ValidationError
 
