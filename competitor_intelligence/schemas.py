@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 
 class CompetitorSnapshotRead(BaseModel):
@@ -119,11 +119,18 @@ class SocialDashboardRead(BaseModel):
 
 
 class TelegramProxyInput(BaseModel):
-    protocol: str = Field(default="SOCKS5", pattern=r"^(SOCKS5|HTTP)$")
+    protocol: str = Field(default="SOCKS5", pattern=r"^(SOCKS5|HTTP|MTPROXY)$")
     host: str = Field(min_length=1, max_length=253)
     port: int = Field(ge=1, le=65535)
     username: str | None = Field(default=None, max_length=300)
     password: str | None = Field(default=None, max_length=1000)
+    secret: str | None = Field(default=None, min_length=16, max_length=1000)
+
+    @model_validator(mode="after")
+    def validate_protocol_fields(self):
+        if self.protocol == "MTPROXY" and not self.secret:
+            raise ValueError("Для MTProxy требуется secret")
+        return self
 
 
 class TelegramConnectionStart(BaseModel):

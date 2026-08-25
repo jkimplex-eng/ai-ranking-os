@@ -99,6 +99,8 @@ class TelethonGateway:
     def _proxy(value: dict | None):
         if not value:
             return None
+        if value.get("protocol") == "MTPROXY":
+            return (value["host"], int(value["port"]), value["secret"])
         import socks
 
         proxy_type = socks.HTTP if value.get("protocol") == "HTTP" else socks.SOCKS5
@@ -122,6 +124,21 @@ class TelethonGateway:
     @classmethod
     def _check_proxy_route(cls, session: str, proxy: dict) -> None:
         """Verify the SOCKS handshake and Telegram route before Telethon hides the cause."""
+        if proxy.get("protocol") == "MTPROXY":
+            try:
+                connection = socket.create_connection(
+                    (proxy["host"], int(proxy["port"])), timeout=12
+                )
+            except socket.gaierror as error:
+                raise SocialMonitorError("Адрес MTProxy не найден.") from error
+            except (ConnectionError, TimeoutError, OSError) as error:
+                raise SocialMonitorError(
+                    "VPS не может подключиться к MTProxy. Проверьте сервер и порт."
+                ) from error
+            else:
+                connection.close()
+            return
+
         import socks
 
         target_host, target_port = cls._proxy_target(session)
@@ -167,6 +184,7 @@ class TelethonGateway:
     @classmethod
     def _client(cls, session: str, api_id: int, api_hash: str, proxy: dict | None):
         from telethon import TelegramClient
+        from telethon.network.connection import ConnectionTcpMTProxyRandomizedIntermediate
         from telethon.sessions import StringSession
 
         class DirectStringSession(StringSession):
@@ -186,14 +204,14 @@ class TelethonGateway:
                 string_session.server_address or "149.154.167.51",
                 80,
             )
-        client = TelegramClient(
-            string_session,
-            api_id,
-            api_hash,
-            proxy=cls._proxy(proxy),
-            connection_retries=2,
-            timeout=15,
-        )
+        options = {
+            "proxy": cls._proxy(proxy),
+            "connection_retries": 2,
+            "timeout": 15,
+        }
+        if proxy and proxy.get("protocol") == "MTPROXY":
+            options["connection"] = ConnectionTcpMTProxyRandomizedIntermediate
+        client = TelegramClient(string_session, api_id, api_hash, **options)
         # Telegram supports MTProto on ports 80 and 443. Timeweb currently drops
         # outbound Telegram traffic on 443 while port 80 remains reachable. A
         # configured SOCKS proxy owns its destination routing and is left intact.

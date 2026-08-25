@@ -202,6 +202,41 @@ def test_telegram_proxy_client_uses_standard_mtproto_port() -> None:
     assert client.session.port == 443
 
 
+def test_telegram_mtproxy_uses_native_telethon_transport() -> None:
+    from telethon.network.connection import ConnectionTcpMTProxyRandomizedIntermediate
+    from telethon.sessions import StringSession
+
+    stored = StringSession()
+    stored.set_dc(2, "149.154.167.51", 80)
+    proxy = {
+        "protocol": "MTPROXY",
+        "host": "proxy.example.com",
+        "port": 443,
+        "secret": "dd" + "a" * 32,
+    }
+
+    client = TelethonGateway._client(stored.save(), 12345, "a" * 32, proxy)
+
+    assert TelethonGateway._proxy(proxy) == (
+        "proxy.example.com",
+        443,
+        "dd" + "a" * 32,
+    )
+    assert client._connection is ConnectionTcpMTProxyRandomizedIntermediate
+    assert client.session.port == 443
+
+
+def test_telegram_mtproxy_requires_secret() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="Для MTProxy требуется secret"):
+        TelegramProxyInput(
+            protocol="MTPROXY",
+            host="proxy.example.com",
+            port=443,
+        )
+
+
 @pytest.fixture
 def client() -> Generator[TestClient]:
     Base.metadata.create_all(engine)

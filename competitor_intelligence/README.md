@@ -48,3 +48,9 @@ deterministic analytics and is not used to train or fine-tune an ML/LLM model.
 An already-authorized account can add or replace its SOCKS5 route without reconnecting Telegram.
 The service validates authentication through the proposed proxy before encrypting and persisting
 its host, port and optional credentials. A failed proxy never replaces the active route.
+
+For networks which block Telegram DCs, the same connection endpoint also accepts native
+`MTPROXY` transport with `host`, `port` and `secret` from a `tg://proxy` or `t.me/proxy` link.
+Telethon validates the MTProxy against the existing authorized session before it is saved. The
+secret is encrypted together with the rest of the proxy configuration and is never returned by
+the API. HTTP Webshare connections retain automatic SOCKS5 fallback for compatible endpoints.
