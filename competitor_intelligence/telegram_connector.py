@@ -429,10 +429,27 @@ class TelegramConnectionService:
                 self.cipher.decrypt(item.encrypted_session),
                 proxy,
             )
-        except Exception as error:
-            item.last_error = self._safe_error(error)
-            self.db.commit()
-            raise SocialMonitorError(item.last_error) from error
+        except Exception as primary_error:
+            if proxy.get("protocol") == "HTTP":
+                proxy["protocol"] = "SOCKS5"
+                try:
+                    self.gateway.check(
+                        item.api_id,
+                        self.cipher.decrypt(item.encrypted_api_hash),
+                        self.cipher.decrypt(item.encrypted_session),
+                        proxy,
+                    )
+                except Exception as fallback_error:
+                    item.last_error = (
+                        "Webshare не открыл Telegram ни через HTTP, ни через SOCKS5: "
+                        f"{self._safe_error(fallback_error)}"
+                    )[:500]
+                    self.db.commit()
+                    raise SocialMonitorError(item.last_error) from fallback_error
+            else:
+                item.last_error = self._safe_error(primary_error)
+                self.db.commit()
+                raise SocialMonitorError(item.last_error) from primary_error
         item.encrypted_proxy = self.cipher.encrypt(json.dumps(proxy))
         item.last_error = None
         item.last_connected_at = datetime.now(UTC)

@@ -572,3 +572,52 @@ def test_telegram_proxy_is_checked_and_encrypted(client: TestClient, monkeypatch
     }
     assert stored is not None
     assert "proxy.example.com" not in stored.encrypted_proxy
+
+
+def test_telegram_webshare_falls_back_from_http_to_socks5(
+    client: TestClient, monkeypatch
+) -> None:
+    class FallbackGateway(_TelegramGateway):
+        protocols: list[str] = []
+
+        def check(self, api_id, api_hash, session, proxy):
+            self.protocols.append(proxy["protocol"])
+            if proxy["protocol"] == "HTTP":
+                raise RuntimeError("HTTP tunnel rejected")
+
+    settings = type(
+        "Settings",
+        (),
+        {"provider_secret_key": "t" * 32, "auth_jwt_secret": "j" * 32},
+    )()
+    monkeypatch.setattr("competitor_intelligence.telegram_connector.get_settings", lambda: settings)
+    gateway = FallbackGateway()
+    with TestingSession() as db:
+        service = TelegramConnectionService(db, gateway)
+        service.start(
+            1,
+            TelegramConnectionStart(
+                api_id=12345,
+                api_hash="a" * 32,
+                phone_number="+79991234567",
+            ),
+        )
+        service.verify(1, TelegramCodeVerify(code="12345"))
+        result = service.set_proxy(
+            1,
+            TelegramProxyInput(
+                protocol="HTTP",
+                host="p.webshare.io",
+                port=80,
+                username="user",
+                password="secret",
+            ),
+        )
+        stored = db.scalar(
+            select(TelegramConnection).where(TelegramConnection.user_id == 1)
+        )
+        saved_proxy = service._proxy(stored)
+
+    assert result.proxy_configured is True
+    assert gateway.protocols == ["HTTP", "SOCKS5"]
+    assert saved_proxy["protocol"] == "SOCKS5"
