@@ -105,6 +105,70 @@ def test_telegram_existing_session_is_moved_from_blocked_port() -> None:
     assert client.session.port == 80
 
 
+def test_telegram_proxy_preflight_checks_stored_dc_on_port_80(monkeypatch) -> None:
+    from telethon.sessions import StringSession
+
+    stored = StringSession()
+    stored.set_dc(2, "149.154.167.51", 443)
+    calls: dict[str, object] = {}
+
+    class FakeSocket:
+        def set_proxy(self, *args) -> None:
+            calls["proxy"] = args
+
+        def settimeout(self, timeout: int) -> None:
+            calls["timeout"] = timeout
+
+        def connect(self, target) -> None:
+            calls["target"] = target
+
+        def close(self) -> None:
+            calls["closed"] = True
+
+    monkeypatch.setattr("socks.socksocket", FakeSocket)
+
+    TelethonGateway._check_proxy_route(
+        stored.save(),
+        {
+            "host": "proxy.example.com",
+            "port": 1080,
+            "username": "user",
+            "password": "secret",
+        },
+    )
+
+    assert calls["target"] == ("149.154.167.51", 80)
+    assert calls["timeout"] == 12
+    assert calls["closed"] is True
+
+
+def test_telegram_proxy_preflight_reports_dns_error(monkeypatch) -> None:
+    import socket
+
+    from competitor_intelligence.social_monitor import SocialMonitorError
+
+    class FakeSocket:
+        def set_proxy(self, *args) -> None:
+            pass
+
+        def settimeout(self, timeout: int) -> None:
+            pass
+
+        def connect(self, target) -> None:
+            raise socket.gaierror("not found")
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr("socks.socksocket", FakeSocket)
+
+    with pytest.raises(SocialMonitorError, match="Адрес SOCKS5 не найден"):
+        TelethonGateway._check_proxy_route(
+            "",
+            {"host": "missing.example.com", "port": 1080},
+        )
+
+
 @pytest.fixture
 def client() -> Generator[TestClient]:
     Base.metadata.create_all(engine)

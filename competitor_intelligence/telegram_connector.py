@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -108,6 +109,43 @@ class TelethonGateway:
             value.get("username"),
             value.get("password"),
         )
+
+    @staticmethod
+    def _proxy_target(session: str) -> tuple[str, int]:
+        """Return the Telegram DC stored in a session, using its reachable MTProto port."""
+        from telethon.sessions import StringSession
+
+        stored = StringSession(session)
+        return stored.server_address or "149.154.167.51", 80
+
+    @classmethod
+    def _check_proxy_route(cls, session: str, proxy: dict) -> None:
+        """Verify the SOCKS handshake and Telegram route before Telethon hides the cause."""
+        import socks
+
+        target_host, target_port = cls._proxy_target(session)
+        connection = socks.socksocket()
+        connection.set_proxy(
+            socks.SOCKS5,
+            proxy["host"],
+            int(proxy["port"]),
+            True,
+            proxy.get("username"),
+            proxy.get("password"),
+        )
+        connection.settimeout(12)
+        try:
+            connection.connect((target_host, target_port))
+        except socket.gaierror as error:
+            raise SocialMonitorError(
+                "Адрес SOCKS5 не найден. Проверьте имя сервера прокси."
+            ) from error
+        except TimeoutError as error:
+            raise SocialMonitorError(
+                "SOCKS5 не ответил за 12 секунд. Порт закрыт для VPS или прокси недоступен."
+            ) from error
+        finally:
+            connection.close()
 
     @classmethod
     def _client(cls, session: str, api_id: int, api_hash: str, proxy: dict | None):
@@ -227,6 +265,9 @@ class TelethonGateway:
         session: str,
         proxy: dict | None,
     ) -> None:
+        if proxy:
+            self._check_proxy_route(session, proxy)
+
         async def run() -> None:
             client = self._client(session, api_id, api_hash, proxy)
             try:
@@ -531,6 +572,8 @@ class TelegramConnectionService:
 
     @staticmethod
     def _safe_error(error: Exception) -> str:
+        if isinstance(error, SocialMonitorError):
+            return str(error)[:500]
         name = type(error).__name__
         safe = {
             "ApiIdInvalidError": "Telegram отклонил API ID или API Hash",
