@@ -138,7 +138,7 @@ def test_telegram_proxy_preflight_checks_stored_dc_on_port_80(monkeypatch) -> No
         },
     )
 
-    assert calls["target"] == ("149.154.167.51", 80)
+    assert calls["target"] == ("149.154.167.51", 443)
     assert calls["timeout"] == 12
     assert calls["closed"] is True
 
@@ -184,6 +184,22 @@ def test_telegram_http_proxy_uses_http_connect() -> None:
     )
 
     assert proxy == (socks.HTTP, "p.webshare.io", 80, True, "user", "secret")
+
+
+def test_telegram_proxy_client_uses_standard_mtproto_port() -> None:
+    from telethon.sessions import StringSession
+
+    stored = StringSession()
+    stored.set_dc(2, "149.154.167.51", 80)
+
+    client = TelethonGateway._client(
+        stored.save(),
+        12345,
+        "a" * 32,
+        {"protocol": "HTTP", "host": "p.webshare.io", "port": 80},
+    )
+
+    assert client.session.port == 443
 
 
 @pytest.fixture

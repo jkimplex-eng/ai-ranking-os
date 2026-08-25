@@ -117,6 +117,8 @@ python-dotenv==1.2.2
     # via
     #   pydantic-settings
     #   uvicorn
+python-socks==2.8.2
+    # via -r requirements.txt
 pyyaml==6.0.3
     # via
     #   -r requirements.txt

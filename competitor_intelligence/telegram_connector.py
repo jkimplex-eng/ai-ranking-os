@@ -113,11 +113,11 @@ class TelethonGateway:
 
     @staticmethod
     def _proxy_target(session: str) -> tuple[str, int]:
-        """Return the Telegram DC stored in a session, using its reachable MTProto port."""
+        """Return the Telegram DC; proxy routes use standard MTProto TLS port 443."""
         from telethon.sessions import StringSession
 
         stored = StringSession(session)
-        return stored.server_address or "149.154.167.51", 80
+        return stored.server_address or "149.154.167.51", 443
 
     @classmethod
     def _check_proxy_route(cls, session: str, proxy: dict) -> None:
@@ -138,6 +138,21 @@ class TelethonGateway:
         connection.settimeout(12)
         try:
             connection.connect((target_host, target_port))
+        except socks.SOCKS5AuthError as error:
+            raise SocialMonitorError("Прокси отклонил логин или пароль.") from error
+        except socks.ProxyConnectionError as error:
+            raise SocialMonitorError(
+                "VPS не может подключиться к серверу прокси. Проверьте адрес и порт."
+            ) from error
+        except socks.HTTPError as error:
+            raise SocialMonitorError(
+                "HTTP-прокси отклонил маршрут к Telegram. Проверьте тариф и ограничения Webshare."
+            ) from error
+        except socks.GeneralProxyError as error:
+            protocol = proxy.get("protocol", "SOCKS5")
+            raise SocialMonitorError(
+                f"{protocol}-прокси не смог открыть маршрут к Telegram."
+            ) from error
         except socket.gaierror as error:
             raise SocialMonitorError(
                 "Адрес SOCKS5 не найден. Проверьте имя сервера прокси."
@@ -159,7 +174,13 @@ class TelethonGateway:
                 super().set_dc(dc_id, server_address, 80)
 
         string_session = StringSession(session) if proxy else DirectStringSession(session)
-        if not proxy:
+        if proxy:
+            string_session.set_dc(
+                string_session.dc_id or 2,
+                string_session.server_address or "149.154.167.51",
+                443,
+            )
+        else:
             string_session.set_dc(
                 string_session.dc_id or 2,
                 string_session.server_address or "149.154.167.51",
