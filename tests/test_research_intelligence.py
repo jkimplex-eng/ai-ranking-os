@@ -39,6 +39,17 @@ class EducationFetcher:
         )
 
 
+class EducationWithCourseTopicsFetcher:
+    def fetch(self, url: str) -> tuple[str, str]:
+        return (
+            url,
+            """<html><head><title>Онлайн-курсы и профессии</title>
+            <meta name='description' content='Образовательная платформа и обучение с нуля'>
+            </head><body><h1>Освойте новую профессию онлайн</h1>
+            <p>Курсы маркетинга, финансов, туризма и рекламы</p></body></html>""",
+        )
+
+
 def test_brand_intelligence_extracts_product_price_and_attributes() -> None:
     profile = BrandIntelligenceEngine(FakeFetcher(), max_pages=1).analyze(
         brand="Skinjestique", website_url="https://skinjestique.example"
@@ -68,6 +79,14 @@ def test_brand_intelligence_detects_education_without_beauty_fallback() -> None:
     assert "Онлайн-образование" in profile["categories"]
     assert "обучение с нуля" in profile["attributes"]
     assert not any("космет" in item.casefold() for item in profile["categories"])
+
+
+def test_brand_category_is_business_vertical_not_individual_course_topics() -> None:
+    profile = BrandIntelligenceEngine(
+        EducationWithCourseTopicsFetcher(), max_pages=1
+    ).analyze(brand="Education Brand", website_url="https://education.example")
+
+    assert profile["categories"] == ["Онлайн-образование"]
 
 
 def test_universal_education_queries_never_use_beauty_vocabulary() -> None:

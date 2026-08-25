@@ -295,6 +295,13 @@ class BrandIntelligenceEngine:
                 *[text for page in pages for text in page.text[:300]],
             ]
         ).casefold()
+        identity_text = " ".join(
+            [
+                *[page.title for page in pages[:2]],
+                *[page.description for page in pages[:2]],
+                *[heading for page in pages[:2] for heading in page.headings[:12]],
+            ]
+        ).casefold()
         taxonomy = {
             "Сыворотки": ("сыворот", "serum"),
             "Кремы": ("крем", "cream"),
@@ -313,6 +320,9 @@ class BrandIntelligenceEngine:
                 "онлайн-образован",
                 "онлайн обучение",
                 "онлайн-курс",
+                "онлайн-курсы",
+                "обучение",
+                "курсы",
                 "профессия с нуля",
                 "образовательная платформа",
                 "курсы программирования",
@@ -323,11 +333,18 @@ class BrandIntelligenceEngine:
             "Программное обеспечение": ("программное обеспечение", "saas", "crm", "erp"),
             "Маркетинг и реклама": ("маркетинг", "реклам", "продвижение бренда"),
         }
-        values.update(
-            category
+        vertical_scores = {
+            category: sum(
+                identity_text.count(marker) * 10 + site_text.count(marker)
+                for marker in markers
+            )
             for category, markers in vertical_taxonomy.items()
-            if any(marker in site_text for marker in markers)
+        }
+        primary_vertical, primary_score = max(
+            vertical_scores.items(), key=lambda item: item[1], default=("", 0)
         )
+        if primary_score > 0:
+            values.add(primary_vertical)
         for page in pages:
             if page.url.casefold().endswith(".html"):
                 continue
