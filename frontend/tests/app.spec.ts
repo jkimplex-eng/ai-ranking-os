@@ -142,8 +142,9 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
   await page.getByLabel("Код Telegram").fill("12345");
   await page.getByRole("button", { name: "Подтвердить" }).click();
   await expect(page.getByText("ПОДКЛЮЧЕНО")).toBeVisible();
-  await page.getByLabel("Адрес SOCKS5").fill("proxy.example.com");
-  await page.getByLabel("Порт SOCKS5").fill("1080");
+  await page.getByLabel("Тип прокси").selectOption("SOCKS5");
+  await page.getByLabel("Адрес прокси").fill("proxy.example.com");
+  await page.getByLabel("Порт прокси").fill("1080");
   await page.getByRole("button", { name: "Проверить и подключить" }).click();
   await expect(page.getByText("АКТИВЕН")).toBeVisible();
   await page.getByLabel("URL профиля").fill("https://t.me/librederm");

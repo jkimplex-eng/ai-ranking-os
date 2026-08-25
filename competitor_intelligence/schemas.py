@@ -119,6 +119,7 @@ class SocialDashboardRead(BaseModel):
 
 
 class TelegramProxyInput(BaseModel):
+    protocol: str = Field(default="SOCKS5", pattern=r"^(SOCKS5|HTTP)$")
     host: str = Field(min_length=1, max_length=253)
     port: int = Field(ge=1, le=65535)
     username: str | None = Field(default=None, max_length=300)

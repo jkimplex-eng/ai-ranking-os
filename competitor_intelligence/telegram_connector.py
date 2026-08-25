@@ -101,8 +101,9 @@ class TelethonGateway:
             return None
         import socks
 
+        proxy_type = socks.HTTP if value.get("protocol") == "HTTP" else socks.SOCKS5
         return (
-            socks.SOCKS5,
+            proxy_type,
             value["host"],
             int(value["port"]),
             True,
@@ -125,8 +126,9 @@ class TelethonGateway:
 
         target_host, target_port = cls._proxy_target(session)
         connection = socks.socksocket()
+        proxy_type = socks.HTTP if proxy.get("protocol") == "HTTP" else socks.SOCKS5
         connection.set_proxy(
-            socks.SOCKS5,
+            proxy_type,
             proxy["host"],
             int(proxy["port"]),
             True,

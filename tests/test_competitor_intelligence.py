@@ -130,6 +130,7 @@ def test_telegram_proxy_preflight_checks_stored_dc_on_port_80(monkeypatch) -> No
     TelethonGateway._check_proxy_route(
         stored.save(),
         {
+            "protocol": "SOCKS5",
             "host": "proxy.example.com",
             "port": 1080,
             "username": "user",
@@ -167,6 +168,22 @@ def test_telegram_proxy_preflight_reports_dns_error(monkeypatch) -> None:
             "",
             {"host": "missing.example.com", "port": 1080},
         )
+
+
+def test_telegram_http_proxy_uses_http_connect() -> None:
+    import socks
+
+    proxy = TelethonGateway._proxy(
+        {
+            "protocol": "HTTP",
+            "host": "p.webshare.io",
+            "port": 80,
+            "username": "user",
+            "password": "secret",
+        }
+    )
+
+    assert proxy == (socks.HTTP, "p.webshare.io", 80, True, "user", "secret")
 
 
 @pytest.fixture
@@ -531,6 +548,7 @@ def test_telegram_proxy_is_checked_and_encrypted(client: TestClient, monkeypatch
 
     assert result.proxy_configured is True
     assert gateway.checked_proxy == {
+        "protocol": "SOCKS5",
         "host": "proxy.example.com",
         "port": 1080,
         "username": "user",
