@@ -252,3 +252,24 @@ def delete_social_source(
     except (ProjectNotFoundError, SocialMonitorError) as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete(
+    "/projects/{project_id}/competitors/{competitor_id}/social/{source_id}/posts/{post_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_social_post(
+    project_id: int,
+    competitor_id: int,
+    source_id: int,
+    post_id: int,
+    user_id: CurrentUserId,
+    db: DbSession,
+) -> Response:
+    try:
+        CompetitorSocialMonitorService(db).delete_post(
+            user_id, project_id, competitor_id, source_id, post_id
+        )
+    except (ProjectNotFoundError, SocialMonitorError) as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

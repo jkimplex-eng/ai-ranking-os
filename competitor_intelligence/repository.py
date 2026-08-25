@@ -102,6 +102,9 @@ class CompetitorIntelligenceRepository:
             )
         )
 
+    def social_post_by_id(self, post_id: int) -> CompetitorSocialPost | None:
+        return self.db.get(CompetitorSocialPost, post_id)
+
     def social_posts(self, source_id: int, limit: int = 50) -> list[CompetitorSocialPost]:
         return list(
             self.db.scalars(
@@ -113,5 +116,9 @@ class CompetitorIntelligenceRepository:
         )
 
     def delete_social_source(self, item: CompetitorSocialSource) -> None:
+        self.db.delete(item)
+        self.db.commit()
+
+    def delete_social_post(self, item: CompetitorSocialPost) -> None:
         self.db.delete(item)
         self.db.commit()

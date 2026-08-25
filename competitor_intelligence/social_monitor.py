@@ -374,6 +374,23 @@ class CompetitorSocialMonitorService:
             raise SocialMonitorError("Источник соцсети не найден")
         self.repository.delete_social_source(source)
 
+    def delete_post(
+        self,
+        user_id: int,
+        project_id: int,
+        competitor_id: int,
+        source_id: int,
+        post_id: int,
+    ) -> None:
+        self._authorize(user_id, project_id, competitor_id)
+        source = self.repository.social_source(source_id)
+        if source is None or source.competitor_id != competitor_id:
+            raise SocialMonitorError("Источник соцсети не найден")
+        post = self.repository.social_post_by_id(post_id)
+        if post is None or post.source_id != source_id:
+            raise SocialMonitorError("Публикация не найдена")
+        self.repository.delete_social_post(post)
+
     def run_due(self) -> int:
         count = 0
         for source in self.repository.due_social_sources(datetime.now(UTC)):

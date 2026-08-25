@@ -34,6 +34,7 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
   let projectCreated = false;
   let competitorCreated = false;
   let socialConnected = false;
+  let socialPostPresent = true;
   let telegramStatus = "NOT_CONFIGURED";
   let telegramProxy = false;
   const dashboard = () => ({
@@ -105,8 +106,13 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
       json = { id: 70, competitor_id: 22, platform: "TELEGRAM", profile_url: "https://t.me/librederm", external_id: "librederm", configured: true, active: true, status: "CONNECTED", last_scanned_at: "2026-08-20T10:00:00Z", next_scan_at: "2026-08-21T10:00:00Z", last_error: null, posts: [] };
     } else if (path.endsWith("/competitor-intelligence/projects/10/competitors/22/social/discover")) {
       json = { competitor_id: 22, total_posts: 0, limitation: "Значимость не доказывает влияние на выдачу AI.", sources: [] };
+    } else if (path.endsWith("/social/70/posts/90") && request.method() === "DELETE") {
+      socialPostPresent = false;
+      status = 204;
+      json = {};
     } else if (path.endsWith("/competitor-intelligence/projects/10/competitors/22/social")) {
-      json = { competitor_id: 22, total_posts: 0, limitation: "Значимость не доказывает влияние на выдачу AI.", sources: socialConnected ? [{ id: 70, competitor_id: 22, platform: "TELEGRAM", profile_url: "https://t.me/librederm", external_id: "librederm", configured: true, active: true, status: "CONNECTED", last_scanned_at: "2026-08-20T10:00:00Z", next_scan_at: "2026-08-21T10:00:00Z", last_error: null, posts: [] }] : [] };
+      const posts = socialConnected && socialPostPresent ? [{ id: 90, external_post_id: "42", url: "https://t.me/librederm/42", title: "Новая сыворотка", content: "Публикация о новой сыворотке", published_at: "2026-08-20T10:00:00Z", views: 1200, likes: 80, comments: 12, shares: 7, significance_score: 64 }] : [];
+      json = { competitor_id: 22, total_posts: posts.length, limitation: "Значимость не доказывает влияние на выдачу AI.", sources: socialConnected ? [{ id: 70, competitor_id: 22, platform: "TELEGRAM", profile_url: "https://t.me/librederm", external_id: "librederm", configured: true, active: true, status: "CONNECTED", last_scanned_at: "2026-08-20T10:00:00Z", next_scan_at: "2026-08-21T10:00:00Z", last_error: null, posts }] : [] };
     } else if (path.includes("/competitor-intelligence/projects/10")) json = dashboard();
     else if (path.endsWith("/research") || path.endsWith("/providers")) json = [];
     else if (path.endsWith("/system/health")) json = { status: "healthy" };
@@ -151,6 +157,13 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
   await page.getByLabel("Идентификатор канала").fill("librederm");
   await page.getByRole("button", { name: "Добавить канал" }).click();
   await expect(page.getByText("CONNECTED")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Новая сыворотка" })).toHaveAttribute("href", "https://t.me/librederm/42");
+  const reportPage = page.waitForEvent("popup");
+  await page.getByRole("button", { name: "Отчёт со ссылками" }).click();
+  await expect((await reportPage).getByRole("link", { name: "Новая сыворотка" })).toHaveAttribute("href", "https://t.me/librederm/42");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator(".social-post").getByRole("button", { name: "Удалить", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Новая сыворотка" })).toHaveCount(0);
 });
 
 test("wizard transparently refreshes an expired access token", async ({ page }) => {

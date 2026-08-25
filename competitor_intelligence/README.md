@@ -15,6 +15,8 @@ API:
 - `POST /competitor-intelligence/projects/{project_id}/refresh`
 - `PUT /competitor-intelligence/projects/{project_id}/daily-monitoring`
 - `POST /competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/social/discover`
+- `DELETE /competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/social/{source_id}`
+- `DELETE /competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/social/{source_id}/posts/{post_id}`
 - `GET /competitor-intelligence/telegram/connection`
 - `POST /competitor-intelligence/telegram/connection/send-code`
 - `POST /competitor-intelligence/telegram/connection/verify`

@@ -434,6 +434,11 @@ def test_competitor_intelligence_is_documented_in_openapi(client: TestClient) ->
         "/competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/social/discover"
         in paths
     )
+    assert (
+        "/competitor-intelligence/projects/{project_id}/competitors/{competitor_id}"
+        "/social/{source_id}/posts/{post_id}"
+        in paths
+    )
     assert "/competitor-intelligence/telegram/connection/send-code" in paths
     assert "/competitor-intelligence/telegram/connection/verify" in paths
     assert (
@@ -542,6 +547,42 @@ def test_social_monitor_saves_real_collector_results(client: TestClient) -> None
     assert dashboard.status_code == 200
     assert dashboard.json()["total_posts"] == 1
     assert "не доказывает влияние" in dashboard.json()["limitation"]
+
+
+def test_social_posts_and_sources_can_be_deleted(client: TestClient) -> None:
+    project_id, competitor_id = _project_and_competitor(client)
+    with TestingSession() as db:
+        source = CompetitorSocialMonitorService(db, _SocialCollector()).create(
+            1,
+            project_id,
+            competitor_id,
+            SocialSourceCreate(
+                platform="TELEGRAM",
+                profile_url="https://t.me/skinjestique",
+                external_id="skinjestique",
+            ),
+        )
+
+    post_id = source.posts[0].id
+    deleted_post = client.delete(
+        f"/competitor-intelligence/projects/{project_id}/competitors/{competitor_id}"
+        f"/social/{source.id}/posts/{post_id}"
+    )
+    assert deleted_post.status_code == 204
+    dashboard = client.get(
+        f"/competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/social"
+    ).json()
+    assert dashboard["total_posts"] == 0
+
+    deleted_source = client.delete(
+        f"/competitor-intelligence/projects/{project_id}/competitors/{competitor_id}"
+        f"/social/{source.id}"
+    )
+    assert deleted_source.status_code == 204
+    dashboard = client.get(
+        f"/competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/social"
+    ).json()
+    assert dashboard["sources"] == []
 
 
 def test_telegram_connection_encrypts_credentials_and_searches_message_content(

@@ -146,6 +146,10 @@
 .social-post > div { display: grid; gap: 4px; }
 .social-post > strong { display: grid; text-align: right; color: var(--success); font-size: 1.3rem; }
 .social-post > strong span { color: var(--muted); font-size: 9px; font-weight: 500; }
+.social-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.social-post__actions { display: grid; justify-items: end; gap: 2px; }
+.social-post__actions strong { display: grid; text-align: right; color: var(--success); font-size: 1.3rem; }
+.social-post__actions strong span { color: var(--muted); font-size: 9px; font-weight: 500; }
 @media (max-width: 1000px) { .geo-site-audit { grid-template-columns: 1fr; }.social-source-form { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 620px) { .geo-audit-categories, .social-source-form { grid-template-columns: 1fr; }.social-post { grid-template-columns: 1fr; }.social-post > strong { text-align: left; } }
 @media (max-width: 620px) { .social-discovery,.telegram-connection__header { align-items:stretch; flex-direction:column; } .telegram-connect-form,.telegram-search,.telegram-proxy-form{grid-template-columns:1fr} }
