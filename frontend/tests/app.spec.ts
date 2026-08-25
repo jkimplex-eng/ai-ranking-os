@@ -385,6 +385,13 @@ test("GEO screen exposes real platform scoring and explainability", async ({ pag
   await page.getByLabel("Пароль").fill("strong-password");
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page.getByRole("heading", { name: "Где публиковаться, чтобы вас рекомендовали ИИ" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "От реального спроса — к плану роста в Алисе" })).toBeVisible();
+  await expect(page.getByText("Находим спрос", { exact: true })).toBeVisible();
+  await expect(page.getByText("Проверяем Алису", { exact: true })).toBeVisible();
+  await expect(page.getByText("Предлагаем действие", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "По каким запросам вас находят — и где вы теряете возможность" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Что чаще встречается рядом с рекомендацией бренда" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Следим, помогли ли ваши действия" })).toBeVisible();
   await expect(page.getByText("Отраслевое СМИ")).toBeVisible();
   await expect(page.getByText("Beauty Core")).toBeVisible();
   await expect(page.getByText("Что уже повлияло на ответы ИИ")).toBeVisible();
