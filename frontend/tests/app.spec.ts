@@ -35,6 +35,7 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
   let competitorCreated = false;
   let socialConnected = false;
   let telegramStatus = "NOT_CONFIGURED";
+  let telegramProxy = false;
   const dashboard = () => ({
     project_id: 10,
     monitoring_enabled: false,
@@ -83,9 +84,10 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
     let json: unknown = {};
     if (path.endsWith("/auth/login")) json = { access_token: "access", refresh_token: "refresh-token-with-valid-length" };
     else if (path.endsWith("/auth/me")) json = { id: 1, display_name: "Admin", email: "admin@example.com", roles: ["superadmin"] };
-    else if (path.endsWith("/competitor-intelligence/telegram/connection/send-code")) { telegramStatus = "PENDING_CODE"; json = { configured: false, status: telegramStatus, phone_hint: "+79***67" }; }
-    else if (path.endsWith("/competitor-intelligence/telegram/connection/verify")) { telegramStatus = "CONNECTED"; json = { configured: true, status: telegramStatus, phone_hint: "+79***67" }; }
-    else if (path.endsWith("/competitor-intelligence/telegram/connection")) json = { configured: telegramStatus === "CONNECTED", status: telegramStatus, phone_hint: telegramStatus === "NOT_CONFIGURED" ? null : "+79***67" };
+    else if (path.endsWith("/competitor-intelligence/telegram/connection/send-code")) { telegramStatus = "PENDING_CODE"; json = { configured: false, status: telegramStatus, proxy_configured: false, phone_hint: "+79***67" }; }
+    else if (path.endsWith("/competitor-intelligence/telegram/connection/verify")) { telegramStatus = "CONNECTED"; json = { configured: true, status: telegramStatus, proxy_configured: false, phone_hint: "+79***67" }; }
+    else if (path.endsWith("/competitor-intelligence/telegram/connection/proxy")) { telegramProxy = request.method() === "PUT"; json = { configured: true, status: telegramStatus, proxy_configured: telegramProxy, phone_hint: "+79***67" }; }
+    else if (path.endsWith("/competitor-intelligence/telegram/connection")) json = { configured: telegramStatus === "CONNECTED", status: telegramStatus, proxy_configured: telegramProxy, phone_hint: telegramStatus === "NOT_CONFIGURED" ? null : "+79***67" };
     else if (path.endsWith("/workspace/projects") && request.method() === "POST") {
       projectCreated = true;
       status = 201;
@@ -140,6 +142,10 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
   await page.getByLabel("Код Telegram").fill("12345");
   await page.getByRole("button", { name: "Подтвердить" }).click();
   await expect(page.getByText("ПОДКЛЮЧЕНО")).toBeVisible();
+  await page.getByLabel("Адрес SOCKS5").fill("proxy.example.com");
+  await page.getByLabel("Порт SOCKS5").fill("1080");
+  await page.getByRole("button", { name: "Проверить и подключить" }).click();
+  await expect(page.getByText("АКТИВЕН")).toBeVisible();
   await page.getByLabel("URL профиля").fill("https://t.me/librederm");
   await page.getByLabel("Идентификатор канала").fill("librederm");
   await page.getByRole("button", { name: "Добавить канал" }).click();

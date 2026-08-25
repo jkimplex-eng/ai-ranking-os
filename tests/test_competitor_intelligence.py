@@ -17,6 +17,7 @@ from competitor_intelligence.schemas import (
     SocialSourceCreate,
     TelegramCodeVerify,
     TelegramConnectionStart,
+    TelegramProxyInput,
     TelegramSearchRequest,
 )
 from competitor_intelligence.social_monitor import (
@@ -133,6 +134,8 @@ def _project_and_competitor(client: TestClient) -> tuple[int, int]:
 
 
 class _TelegramGateway:
+    checked_proxy = None
+
     def send_code(self, api_id, api_hash, phone, proxy):
         assert api_id == 12345
         assert api_hash == "a" * 32
@@ -159,6 +162,10 @@ class _TelegramGateway:
                 forwards=12,
             )
         ]
+
+    def check(self, api_id, api_hash, session, proxy):
+        assert session == "authorized-session"
+        self.checked_proxy = proxy
 
 
 def _completed_research(project_id: int) -> int:
@@ -423,3 +430,47 @@ def test_telegram_connection_encrypts_credentials_and_searches_message_content(
     ).json()
     assert dashboard["total_posts"] == 1
     assert all("Публикация про" in post["content"] for post in dashboard["sources"][0]["posts"])
+
+
+def test_telegram_proxy_is_checked_and_encrypted(client: TestClient, monkeypatch) -> None:
+    _project_and_competitor(client)
+    settings = type(
+        "Settings",
+        (),
+        {"provider_secret_key": "t" * 32, "auth_jwt_secret": "j" * 32},
+    )()
+    monkeypatch.setattr("competitor_intelligence.telegram_connector.get_settings", lambda: settings)
+    gateway = _TelegramGateway()
+    with TestingSession() as db:
+        service = TelegramConnectionService(db, gateway)
+        service.start(
+            1,
+            TelegramConnectionStart(
+                api_id=12345,
+                api_hash="a" * 32,
+                phone_number="+79991234567",
+            ),
+        )
+        service.verify(1, TelegramCodeVerify(code="12345"))
+        result = service.set_proxy(
+            1,
+            TelegramProxyInput(
+                host="proxy.example.com",
+                port=1080,
+                username="user",
+                password="secret",
+            ),
+        )
+        stored = db.scalar(
+            select(TelegramConnection).where(TelegramConnection.user_id == 1)
+        )
+
+    assert result.proxy_configured is True
+    assert gateway.checked_proxy == {
+        "host": "proxy.example.com",
+        "port": 1080,
+        "username": "user",
+        "password": "secret",
+    }
+    assert stored is not None
+    assert "proxy.example.com" not in stored.encrypted_proxy

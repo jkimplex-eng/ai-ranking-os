@@ -140,6 +140,7 @@ class TelegramCodeVerify(BaseModel):
 class TelegramConnectionRead(BaseModel):
     configured: bool
     status: str
+    proxy_configured: bool = False
     phone_hint: str | None = None
     last_connected_at: datetime | None = None
     last_error: str | None = None

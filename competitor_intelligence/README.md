@@ -19,6 +19,8 @@ API:
 - `POST /competitor-intelligence/telegram/connection/send-code`
 - `POST /competitor-intelligence/telegram/connection/verify`
 - `DELETE /competitor-intelligence/telegram/connection`
+- `PUT /competitor-intelligence/telegram/connection/proxy`
+- `DELETE /competitor-intelligence/telegram/connection/proxy`
 - `POST /competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/telegram/search`
 
 Social monitoring uses the same module and the existing worker queue. Telegram public previews
@@ -42,3 +44,7 @@ account has not joined), saves evidence under the existing social source/post mo
 searches daily through the existing worker. Private channels and chats remain inaccessible. Some
 Telegram accounts may require Premium for global post search. Telegram content is evidence for
 deterministic analytics and is not used to train or fine-tune an ML/LLM model.
+
+An already-authorized account can add or replace its SOCKS5 route without reconnecting Telegram.
+The service validates authentication through the proposed proxy before encrypting and persisting
+its host, port and optional credentials. A failed proxy never replaces the active route.

@@ -15,6 +15,7 @@ from competitor_intelligence.schemas import (
     TelegramCodeVerify,
     TelegramConnectionRead,
     TelegramConnectionStart,
+    TelegramProxyInput,
     TelegramSearchRequest,
 )
 from competitor_intelligence.service import CompetitorIntelligenceService
@@ -65,6 +66,24 @@ def telegram_verify(
 def telegram_disconnect(user_id: CurrentUserId, db: DbSession) -> Response:
     TelegramConnectionService(db).disconnect(user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/telegram/connection/proxy", response_model=TelegramConnectionRead)
+def telegram_proxy(
+    payload: TelegramProxyInput, user_id: CurrentUserId, db: DbSession
+) -> TelegramConnectionRead:
+    try:
+        return TelegramConnectionService(db).set_proxy(user_id, payload)
+    except SocialMonitorError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.delete("/telegram/connection/proxy", response_model=TelegramConnectionRead)
+def telegram_proxy_delete(user_id: CurrentUserId, db: DbSession) -> TelegramConnectionRead:
+    try:
+        return TelegramConnectionService(db).clear_proxy(user_id)
+    except SocialMonitorError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.get("/projects/{project_id}", response_model=CompetitorDashboardRead)

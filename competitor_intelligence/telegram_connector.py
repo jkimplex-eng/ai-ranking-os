@@ -21,6 +21,7 @@ from competitor_intelligence.schemas import (
     TelegramCodeVerify,
     TelegramConnectionRead,
     TelegramConnectionStart,
+    TelegramProxyInput,
     TelegramSearchRequest,
 )
 from competitor_intelligence.social_monitor import SocialMonitorError
@@ -73,6 +74,14 @@ class TelegramGatewayPort(Protocol):
         limit: int,
         proxy: dict | None,
     ) -> list[TelegramMessage]: ...
+
+    def check(
+        self,
+        api_id: int,
+        api_hash: str,
+        session: str,
+        proxy: dict | None,
+    ) -> None: ...
 
 
 class TelethonGateway:
@@ -211,6 +220,26 @@ class TelethonGateway:
 
         return self._run(run())
 
+    def check(
+        self,
+        api_id: int,
+        api_hash: str,
+        session: str,
+        proxy: dict | None,
+    ) -> None:
+        async def run() -> None:
+            client = self._client(session, api_id, api_hash, proxy)
+            try:
+                await client.connect()
+                if not await client.is_user_authorized():
+                    raise SocialMonitorError(
+                        "Telegram-сессия истекла; подключите аккаунт повторно"
+                    )
+            finally:
+                await client.disconnect()
+
+        self._run(run())
+
     @staticmethod
     def _messages(result: object) -> list[TelegramMessage]:
         chats = {
@@ -321,6 +350,37 @@ class TelegramConnectionService:
         if item:
             self.db.delete(item)
             self.db.commit()
+
+    def set_proxy(
+        self, user_id: int, payload: TelegramProxyInput
+    ) -> TelegramConnectionRead:
+        item = self._required(user_id)
+        if item.status != "CONNECTED" or not item.encrypted_session:
+            raise SocialMonitorError("Сначала подключите Telegram")
+        proxy = payload.model_dump(exclude_none=True)
+        try:
+            self.gateway.check(
+                item.api_id,
+                self.cipher.decrypt(item.encrypted_api_hash),
+                self.cipher.decrypt(item.encrypted_session),
+                proxy,
+            )
+        except Exception as error:
+            item.last_error = self._safe_error(error)
+            self.db.commit()
+            raise SocialMonitorError(item.last_error) from error
+        item.encrypted_proxy = self.cipher.encrypt(json.dumps(proxy))
+        item.last_error = None
+        item.last_connected_at = datetime.now(UTC)
+        self.db.commit()
+        return self._read(item)
+
+    def clear_proxy(self, user_id: int) -> TelegramConnectionRead:
+        item = self._required(user_id)
+        item.encrypted_proxy = None
+        item.last_error = None
+        self.db.commit()
+        return self._read(item)
 
     def search_competitor(
         self,
@@ -482,6 +542,9 @@ class TelegramConnectionService:
             "ConnectionError": (
                 "VPS не может установить соединение с Telegram; повторите через минуту"
             ),
+            "ProxyConnectionError": "SOCKS5-прокси недоступен; проверьте адрес и порт",
+            "SOCKS5AuthError": "SOCKS5-прокси отклонил логин или пароль",
+            "GeneralProxyError": "SOCKS5-прокси не смог подключиться к Telegram",
             "PremiumAccountRequiredError": (
                 "Глобальный поиск по публичным каналам требует Telegram Premium "
                 "для подключённого аккаунта"
@@ -494,6 +557,7 @@ class TelegramConnectionService:
         return TelegramConnectionRead(
             configured=item.status == "CONNECTED",
             status=item.status,
+            proxy_configured=bool(item.encrypted_proxy),
             phone_hint=item.phone_hint,
             last_connected_at=item.last_connected_at,
             last_error=item.last_error,
