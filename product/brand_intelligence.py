@@ -124,6 +124,13 @@ class BrandIntelligenceEngine:
         "catalog",
         "shop",
         "collection",
+        "course",
+        "courses",
+        "profession",
+        "education",
+        "kurs",
+        "obuchen",
+        "uslug",
         "serum",
         "cream",
         "сывор",
@@ -280,6 +287,14 @@ class BrandIntelligenceEngine:
     def _categories(pages: list[ParsedPage], products: list[dict[str, Any]]) -> list[str]:
         values = {str(item["category"]).strip() for item in products if item.get("category")}
         product_text = " ".join(str(item.get("name") or "") for item in products).casefold()
+        site_text = " ".join(
+            [
+                *[page.title for page in pages],
+                *[page.description for page in pages],
+                *[heading for page in pages for heading in page.headings],
+                *[text for page in pages for text in page.text[:300]],
+            ]
+        ).casefold()
         taxonomy = {
             "Сыворотки": ("сыворот", "serum"),
             "Кремы": ("крем", "cream"),
@@ -292,6 +307,26 @@ class BrandIntelligenceEngine:
             category
             for category, markers in taxonomy.items()
             if any(marker in product_text for marker in markers)
+        )
+        vertical_taxonomy = {
+            "Онлайн-образование": (
+                "онлайн-образован",
+                "онлайн обучение",
+                "онлайн-курс",
+                "профессия с нуля",
+                "образовательная платформа",
+                "курсы программирования",
+            ),
+            "Финансовые услуги": ("банк", "кредит", "вклад", "страхован", "инвестиц"),
+            "Недвижимость": ("недвижимост", "квартир", "жилой комплекс", "застройщик"),
+            "Туризм и путешествия": ("туризм", "путешеств", "отел", "авиабилет"),
+            "Программное обеспечение": ("программное обеспечение", "saas", "crm", "erp"),
+            "Маркетинг и реклама": ("маркетинг", "реклам", "продвижение бренда"),
+        }
+        values.update(
+            category
+            for category, markers in vertical_taxonomy.items()
+            if any(marker in site_text for marker in markers)
         )
         for page in pages:
             if page.url.casefold().endswith(".html"):
@@ -310,6 +345,9 @@ class BrandIntelligenceEngine:
         text = " ".join(
             [item.get("description", "") for item in products]
             + [page.description for page in pages]
+            + [page.title for page in pages]
+            + [heading for page in pages for heading in page.headings]
+            + [value for page in pages for value in page.text[:300]]
         ).casefold()
         vocabulary = {
             "увлажняющий": ("увлажняющ",),
@@ -325,6 +363,11 @@ class BrandIntelligenceEngine:
             "anti-aging": ("anti-aging",),
             "acne": ("acne",),
             "barrier": ("barrier",),
+            "обучение с нуля": ("с нуля", "без опыта"),
+            "освоение новой профессии": ("новая професс", "освоить профес"),
+            "помощь с трудоустройством": ("трудоустрой", "карьерный центр"),
+            "гибкий график обучения": ("гибкий график", "в своём темпе", "в своем темпе"),
+            "практические проекты": ("практические проект", "портфолио"),
         }
         return [
             canonical

@@ -1766,7 +1766,7 @@ function Wizard({
             <input
               autoFocus
               value={brand}
-              onChange={(e) => setBrand(e.target.value)}
+              onChange={(e) => { setBrand(e.target.value); setBrandProfile(undefined); setCustomQueries([]); setReview(undefined); }}
               placeholder="Например, Skinjestique"
             />
           </label>

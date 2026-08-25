@@ -28,6 +28,17 @@ class FakeFetcher:
         )
 
 
+class EducationFetcher:
+    def fetch(self, url: str) -> tuple[str, str]:
+        return (
+            url,
+            """<html><head><title>Онлайн-курсы и профессии</title>
+            <meta name='description' content='Образовательная платформа: обучение с нуля,
+            практические проекты, портфолио и помощь с трудоустройством'></head>
+            <body><h1>Освойте новую профессию онлайн</h1></body></html>""",
+        )
+
+
 def test_brand_intelligence_extracts_product_price_and_attributes() -> None:
     profile = BrandIntelligenceEngine(FakeFetcher(), max_pages=1).analyze(
         brand="Skinjestique", website_url="https://skinjestique.example"
@@ -47,6 +58,36 @@ def test_brand_intelligence_reuses_verified_server_profile() -> None:
 
     assert first == second
     assert fetcher.calls == ["https://skinjestique.example"]
+
+
+def test_brand_intelligence_detects_education_without_beauty_fallback() -> None:
+    profile = BrandIntelligenceEngine(EducationFetcher(), max_pages=1).analyze(
+        brand="Education Brand", website_url="https://education.example"
+    )
+
+    assert "Онлайн-образование" in profile["categories"]
+    assert "обучение с нуля" in profile["attributes"]
+    assert not any("космет" in item.casefold() for item in profile["categories"])
+
+
+def test_universal_education_queries_never_use_beauty_vocabulary() -> None:
+    catalog = QueryMapBuilder().build(
+        brand="Education Brand",
+        language="ru",
+        region="RU-MOW",
+        profile="UNIVERSAL",
+        variables={},
+        brand_profile={
+            "categories": ["Онлайн-образование"],
+            "products": [],
+            "attributes": ["обучение с нуля", "помощь с трудоустройством"],
+        },
+    )
+
+    combined = " ".join(item.text.casefold() for item in catalog)
+    assert "онлайн-образование" in combined
+    assert "трудоустрой" in combined
+    assert all(word not in combined for word in ("космет", "сыворот", "кож", "skincare"))
 
 
 def test_query_map_uses_brand_context_for_narrow_buyer_queries() -> None:

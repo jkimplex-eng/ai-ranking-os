@@ -50,10 +50,16 @@ class QueryMapBuilder:
     ) -> list[QueryScenario]:
         is_english = language.casefold().startswith("en")
         profile_data = brand_profile or {}
-        categories = [str(item).strip() for item in profile_data.get("categories", []) if item]
+        detected_categories = [
+            str(item).strip() for item in profile_data.get("categories", []) if item
+        ]
         attributes = [str(item).strip() for item in profile_data.get("attributes", []) if item]
-        fallback_category = variables.get("category") or self._category(profile, english=is_english)
-        categories = list(dict.fromkeys([*categories, fallback_category]))[:4]
+        fallback_category = (
+            variables.get("category")
+            or next(iter(detected_categories), None)
+            or self._category(profile, english=is_english)
+        )
+        categories = list(dict.fromkeys(detected_categories or [fallback_category]))[:4]
         products = [item for item in profile_data.get("products", []) if item.get("name")]
         price_context = self._price_context(products, english=is_english)
         competitors = list(
@@ -64,7 +70,11 @@ class QueryMapBuilder:
             )
         )
         if is_english:
-            needs = list(dict.fromkeys([*attributes, *self._default_needs(profile, True)]))[:4]
+            needs = list(
+                dict.fromkeys(
+                    [*attributes, *self._default_needs(profile, True, fallback_category)]
+                )
+            )[:4]
             terms = [self._product_term(item, True) for item in categories]
             templates = [
                 (
@@ -82,7 +92,7 @@ class QueryMapBuilder:
                 (
                     "problem_solution",
                     "solution",
-                    f"What skincare works best for {need}?",
+                    f"Which {fallback_category} options work best for {need}?",
                     "consideration",
                     "unbranded",
                 )
@@ -93,8 +103,8 @@ class QueryMapBuilder:
                     "price_comparison",
                     "comparison",
                     (
-                        f"Which {term} for {needs[index % len(needs)]} offers the best "
-                        f"ingredients and evidence {price_context}?"
+                        f"Which options in {term} for {needs[index % len(needs)]} offer "
+                        f"the best value, features, and verified outcomes {price_context}?"
                     ),
                     "consideration",
                     "unbranded",
@@ -150,7 +160,9 @@ class QueryMapBuilder:
         else:
             needs = [
                 self._need_context(item)
-                for item in dict.fromkeys([*attributes, *self._default_needs(profile, False)])
+                for item in dict.fromkeys(
+                    [*attributes, *self._default_needs(profile, False, fallback_category)]
+                )
             ][:4]
             terms = [self._product_term(item, False) for item in categories]
             templates = [
@@ -169,7 +181,7 @@ class QueryMapBuilder:
                 (
                     "problem_solution",
                     "solution",
-                    f"Какие средства стоит выбрать для {need}?",
+                    f"Какие варианты в категории «{fallback_category}» подходят для {need}?",
                     "consideration",
                     "unbranded",
                 )
@@ -180,9 +192,9 @@ class QueryMapBuilder:
                     "price_comparison",
                     "comparison",
                     (
-                        f"Какие {self._comparison_term(term)} для "
-                        f"{needs[index % len(needs)]} лучше по составу и доказательствам "
-                        f"эффективности {price_context}?"
+                        f"Какие предложения в категории «{self._comparison_term(term)}» для "
+                        f"{needs[index % len(needs)]} лучше по цене, характеристикам и "
+                        f"подтверждённым результатам {price_context}?"
                     ),
                     "consideration",
                     "unbranded",
@@ -491,7 +503,24 @@ class QueryMapBuilder:
         return variants[(index // 4) % len(variants)]
 
     @staticmethod
-    def _default_needs(profile: str, english: bool) -> list[str]:
+    def _default_needs(profile: str, english: bool, category: str = "") -> list[str]:
+        normalized_category = category.casefold()
+        if "образован" in normalized_category or "education" in normalized_category:
+            return (
+                [
+                    "starting a new career without prior experience",
+                    "job-ready practical skills",
+                    "a flexible learning schedule",
+                    "career support and a strong portfolio",
+                ]
+                if english
+                else [
+                    "освоения новой профессии с нуля",
+                    "получения практических навыков для работы",
+                    "обучения по гибкому графику",
+                    "подготовки портфолио и трудоустройства",
+                ]
+            )
         if profile == "BEAUTY":
             return (
                 [
