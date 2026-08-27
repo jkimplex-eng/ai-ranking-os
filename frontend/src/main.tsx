@@ -57,6 +57,12 @@ import {
 import "./styles.css";
 
 const api = new ApiClient();
+const ACTIVE_RESEARCH_KEY = "ai-ranking-active-research";
+
+function researchBrand(item: ResearchItem | undefined) {
+  if (!item) return "";
+  return String(item.metadata?.brand ?? item.title.replace(/^AI Visibility:\s*/i, "")).trim();
+}
 const screenPaths: Record<Screen, string> = {
   home: "/",
   expert: "/expert-guide",
@@ -400,12 +406,39 @@ function metricEvidence(key: string, data: ReportShape, research: ResearchItem) 
 
 function GraphScreen() {
   const [graph, setGraph] = useState<GraphSnapshot>();
+  const [researches, setResearches] = useState<ResearchItem[]>([]);
+  const [researchId, setResearchId] = useState<number>();
   const [query, setQuery] = useState("");
   const [nodeType, setNodeType] = useState("ALL");
   const [selected, setSelected] = useState<number>();
   const [error, setError] = useState("");
-  useEffect(() => { api.graph().then(setGraph).catch((reason) => setError(reason instanceof Error ? reason.message : "Граф недоступен")); }, []);
-  if (error) return <main className="analytics-page"><div className="error" role="alert">{error}</div></main>;
+  useEffect(() => {
+    api.listResearch().then((items) => {
+      const completed = [...items]
+        .filter((item) => item.status === "COMPLETED")
+        .sort((left, right) => right.id - left.id);
+      setResearches(completed);
+      const savedId = Number(sessionStorage.getItem(ACTIVE_RESEARCH_KEY));
+      const selectedId = completed.some((item) => item.id === savedId)
+        ? savedId
+        : completed[0]?.id;
+      setResearchId(selectedId);
+    }).catch((reason) => setError(reason instanceof Error ? reason.message : "Исследования недоступны"));
+  }, []);
+  useEffect(() => {
+    if (!researchId) return;
+    let active = true;
+    sessionStorage.setItem(ACTIVE_RESEARCH_KEY, String(researchId));
+    api.graph(researchId)
+      .then((snapshot) => { if (active) setGraph(snapshot); })
+      .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Граф недоступен"); });
+    return () => { active = false; };
+  }, [researchId]);
+  if (!researches.length) return <main className="analytics-page graph-page"><header className="analytics-hero"><div><span className="eyebrow">СВЯЗИ И ИСТОЧНИКИ</span><h1>Граф знаний</h1><p>Здесь появятся реальные связи выбранного бренда с продуктами, организациями и источниками.</p></div></header><div className="analytics-card empty-state"><h2>Граф появится после исследования</h2><p>Создайте и завершите исследование бренда. Система извлечёт сущности, источники и связи из реальных ответов ИИ.</p></div></main>;
+  const selectedResearch = researches.find((item) => item.id === researchId);
+  const selectedBrand = researchBrand(selectedResearch);
+  const selector = <label className="research-selector">Бренд и исследование<select aria-label="Бренд для графа знаний" value={researchId} onChange={(event) => { setGraph(undefined); setSelected(undefined); setError(""); setResearchId(Number(event.target.value)); }}>{researches.map((item) => <option value={item.id} key={item.id}>{researchBrand(item)} · исследование #{item.id}</option>)}</select></label>;
+  if (error) return <main className="analytics-page graph-page"><header className="analytics-hero"><div><span className="eyebrow">{selectedBrand || "ВЫБРАННЫЙ БРЕНД"}</span><h1>Граф знаний</h1><p>Для выбранного исследования граф не построен.</p></div>{selector}</header><div className="analytics-card empty-state" role="alert"><h2>Связи ещё не извлечены</h2><p>{error}</p><p>Выберите другое завершённое исследование или запустите новое — после обработки ответов граф будет создан автоматически.</p></div></main>;
   if (!graph) return <DashboardSkeleton />;
   const types = [...new Set(graph.nodes.map((node) => node.node_type))];
   const visible = graph.nodes.filter((node) => (nodeType === "ALL" || node.node_type === nodeType) && (!query || `${node.name} ${node.aliases.join(" ")}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())));
@@ -414,7 +447,8 @@ function GraphScreen() {
   const positions = new Map(visible.map((node, index) => { const angle = index * Math.PI * 2 / Math.max(visible.length, 1) - Math.PI / 2; return [node.id, { x: 310 + Math.cos(angle) * 215, y: 230 + Math.sin(angle) * 165 }]; }));
   const selectedNode = graph.nodes.find((node) => node.id === selected);
   const connected = selected == null ? [] : graph.edges.filter((edge) => edge.source_node_id === selected || edge.target_node_id === selected);
-  return <main className="analytics-page graph-page"><header className="analytics-hero"><div><span className="eyebrow">СНИМОК #{graph.id} · v{graph.structure_version}</span><h1>Граф знаний</h1><p>{graph.node_count} сущностей · {graph.edge_count} связей · {new Date(graph.created_at).toLocaleString("ru-RU")}</p></div></header>
+  return <main className="analytics-page graph-page"><header className="analytics-hero"><div><span className="eyebrow">{selectedBrand} · СНИМОК #{graph.id} · v{graph.structure_version}</span><h1>Граф знаний</h1><p>Что ИИ связывает с брендом <strong>{selectedBrand}</strong> в исследовании #{researchId}. Линия означает зафиксированную связь в ответе ИИ, а не доказанное влияние.</p></div>{selector}</header>
+    <section className="analytics-card graph-explainer"><div><b>{graph.node_count}</b><span>обнаруженных сущностей</span></div><div><b>{graph.edge_count}</b><span>подтверждённых связей</span></div><p><strong>Как читать:</strong> нажмите на круг, чтобы увидеть тип сущности, уверенность извлечения и связи. Если связь отсутствует, это означает, что в сохранённых ответах ИИ она не была обнаружена.</p></section>
     <section className="analytics-card graph-toolbar"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по имени или алиасу"/><select value={nodeType} onChange={(event) => setNodeType(event.target.value)}><option value="ALL">Все типы</option>{types.map((type) => <option key={type}>{type}</option>)}</select></section>
     {!visible.length ? <div className="analytics-card empty-state">Сущности по выбранным условиям не найдены.</div> : <section className="graph-real-layout"><article className="analytics-card"><svg viewBox="0 0 620 460" className="network" aria-label="Реальный граф знаний"><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#607899"/></marker></defs>{edges.map((edge) => { const source = positions.get(edge.source_node_id); const target = positions.get(edge.target_node_id); if (!source || !target) return null; return <g key={edge.id}><line x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke="#607899" markerEnd="url(#arrow)"/><title>{edge.edge_type} · уверенность {(edge.confidence * 100).toFixed(0)}%</title></g>; })}{visible.map((node) => { const point = positions.get(node.id)!; return <g key={node.id} className="graph-node" onClick={() => setSelected(node.id)}><circle cx={point.x} cy={point.y} r={selected === node.id ? 25 : 19} fill={selected === node.id ? "#3b82f6" : "#263d62"}/><text x={point.x} y={point.y + 34} textAnchor="middle" fill="#c8d4e6" fontSize="11">{node.name}</text><title>{node.node_type} · уверенность {(node.confidence * 100).toFixed(0)}%</title></g>; })}</svg>{!edges.length && <p className="empty-state">Связи пока не обнаружены. Показаны только реальные узлы снимка.</p>}</article><aside className="analytics-card graph-detail">{selectedNode ? <><span className="eyebrow">{selectedNode.node_type}</span><h2>{selectedNode.name}</h2><p>Уверенность {(selectedNode.confidence * 100).toFixed(1)}%</p><p>Алиасы: {selectedNode.aliases.join(", ") || "нет"}</p><h3>Связи ({connected.length})</h3>{connected.map((edge) => <div className="graph-edge-detail" key={edge.id}><div className="setting-row"><span>{edge.edge_type}</span><b>{(edge.confidence * 100).toFixed(0)}%</b></div><small>{Object.keys(edge.properties ?? {}).length ? `Доказательства: ${JSON.stringify(edge.properties)}` : "Контекст и источник связи не были записаны при построении графа."}</small></div>)}</> : <p className="empty-state">Выберите узел, чтобы увидеть уверенность, алиасы и связи.</p>}</aside></section>}
   </main>;
@@ -992,6 +1026,7 @@ function GeoOpportunitiesScreen() {
   const [aliceLearning, setAliceLearning] = useState<AliceLearningDashboard>();
   const [aliceAutomation, setAliceAutomation] = useState<AliceAutomationDashboard>();
   const [researches, setResearches] = useState<ResearchItem[]>([]);
+  const [selectedResearchId, setSelectedResearchId] = useState<number>();
   const [auditForm, setAuditForm] = useState({ brand: "", website: "" });
   const [engine, setEngine] = useState("YandexGPT");
   const [form, setForm] = useState({ name: "", domain: "", category: "UNIVERSAL", country: "RU", language: "ru", trust: "", authority: "", citations: "", cost: "" });
@@ -1005,7 +1040,15 @@ function GeoOpportunitiesScreen() {
     api.listResearch(),
   ]).then(([items, sets, estimates, audits, intelligence, learning, automation, researchItems]) => {
     setPlatforms(items); setPromptSets(sets); setLearnedInfluence(estimates); setSiteAudit(audits[0]);
-    setResearches(researchItems);
+    const completed = [...researchItems]
+      .filter((item) => item.status === "COMPLETED")
+      .sort((left, right) => right.id - left.id);
+    setResearches(completed);
+    setSelectedResearchId((current) => {
+      if (current && completed.some((item) => item.id === current)) return current;
+      const savedId = Number(sessionStorage.getItem(ACTIVE_RESEARCH_KEY));
+      return completed.some((item) => item.id === savedId) ? savedId : completed[0]?.id;
+    });
     setYandexIntelligence(Array.isArray(intelligence?.query_map) ? intelligence : undefined);
     setAliceLearning(
       learning
@@ -1023,6 +1066,13 @@ function GeoOpportunitiesScreen() {
     );
   }), []);
   useEffect(() => { load().catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить GEO-данные")); }, [load]);
+  const selectedResearch = researches.find((item) => item.id === selectedResearchId);
+  const selectedBrand = researchBrand(selectedResearch);
+  useEffect(() => {
+    if (!selectedResearchId || !selectedBrand) return;
+    sessionStorage.setItem(ACTIVE_RESEARCH_KEY, String(selectedResearchId));
+    api.aliceLearningDashboard(selectedBrand).then(setAliceLearning).catch(() => undefined);
+  }, [selectedBrand, selectedResearchId]);
   const numericField = (value: string) => value.trim() === "" ? undefined : Number(value);
   const auditSite = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setError("");
@@ -1066,15 +1116,15 @@ function GeoOpportunitiesScreen() {
   };
   const rebuildAlice = async () => {
     setBusy(true); setError("");
-    try { setAliceLearning(await api.rebuildAliceLearning()); }
+    try { setAliceLearning(await api.rebuildAliceLearning(selectedBrand || undefined)); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось обучить модель Алисы"); }
     finally { setBusy(false); }
   };
-  const latestAutomationTemplate = researches.find((item) =>
-    item.status === "COMPLETED"
-    && typeof item.metadata?.website_url === "string"
-    && Array.isArray(item.metadata?.query_catalog),
-  );
+  const latestAutomationTemplate = selectedResearch && (
+    selectedResearch.status === "COMPLETED"
+    && typeof selectedResearch.metadata?.website_url === "string"
+    && Array.isArray(selectedResearch.metadata?.query_catalog)
+  ) ? selectedResearch : undefined;
   const enableAliceAutomation = async () => {
     if (!latestAutomationTemplate) return;
     const metadata = latestAutomationTemplate.metadata ?? {};
@@ -1111,11 +1161,14 @@ function GeoOpportunitiesScreen() {
   };
   const platformById = new Map(platforms.map((item) => [item.id, item]));
   const activeSets = promptSets.filter((item) => item.active);
+  const selectedPlans = (aliceAutomation?.plans ?? []).filter(
+    (plan) => !selectedBrand || plan.brand.toLocaleLowerCase() === selectedBrand.toLocaleLowerCase(),
+  );
   return (
     <main className="analytics-page geo-page">
       <header className="analytics-hero">
         <div><span className="eyebrow">GEO OPPORTUNITY ENGINE</span><h1>Где публиковаться, чтобы вас рекомендовали ИИ</h1><p>Сравните площадки по авторитетности, тематической близости, истории цитирования и стоимости. Оценка EIS показывает потенциал влияния, а не выдаёт корреляцию за доказанную причинность.</p></div>
-        <div className="geo-method"><span>Методология</span><b>{priorities?.methodology_version ?? "heuristic_v1.0"}</b><small>Версионированный расчёт</small></div>
+        <div className="geo-hero-controls"><label className="research-selector">Анализируемый бренд<select aria-label="Бренд для экспертного анализа" value={selectedResearchId ?? ""} onChange={(event) => setSelectedResearchId(Number(event.target.value))}><option value="" disabled>Выберите исследование</option>{researches.map((item) => <option value={item.id} key={item.id}>{researchBrand(item)} · исследование #{item.id}</option>)}</select></label><div className="geo-method"><span>Методология</span><b>{priorities?.methodology_version ?? "heuristic_v1.0"}</b><small>Версионированный расчёт</small></div></div>
       </header>
       {error && <div className="error" role="alert">{error}</div>}
       <section className="geo-summary">
@@ -1155,8 +1208,8 @@ function GeoOpportunitiesScreen() {
           {aliceLearning.limitations.length ? <details><summary>Что важно учитывать</summary>{aliceLearning.limitations.map((item) => <p className="method-note" key={item}>{item}</p>)}</details> : null}</div> : <div className="geo-empty"><strong>Пока нет истории для сравнения</strong><p>Завершите первое исследование через YandexGPT. Каждый сохранённый ответ станет наблюдением для будущего сравнения.</p></div>}
       </section>
       <section className="analytics-card geo-site-audit alice-automation">
-        <div className="geo-audit-intro"><span className="eyebrow">ШАГ 3 · КОНТРОЛЬ ИЗМЕНЕНИЙ</span><h2>Следим, помогли ли ваши действия</h2><p>Система регулярно повторяет один и тот же набор вопросов. Благодаря неизменной контрольной группе видно, когда бренд начал или перестал появляться в рекомендациях и что изменилось перед этим.</p><div className="geo-user-value"><b>Ценность для вас</b><p>После публикации или улучшения страницы не нужно проверять Алису вручную: система сама зафиксирует изменение и накопит доказательства.</p></div>{aliceAutomation?.plans.length ? null : <Button onClick={() => void enableAliceAutomation()} disabled={busy || !latestAutomationTemplate}>{busy ? "Настраиваем…" : "Включить регулярную проверку"}</Button>}{!latestAutomationTemplate && !aliceAutomation?.plans.length ? <small>Сначала завершите хотя бы одно исследование — оно станет контрольной точкой.</small> : null}</div>
-        {aliceAutomation?.plans.length ? <div className="geo-audit-result">{aliceAutomation.plans.map((plan) => { const latestRun = aliceAutomation.latest_runs.find((item) => item.plan_id === plan.id); return <article className="geo-audit-action" key={plan.id}><Badge tone={plan.is_enabled ? "success" : "neutral"}>{plan.is_enabled ? "АКТИВЕН" : "ПАУЗА"}</Badge><div><b>{plan.brand} · {plan.repetitions} прогона каждого вопроса</b><p>Следующая проверка: {new Date(plan.next_run_at).toLocaleString("ru-RU")} · дневной лимит ${plan.daily_budget_usd.toFixed(2)} · месячный ${plan.monthly_budget_usd.toFixed(2)}</p><small>{latestRun ? `Последний запуск: ${latestRun.status}, ${latestRun.task_count} проверок, $${(latestRun.actual_cost_usd ?? 0).toFixed(4)}` : "Автоматических запусков ещё не было"}</small><div className="button-row"><Button onClick={() => void runAliceAutomation(plan.id)} disabled={busy || !plan.is_enabled}>Проверить сейчас</Button><button className="secondary" onClick={() => void toggleAliceAutomation(plan.id, !plan.is_enabled)} disabled={busy}>{plan.is_enabled ? "Поставить на паузу" : "Возобновить"}</button></div></div></article>; })}<p className="method-note">Закономерности считаются гипотезами. Причинный эффект публикации подтверждается только отдельным зафиксированным экспериментом до/после или с контрольной группой.</p></div> : <div className="geo-empty"><strong>Автоматизация ещё не включена</strong><p>Система возьмёт последнее завершённое исследование как шаблон и не будет незаметно менять контрольные вопросы.</p></div>}
+        <div className="geo-audit-intro"><span className="eyebrow">ШАГ 3 · КОНТРОЛЬ ИЗМЕНЕНИЙ</span><h2>Следим, помогли ли ваши действия</h2><p>Система регулярно повторяет один и тот же набор вопросов. Благодаря неизменной контрольной группе видно, когда бренд начал или перестал появляться в рекомендациях и что изменилось перед этим.</p><div className="geo-user-value"><b>Сейчас выбран</b><p>{selectedBrand || "Выберите завершённое исследование выше"}. Мониторинг создаётся отдельно для каждого бренда и не смешивает результаты.</p></div>{selectedPlans.length ? null : <Button onClick={() => void enableAliceAutomation()} disabled={busy || !latestAutomationTemplate}>{busy ? "Настраиваем…" : `Включить проверку ${selectedBrand || "бренда"}`}</Button>}{!latestAutomationTemplate && !selectedPlans.length ? <small>Сначала завершите исследование этого бренда — оно станет контрольной точкой.</small> : null}</div>
+        {selectedPlans.length ? <div className="geo-audit-result">{selectedPlans.map((plan) => { const latestRun = aliceAutomation?.latest_runs.find((item) => item.plan_id === plan.id); return <article className="geo-audit-action" key={plan.id}><Badge tone={plan.is_enabled ? "success" : "neutral"}>{plan.is_enabled ? "АКТИВЕН" : "ПАУЗА"}</Badge><div><b>{plan.brand} · {plan.repetitions} прогона каждого вопроса</b><p>Следующая проверка: {new Date(plan.next_run_at).toLocaleString("ru-RU")} · дневной лимит ${plan.daily_budget_usd.toFixed(2)} · месячный ${plan.monthly_budget_usd.toFixed(2)}</p><small>{latestRun ? `Последний запуск: ${latestRun.status}, ${latestRun.task_count} проверок, $${(latestRun.actual_cost_usd ?? 0).toFixed(4)}` : "Автоматических запусков ещё не было"}</small><div className="button-row"><Button onClick={() => void runAliceAutomation(plan.id)} disabled={busy || !plan.is_enabled}>Проверить сейчас</Button><button className="secondary" onClick={() => void toggleAliceAutomation(plan.id, !plan.is_enabled)} disabled={busy}>{plan.is_enabled ? "Поставить на паузу" : "Возобновить"}</button></div></div></article>; })}<p className="method-note">Закономерности считаются гипотезами. Причинный эффект публикации подтверждается только отдельным зафиксированным экспериментом до/после или с контрольной группой.</p></div> : <div className="geo-empty"><strong>Для {selectedBrand || "этого бренда"} мониторинг ещё не включён</strong><p>Нажмите кнопку выше — система возьмёт выбранное исследование как шаблон и будет повторять именно его вопросы.</p></div>}
       </section>
       <section className="geo-layout">
         <form className="analytics-card geo-form" onSubmit={create}>

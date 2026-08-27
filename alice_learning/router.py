@@ -81,15 +81,15 @@ def predict(payload: PredictRequest, request: Request, db: DbSession):
 
 
 @router.get("/dashboard", response_model=DashboardRead)
-def dashboard(request: Request, db: DbSession):
-    return _service(db).dashboard(_organization(db, request))
+def dashboard(request: Request, db: DbSession, brand: str | None = None):
+    return _service(db).dashboard(_organization(db, request), brand)
 
 
 @router.post("/rebuild", response_model=DashboardRead)
-def rebuild(request: Request, db: DbSession):
+def rebuild(request: Request, db: DbSession, brand: str | None = None):
     organization_id = _organization(db, request)
     rebuild_alice_learning(db, organization_id)
-    return _service(db).dashboard(organization_id)
+    return _service(db).dashboard(organization_id, brand)
 
 
 @router.get("/models/latest", response_model=ModelRead)

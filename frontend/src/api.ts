@@ -363,7 +363,7 @@ export class ApiClient {
   recommendations(researchId: number) { return this.request<{ recommendations: RecommendationItem[] }>(`/research/${researchId}/recommendations`); }
   actionPlan(researchId: number) { return this.request<ActionPlan>(`/research/${researchId}/action-plan`); }
   simulation(researchId: number) { return this.request<SimulationResult>(`/research/${researchId}/simulation`); }
-  graph() { return this.request<GraphSnapshot>("/graph"); }
+  graph(researchId?: number) { return this.request<GraphSnapshot>(`/graph${researchId ? `?research_id=${researchId}` : ""}`); }
   workspaceProjects() { return this.request<WorkspaceProjectItem[]>("/workspace/projects"); }
   createWorkspaceProject(payload: { name: string; description?: string }) {
     return this.request<WorkspaceProjectItem>("/workspace/projects", {
@@ -413,8 +413,8 @@ export class ApiClient {
   disconnectYandexWebmaster() { return this.request<void>("/integrations/yandex-webmaster", { method: "DELETE" }); }
   yandexIntelligence() { return this.request<YandexIntelligence>("/yandex-intelligence/dashboard"); }
   syncYandexIntelligence() { return this.request<YandexIntelligence>("/yandex-intelligence/sync", { method: "POST" }); }
-  aliceLearningDashboard() { return this.request<AliceLearningDashboard>("/alice-learning/dashboard"); }
-  rebuildAliceLearning() { return this.request<AliceLearningDashboard>("/alice-learning/rebuild", { method: "POST" }); }
+  aliceLearningDashboard(brand?: string) { return this.request<AliceLearningDashboard>(`/alice-learning/dashboard${brand ? `?brand=${encodeURIComponent(brand)}` : ""}`); }
+  rebuildAliceLearning(brand?: string) { return this.request<AliceLearningDashboard>(`/alice-learning/rebuild${brand ? `?brand=${encodeURIComponent(brand)}` : ""}`, { method: "POST" }); }
   aliceAutomationDashboard() { return this.request<AliceAutomationDashboard>("/alice-learning/automation/dashboard"); }
   createAliceAutomationPlan(payload: {
     template_research_id: number; brand: string; website_url: string; language?: string;

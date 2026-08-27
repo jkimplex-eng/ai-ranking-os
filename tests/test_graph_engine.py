@@ -79,6 +79,19 @@ def test_engine_builds_deduplicated_immutable_snapshots(db: Session) -> None:
     assert engine.get(first.id).build_metadata == {"trigger": "test", "source_ids": []}
 
 
+def test_engine_selects_latest_snapshot_for_research(db: Session) -> None:
+    provider = FakeProvider()
+    engine = GraphEngine(db, provider, provider)
+    first = engine.build(GraphBuildContext(metadata={"research_id": 10}))
+    engine.build(GraphBuildContext(metadata={"research_id": 20}))
+    latest_for_first = engine.build(GraphBuildContext(metadata={"research_id": 10}))
+
+    assert engine.latest(10).id == latest_for_first.id
+    assert engine.latest(20).build_metadata["research_id"] == 20
+    assert engine.latest().id == latest_for_first.id
+    assert first.id != latest_for_first.id
+
+
 def _seed_extraction() -> None:
     with TestingSession() as db:
         run = EntityExtractionRun(
@@ -124,6 +137,24 @@ def test_graph_api_build_latest_get_and_openapi(client: TestClient) -> None:
     assert "/graph/{snapshot_id}" in paths
 
 
+def test_graph_api_selects_snapshot_for_research(client: TestClient) -> None:
+    _seed_extraction()
+    first = client.post(
+        "/graph/build",
+        json={"source_ids": ["response-1"], "metadata": {"research_id": 41}},
+    )
+    second = client.post(
+        "/graph/build",
+        json={"source_ids": ["response-1"], "metadata": {"research_id": 42}},
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert client.get("/graph?research_id=41").json()["id"] == first.json()["id"]
+    assert client.get("/graph?research_id=42").json()["id"] == second.json()["id"]
+    assert client.get("/graph?research_id=999").status_code == 404
+
+
 def test_graph_api_errors_and_empty_snapshot(client: TestClient) -> None:
     assert client.get("/graph").status_code == 404
     assert client.get("/graph/999").status_code == 404
@@ -131,4 +162,3 @@ def test_graph_api_errors_and_empty_snapshot(client: TestClient) -> None:
     assert empty.status_code == 201
     assert empty.json()["nodes"] == []
     assert empty.json()["edges"] == []
-

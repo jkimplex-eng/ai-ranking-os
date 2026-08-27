@@ -154,6 +154,11 @@ def test_model_learns_direction_and_produces_explainable_counterfactuals() -> No
     assert dashboard.baseline_probability is not None
     assert dashboard.recommended_actions
 
+    other_brand = engine.dashboard(1, "Skillbox")
+    assert other_brand.brand == "Skillbox"
+    assert other_brand.observation_count == 0
+    assert other_brand.recommendation_count == 0
+
 
 def test_alice_learning_openapi_contract() -> None:
     from backend.app.main import app
