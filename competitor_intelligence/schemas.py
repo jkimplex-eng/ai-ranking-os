@@ -63,6 +63,7 @@ class DailyMonitoringRequest(BaseModel):
 
 
 class SocialPlatform(StrEnum):
+    WEB = "WEB"
     TELEGRAM = "TELEGRAM"
     INSTAGRAM = "INSTAGRAM"
     YOUTUBE = "YOUTUBE"

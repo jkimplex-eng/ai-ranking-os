@@ -91,7 +91,7 @@ export type CompetitorDashboard = {
   methodology: string; limitation: string; competitors: CompetitorAnalytics[];
 };
 export type SocialPost = { id: number; external_post_id: string; url: string; title?: string; content: string; published_at: string; views?: number; likes?: number; comments?: number; shares?: number; engagement_rate?: number; significance_score: number };
-export type SocialSource = { id: number; competitor_id: number; platform: "TELEGRAM" | "INSTAGRAM" | "YOUTUBE" | "VK"; profile_url: string; external_id: string; configured: boolean; active: boolean; status: string; last_scanned_at?: string; next_scan_at?: string; last_error?: string; posts: SocialPost[] };
+export type SocialSource = { id: number; competitor_id: number; platform: "WEB" | "TELEGRAM" | "INSTAGRAM" | "YOUTUBE" | "VK"; profile_url: string; external_id: string; configured: boolean; active: boolean; status: string; last_scanned_at?: string; next_scan_at?: string; last_error?: string; posts: SocialPost[] };
 export type SocialDashboard = { competitor_id: number; sources: SocialSource[]; total_posts: number; limitation: string };
 export type TelegramConnection = { configured: boolean; status: string; proxy_configured: boolean; phone_hint?: string; last_connected_at?: string; last_error?: string };
 export type GeoAuditCheck = { code: string; category: string; title: string; passed: boolean; points: number; max_points: number; evidence: string; recommendation?: string };

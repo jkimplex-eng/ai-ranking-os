@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import hashlib
 import html
 import ipaddress
 import re
 import socket
 import xml.etree.ElementTree as ET
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from typing import Protocol
-from urllib.parse import urljoin, urlparse
+from urllib.parse import quote_plus, urljoin, urlparse
 
 import httpx
 from sqlalchemy.orm import Session
@@ -155,6 +158,8 @@ class WebsiteSocialDiscovery:
 class HttpSocialCollector:
     def collect(self, source: CompetitorSocialSource, token: str | None) -> list[CollectedPost]:
         platform = SocialPlatform(source.platform)
+        if platform == SocialPlatform.WEB:
+            return self._web(source.external_id)
         if platform == SocialPlatform.YOUTUBE:
             return self._youtube(source.external_id)
         if platform == SocialPlatform.TELEGRAM:
@@ -164,6 +169,40 @@ class HttpSocialCollector:
         if platform == SocialPlatform.VK:
             return self._vk(source.external_id, token)
         return self._instagram(source.external_id, token)
+
+    def _web(self, brand: str) -> list[CollectedPost]:
+        """Collect public web mentions from Bing's documented RSS result format."""
+        response = self._get(
+            "https://www.bing.com/search",
+            {"q": f'"{brand.strip()}"', "format": "rss", "setlang": "ru"},
+        )
+        root = ET.fromstring(response.text)
+        posts: list[CollectedPost] = []
+        now = datetime.now(UTC)
+        for item in root.findall("./channel/item")[:50]:
+            url = (item.findtext("link") or "").strip()
+            title = html.unescape((item.findtext("title") or "").strip())
+            description = html.unescape(
+                re.sub(r"<[^>]+>", " ", item.findtext("description") or "")
+            )
+            description = " ".join(description.split())
+            if not url:
+                continue
+            published_raw = (item.findtext("pubDate") or "").strip()
+            published = now
+            if published_raw:
+                with suppress(ValueError):
+                    published = parsedate_to_datetime(published_raw).astimezone(UTC)
+            posts.append(
+                CollectedPost(
+                    external_id=hashlib.sha256(url.encode()).hexdigest(),
+                    url=url,
+                    title=title or None,
+                    content=description,
+                    published_at=published,
+                )
+            )
+        return posts
 
     @staticmethod
     def _get(url: str, params: dict | None = None) -> httpx.Response:
@@ -295,6 +334,7 @@ class CompetitorSocialMonitorService:
     ) -> None:
         self.db = db
         self.repository = CompetitorIntelligenceRepository(db)
+        self.automatic_web_search = collector is None
         self.collector = collector or HttpSocialCollector()
         self.discovery = discovery or WebsiteSocialDiscovery()
         settings = get_settings()
@@ -365,6 +405,19 @@ class CompetitorSocialMonitorService:
             )
             self.refresh_source(source)
             existing.add(key)
+        web_key = (SocialPlatform.WEB.value, competitor.name.casefold())
+        if self.automatic_web_search and web_key not in existing:
+            source = self.repository.add_social_source(
+                CompetitorSocialSource(
+                    competitor_id=competitor_id,
+                    platform=SocialPlatform.WEB.value,
+                    profile_url=f"https://www.bing.com/search?q={quote_plus(competitor.name)}",
+                    external_id=competitor.name,
+                    status="DISCOVERED",
+                    next_scan_at=datetime.now(UTC),
+                )
+            )
+            self.refresh_source(source)
         return self.dashboard(user_id, project_id, competitor_id)
 
     def delete(self, user_id: int, project_id: int, competitor_id: int, source_id: int) -> None:
@@ -463,7 +516,11 @@ class CompetitorSocialMonitorService:
             profile_url=source.profile_url,
             external_id=source.external_id,
             configured=source.platform
-            in {SocialPlatform.TELEGRAM.value, SocialPlatform.YOUTUBE.value}
+            in {
+                SocialPlatform.WEB.value,
+                SocialPlatform.TELEGRAM.value,
+                SocialPlatform.YOUTUBE.value,
+            }
             or bool(source.encrypted_token),
             active=source.active,
             status=source.status,
@@ -485,6 +542,7 @@ class CompetitorSocialMonitorService:
     def _validate_host(platform: SocialPlatform, url: str) -> None:
         host = (urlparse(url).hostname or "").casefold()
         allowed = {
+            SocialPlatform.WEB: {"www.bing.com", "bing.com"},
             SocialPlatform.TELEGRAM: {"t.me", "telegram.me"},
             SocialPlatform.YOUTUBE: {"youtube.com", "www.youtube.com", "youtu.be"},
             SocialPlatform.VK: {"vk.com", "www.vk.com"},

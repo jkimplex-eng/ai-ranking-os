@@ -53,6 +53,24 @@ engine = create_engine(
 TestingSession = sessionmaker(bind=engine, expire_on_commit=False)
 
 
+def test_web_collector_parses_real_search_result_links(monkeypatch) -> None:
+    rss = """<?xml version="1.0"?><rss><channel><item>
+    <title>Skillbox в обзоре</title>
+    <link>https://example.org/skillbox-review</link>
+    <description>Независимый обзор школы</description>
+    <pubDate>Thu, 27 Aug 2026 10:00:00 GMT</pubDate>
+    </item></channel></rss>"""
+    response = staticmethod(lambda *args, **kwargs: SimpleNamespace(text=rss))
+    monkeypatch.setattr(HttpSocialCollector, "_get", response)
+    source = SimpleNamespace(platform="WEB", external_id="Skillbox")
+
+    posts = HttpSocialCollector().collect(source, None)
+
+    assert len(posts) == 1
+    assert posts[0].url == "https://example.org/skillbox-review"
+    assert posts[0].title == "Skillbox в обзоре"
+
+
 def test_telegram_global_search_maps_only_public_channel_posts() -> None:
     published = datetime(2026, 8, 24, tzinfo=UTC)
     result = SimpleNamespace(

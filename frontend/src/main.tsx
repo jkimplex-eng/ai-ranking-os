@@ -349,7 +349,7 @@ function Shell({
 }
 
 function SettingsScreen({ user }: { user: string }) {
-  const [tab, setTab] = useState("profile");
+  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get("tab") || "profile");
   const [settings, setSettings] = useState<Record<string, unknown>>({ language: "ru", region: "GLOBAL", theme: "dark", notifications: { email: true, in_app: true } });
   const [providers, setProviders] = useState<ProviderItem[]>([]);
   const [keys, setKeys] = useState<Array<{ id: number; name: string; prefix: string }>>([]);
@@ -359,7 +359,20 @@ function SettingsScreen({ user }: { user: string }) {
   const [webmasterHosts, setWebmasterHosts] = useState<YandexWebmasterHost[]>([]);
   const [webmasterBusy, setWebmasterBusy] = useState(false);
   useEffect(() => { Promise.all([api.workspace(), api.listProviders(), api.apiKeys()]).then(([workspace, providerItems, apiKeyItems]) => { setSettings((current) => ({ ...current, ...workspace.settings })); setProviders(providerItems); setKeys(apiKeyItems); }).catch((reason) => setError(reason instanceof Error ? reason.message : "Ошибка загрузки настроек")); }, []);
-  useEffect(() => { api.yandexWebmasterStatus().then((status) => { setWebmaster(status); if (status.connected) void api.yandexWebmasterHosts().then(setWebmasterHosts); }).catch(() => setWebmaster(null)); }, []);
+  const connectWebmaster = () => {
+    setWebmasterBusy(true); setError("");
+    api.authorizeYandexWebmaster().then(({ authorization_url }) => window.location.assign(authorization_url)).catch((reason) => {
+      setError(reason instanceof Error ? reason.message : "Не удалось начать подключение");
+      setWebmasterBusy(false);
+    });
+  };
+  useEffect(() => { api.yandexWebmasterStatus().then((status) => {
+    setWebmaster(status);
+    if (status.connected) void api.yandexWebmasterHosts().then((hosts) => {
+      setWebmasterHosts(hosts);
+      if (!hosts.length) setError("OAuth подключён, но Яндекс Вебмастер не вернул ни одного сайта. Добавьте и подтвердите сайт в кабинете Вебмастера либо подключите другой Яндекс-аккаунт.");
+    }).catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось получить сайты Яндекс Вебмастера"));
+  }).catch(() => setWebmaster(null)); }, []);
   const tabs = [["profile", "Профиль"], ["security", "Безопасность"], ["api", "API Keys"], ["providers", "LLM Providers"], ["integrations", "Интеграции"], ["preferences", "Язык и регион"], ["notifications", "Уведомления"], ["theme", "Тема"], ["organization", "Организация"]];
   const set = (key: string, value: unknown) => { setSaved(false); setSettings((current) => ({ ...current, [key]: value })); };
   return <main className="analytics-page settings-page"><header className="analytics-hero"><div><span className="eyebrow">PREFERENCES</span><h1>Настройки</h1><p>Единый центр персональных и системных настроек.</p></div><button className="primary-action" onClick={() => api.updateWorkspace(settings).then(() => setSaved(true))}>{saved ? "Сохранено ✓" : "Сохранить"}</button></header>
@@ -370,8 +383,8 @@ function SettingsScreen({ user }: { user: string }) {
       {tab === "api" && <><h2>API Keys</h2>{keys.length ? keys.map((key) => <div className="setting-row" key={key.id}><span>{key.name}</span><code>{key.prefix}••••</code></div>) : <p className="empty-state">API-ключи ещё не созданы.</p>}</>}
       {tab === "providers" && <><h2>LLM Providers</h2>{providers.length ? providers.map((provider) => <div className="setting-row" key={provider.id}><span>{provider.display_name}</span><b>{provider.availability}</b></div>) : <p className="empty-state">Провайдеры недоступны.</p>}</>}
       {tab === "integrations" && <><h2>Яндекс Вебмастер</h2><p>Подключите подтверждённые сайты и реальные поисковые запросы. Доступ выдаётся через Яндекс OAuth; пароль и OAuth-токен не отображаются и не передаются в браузер.</p>
-        <div className="setting-row"><span>Состояние</span><Badge tone={webmaster?.connected ? "success" : "warning"}>{webmaster?.connected ? "ПОДКЛЮЧЕН" : "НЕ ПОДКЛЮЧЕН"}</Badge></div>
-        {webmaster?.connected ? <><label>Сайт<select value={webmaster.selected_host_id ?? ""} onChange={(event) => { const host = webmasterHosts.find((item) => item.host_id === event.target.value); if (host) void api.selectYandexWebmasterHost(host.host_id, host.unicode_host_url || host.ascii_host_url).then(setWebmaster); }}><option value="">Выберите подтверждённый сайт</option>{webmasterHosts.map((host) => <option key={host.host_id} value={host.host_id}>{host.unicode_host_url || host.ascii_host_url}{host.verified ? " · подтверждён" : ""}</option>)}</select></label><button className="secondary" disabled={webmasterBusy} onClick={() => { setWebmasterBusy(true); api.disconnectYandexWebmaster().then(() => { setWebmaster({ connected: false, status: "NOT_CONFIGURED" }); setWebmasterHosts([]); }).finally(() => setWebmasterBusy(false)); }}>Отключить</button></> : <button className="primary-action" disabled={webmasterBusy} onClick={() => { setWebmasterBusy(true); api.authorizeYandexWebmaster().then(({ authorization_url }) => { window.location.assign(authorization_url); }).catch((reason) => { setError(reason instanceof Error ? reason.message : "Не удалось начать подключение"); setWebmasterBusy(false); }); }}>Подключить Яндекс Вебмастер</button>}
+        <div className="setting-row"><span>OAuth-доступ</span><Badge tone={webmaster?.connected ? "success" : "warning"}>{webmaster?.connected ? "ПОДКЛЮЧЁН" : "НЕ ПОДКЛЮЧЁН"}</Badge></div>
+        {webmaster?.connected ? <><div className="setting-row"><span>Доступные сайты</span><b>{webmasterHosts.length || "НЕТ"}</b></div><label>Подтверждённый сайт<select value={webmaster.selected_host_id ?? ""} onChange={(event) => { const host = webmasterHosts.find((item) => item.host_id === event.target.value); if (host) void api.selectYandexWebmasterHost(host.host_id, host.unicode_host_url || host.ascii_host_url).then((status) => { setWebmaster(status); setError(""); }); }}><option value="">Выберите подтверждённый сайт</option>{webmasterHosts.filter((host) => host.verified).map((host) => <option key={host.host_id} value={host.host_id}>{host.unicode_host_url || host.ascii_host_url} · подтверждён</option>)}</select></label><div className="button-row"><button className="secondary" disabled={webmasterBusy} onClick={connectWebmaster}>Подключить другой аккаунт</button><button className="secondary" disabled={webmasterBusy} onClick={() => { setWebmasterBusy(true); api.disconnectYandexWebmaster().then(() => { setWebmaster({ connected: false, status: "NOT_CONFIGURED" }); setWebmasterHosts([]); setError(""); }).finally(() => setWebmasterBusy(false)); }}>Отключить</button></div></> : <button className="primary-action" disabled={webmasterBusy} onClick={connectWebmaster}>Подключить Яндекс Вебмастер</button>}
         <p className="empty-state">После выбора сайта система сможет использовать реальные запросы Яндекс Поиска при подготовке карты GEO-исследования. Данные «Видимость в Алисе AI» будут подключены только через официальный API или экспорт — без браузерного скрейпинга.</p></>}
       {tab === "preferences" && <><h2>Язык и регион</h2><label>Язык<select value={String(settings.language)} onChange={(event) => set("language", event.target.value)}><option value="ru">Русский</option><option value="en">English</option></select></label><label>Регион<select value={String(settings.region)} onChange={(event) => set("region", event.target.value)}><option>GLOBAL</option><option>RU</option><option>EU</option><option>US</option></select></label></>}
       {tab === "notifications" && <><h2>Уведомления</h2><label className="toggle-row"><input type="checkbox" checked={Boolean((settings.notifications as Record<string, boolean>)?.in_app)} onChange={(event) => set("notifications", { ...(settings.notifications as object), in_app: event.target.checked })}/>In-app</label><label className="toggle-row"><input type="checkbox" checked={Boolean((settings.notifications as Record<string, boolean>)?.email)} onChange={(event) => set("notifications", { ...(settings.notifications as object), email: event.target.checked })}/>Email</label></>}
@@ -481,7 +494,22 @@ function RecordsScreen({ kind, onNewResearch }: { kind: RecordsKind; onNewResear
       if (kind === "recommendations") {
         const latest = [...await api.listResearch()].sort((a, b) => b.id - a.id)[0];
         if (!latest) return [];
-        return (await api.recommendations(latest.id)).recommendations.map((item: RecommendationItem) => ({ id: String(item.id), title: item.explanation, status: item.priority, detail: `${item.metric}: ${item.metric_value.toFixed(1)}`, meta: item.expected_effect }));
+        const metricLabels: Record<string, string> = { mention_score: "Упоминания", recommendation_score: "Рекомендации бренда", citation_score: "Независимые источники", coverage_score: "Покрытие моделей", confidence_score: "Достоверность данных" };
+        const thresholds: Record<string, number> = { mention_score: 60, recommendation_score: 60, citation_score: 50, coverage_score: 70 };
+        const actions: Record<string, string> = {
+          mention_score: "Расширить присутствие бренда по покупательским запросам",
+          recommendation_score: "Усилить доказательства, отзывы и сигналы доверия",
+          citation_score: "Получить публикации в независимых авторитетных источниках",
+          coverage_score: "Проверить бренд в большем числе подключённых AI-моделей",
+          confidence_score: "Собрать больше успешно обработанных ответов",
+        };
+        return (await api.recommendations(latest.id)).recommendations.map((item: RecommendationItem) => ({
+          id: String(item.id),
+          title: actions[item.metric] ?? "Улучшить измеряемый сигнал бренда",
+          status: item.priority,
+          detail: `${metricLabels[item.metric] ?? item.metric}: ${item.metric_value.toFixed(1)} из 100; целевой порог v1.0 — ${thresholds[item.metric] ?? "не задан"}. Разрыв: ${typeof thresholds[item.metric] === "number" ? Math.max(0, thresholds[item.metric] - item.metric_value).toFixed(1) : "—"} балла.`,
+          meta: `Исследование #${latest.id} · ожидаемый эффект проверяется только повторным исследованием`,
+        }));
       }
       if (kind === "graph") {
         const graph: GraphSnapshot = await api.graph();
@@ -1032,6 +1060,7 @@ function GeoOpportunitiesScreen() {
   const [form, setForm] = useState({ name: "", domain: "", category: "UNIVERSAL", country: "RU", language: "ru", trust: "", authority: "", citations: "", cost: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [operationResult, setOperationResult] = useState("");
   const load = useCallback(() => Promise.all([
     api.geoPlatforms(), api.frozenPromptSets(), api.publicationInfluence(), api.geoSiteAudits(),
     api.yandexIntelligence().catch(() => undefined),
@@ -1109,14 +1138,30 @@ function GeoOpportunitiesScreen() {
     finally { setBusy(false); }
   };
   const syncYandex = async () => {
-    setBusy(true); setError("");
-    try { setYandexIntelligence(await api.syncYandexIntelligence()); }
+    setBusy(true); setError(""); setOperationResult("");
+    try {
+      const status = await api.yandexWebmasterStatus();
+      if (!status.connected || !status.selected_host_id) {
+        window.location.assign("/settings?tab=integrations");
+        return;
+      }
+      const result = await api.syncYandexIntelligence();
+      setYandexIntelligence(result);
+      setOperationResult(`Синхронизация завершена: ${result.query_map.length} поисковых запросов, ${result.yandex_ai.length} ответов YandexGPT, ${result.opportunities.length} точек роста.`);
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось синхронизировать Яндекс Intelligence"); }
     finally { setBusy(false); }
   };
   const rebuildAlice = async () => {
-    setBusy(true); setError("");
-    try { setAliceLearning(await api.rebuildAliceLearning(selectedBrand || undefined)); }
+    setBusy(true); setError(""); setOperationResult("");
+    try {
+      const result = await api.rebuildAliceLearning(selectedBrand || undefined);
+      setAliceLearning(result);
+      const missing = result.recommendation_count === 0 || result.recommendation_count === result.observation_count;
+      setOperationResult(missing
+        ? `Пересчёт завершён: ${result.observation_count} наблюдений, но выборка однородна (${result.recommendation_count} рекомендаций). Для обучения нужны и рекомендации, и отказы.`
+        : `Пересчёт завершён: ${result.observation_count} наблюдений, ${result.recommendation_count} рекомендаций. Статус модели: ${result.status}.`);
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось обучить модель Алисы"); }
     finally { setBusy(false); }
   };
@@ -1128,7 +1173,7 @@ function GeoOpportunitiesScreen() {
   const enableAliceAutomation = async () => {
     if (!latestAutomationTemplate) return;
     const metadata = latestAutomationTemplate.metadata ?? {};
-    setBusy(true); setError("");
+    setBusy(true); setError(""); setOperationResult("");
     try {
       await api.createAliceAutomationPlan({
         template_research_id: latestAutomationTemplate.id,
@@ -1143,7 +1188,10 @@ function GeoOpportunitiesScreen() {
           : [],
         repetitions: 3,
       });
-      setAliceAutomation(await api.aliceAutomationDashboard());
+      const dashboard = await api.aliceAutomationDashboard();
+      setAliceAutomation(dashboard);
+      const plan = dashboard.plans.find((item) => item.brand.toLocaleLowerCase() === String(metadata.brand ?? latestAutomationTemplate.title).toLocaleLowerCase());
+      setOperationResult(plan ? `Мониторинг включён. Следующая проверка: ${new Date(plan.next_run_at).toLocaleString("ru-RU")}.` : "Мониторинг создан; расписание появится после обновления данных.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось включить автоматизацию"); }
     finally { setBusy(false); }
   };
@@ -1164,6 +1212,11 @@ function GeoOpportunitiesScreen() {
   const selectedPlans = (aliceAutomation?.plans ?? []).filter(
     (plan) => !selectedBrand || plan.brand.toLocaleLowerCase() === selectedBrand.toLocaleLowerCase(),
   );
+  const aliceStatusLabel = aliceLearning?.status === "READY"
+    ? "ДОСТАТОЧНО ДАННЫХ"
+    : aliceLearning?.status === "INSUFFICIENT_SAMPLE"
+      ? "НЕДОСТАТОЧНО РАЗНООБРАЗИЯ"
+      : "НЕТ ОБУЧЕННОЙ МОДЕЛИ";
   return (
     <main className="analytics-page geo-page">
       <header className="analytics-hero">
@@ -1171,6 +1224,7 @@ function GeoOpportunitiesScreen() {
         <div className="geo-hero-controls"><label className="research-selector">Анализируемый бренд<select aria-label="Бренд для экспертного анализа" value={selectedResearchId ?? ""} onChange={(event) => setSelectedResearchId(Number(event.target.value))}><option value="" disabled>Выберите исследование</option>{researches.map((item) => <option value={item.id} key={item.id}>{researchBrand(item)} · исследование #{item.id}</option>)}</select></label><div className="geo-method"><span>Методология</span><b>{priorities?.methodology_version ?? "heuristic_v1.0"}</b><small>Версионированный расчёт</small></div></div>
       </header>
       {error && <div className="error" role="alert">{error}</div>}
+      {operationResult && <div className="operation-result" role="status">{operationResult}</div>}
       <section className="geo-summary">
         <article className="analytics-card metric"><span>Площадки</span><strong>{platforms.length}</strong><small>реальные записи реестра</small></article>
         <article className="analytics-card metric"><span>Активные наборы запросов</span><strong>{activeSets.length}</strong><small>frozen prompt set</small></article>
@@ -1178,7 +1232,7 @@ function GeoOpportunitiesScreen() {
       </section>
       <section className="analytics-card geo-site-audit">
         <div className="geo-audit-intro"><span className="eyebrow">GEO-АУДИТ САЙТА</span><h2>Готов ли сайт стать источником для ИИ</h2><p>100-балльная проверка доступности для краулеров, сущности бренда, контента, доказательности и технических сигналов. Каждый балл подтверждается наблюдаемым признаком.</p><form onSubmit={auditSite}><input aria-label="Бренд для GEO-аудита" placeholder="Название бренда" value={auditForm.brand} onChange={(event) => setAuditForm({ ...auditForm, brand: event.target.value })} required /><input aria-label="Сайт для GEO-аудита" type="url" placeholder="https://example.ru" value={auditForm.website} onChange={(event) => setAuditForm({ ...auditForm, website: event.target.value })} required /><Button type="submit" disabled={busy}>{busy ? "Проверяем сайт…" : "Провести GEO-аудит"}</Button></form></div>
-        {siteAudit ? <div className="geo-audit-result"><header><div><strong>{siteAudit.score.toFixed(1)}</strong><span>из 100 · {siteAudit.grade}</span></div><Badge tone={siteAudit.score >= 70 ? "success" : siteAudit.score >= 45 ? "warning" : "danger"}>v{siteAudit.algorithm_version}</Badge></header><div className="geo-audit-categories">{Object.entries(siteAudit.category_scores).map(([name, value]) => <div key={name}><span>{name}</span><b>{value.toFixed(0)}</b></div>)}</div><h3>Главные действия</h3>{siteAudit.opportunities.slice(0, 5).map((item) => <article className="geo-audit-action" key={`${item.problem}:${item.affected_metric}`}><Badge tone={item.priority === "P0" ? "danger" : "warning"}>{item.priority}</Badge><div><b>{item.problem}</b><p>{item.action}</p><small>{item.expected_effect} · Проверка: {item.verification}</small></div></article>)}<details><summary>Показать все доказательства расчёта</summary>{siteAudit.checks.map((check) => <div className="geo-audit-check" key={check.code}><span>{check.passed ? "✓" : "×"}</span><div><b>{check.title}</b><small>{check.evidence}</small>{check.recommendation ? <p>{check.recommendation}</p> : null}</div><strong>{check.points}/{check.max_points}</strong></div>)}</details><p className="method-note">{siteAudit.limitation}</p></div> : <div className="geo-empty"><strong>Аудит ещё не выполнялся</strong><p>Введите официальный сайт. Система не подставит оценку без фактического чтения страницы, robots.txt и sitemap.</p></div>}
+        {siteAudit ? <div className="geo-audit-result"><header><div><strong>{siteAudit.score.toFixed(1)}</strong><span>из 100 · {siteAudit.grade}</span></div><Badge tone={siteAudit.score >= 70 ? "success" : siteAudit.score >= 45 ? "warning" : "danger"}>v{siteAudit.algorithm_version}</Badge></header><p className="method-note"><b>Как получена оценка:</b> сервис заново загрузил {siteAudit.final_url}, robots.txt и sitemap. За каждый реально обнаруженный признак начислены указанные ниже баллы; итог — простая сумма без скрытой AI-оценки. Это готовность сайта быть понятным источником, а не вероятность рекомендации бренда.</p><div className="geo-audit-categories">{Object.entries(siteAudit.category_scores).map(([name, value]) => <div key={name}><span>{name}</span><b>{value.toFixed(0)}</b></div>)}</div><h3>Главные действия</h3>{siteAudit.opportunities.slice(0, 5).map((item) => <article className="geo-audit-action" key={`${item.problem}:${item.affected_metric}`}><Badge tone={item.priority === "P0" ? "danger" : "warning"}>{item.priority}</Badge><div><b>{item.problem}</b><p>{item.action}</p><small>{item.expected_effect} · Проверка: {item.verification}</small></div></article>)}<details><summary>Показать все доказательства расчёта</summary>{siteAudit.checks.map((check) => <div className="geo-audit-check" key={check.code}><span>{check.passed ? "✓" : "×"}</span><div><b>{check.title}</b><small>{check.evidence}</small>{check.recommendation ? <p>{check.recommendation}</p> : null}</div><strong>{check.points}/{check.max_points}</strong></div>)}</details><p className="method-note">{siteAudit.limitation}</p></div> : <div className="geo-empty"><strong>Аудит ещё не выполнялся</strong><p>Введите официальный сайт. Система не подставит оценку без фактического чтения страницы, robots.txt и sitemap.</p></div>}
       </section>
       <section className="geo-value-flow" aria-labelledby="alice-workflow-title">
         <header>
@@ -1203,7 +1257,7 @@ function GeoOpportunitiesScreen() {
       </section>
       <section className="analytics-card geo-site-audit alice-learning">
         <div className="geo-audit-intro"><span className="eyebrow">ШАГ 2 · НАБЛЮДАЕМЫЕ ЗАКОНОМЕРНОСТИ</span><h2>Что чаще встречается рядом с рекомендацией бренда</h2><p>Система сравнивает случаи, когда Алиса рекомендовала бренд и когда не рекомендовала. Она проверяет наличие подходящей страницы, независимых источников, поисковую позицию и другие измеримые признаки.</p><div className="geo-user-value"><b>Ценность для вас</b><p>Не общий совет «улучшайте контент», а проверяемая гипотеза: какой сигнал усилить и каким повторным исследованием измерить результат.</p></div><Button onClick={() => void rebuildAlice()} disabled={busy}>{busy ? "Пересчитываем…" : "Обновить выводы по истории"}</Button></div>
-        {aliceLearning ? <div className="geo-audit-result"><header><div><strong>{aliceLearning.observation_count}</strong><span>наблюдений · {aliceLearning.recommendation_count} рекомендаций</span></div><Badge tone={aliceLearning.status === "READY" ? "success" : "warning"}>{aliceLearning.status}</Badge></header>
+        {aliceLearning ? <div className="geo-audit-result"><header><div><strong>{aliceLearning.observation_count}</strong><span>наблюдений · {aliceLearning.recommendation_count} рекомендаций</span></div><Badge tone={aliceLearning.status === "READY" ? "success" : "warning"}>{aliceStatusLabel}</Badge></header>
           {aliceLearning.model ? <><div className="geo-audit-categories"><div><span>Бренд</span><b>{aliceLearning.brand ?? "—"}</b></div><div><span>Проверено ответов</span><b>{aliceLearning.observation_count}</b></div><div><span>Рекомендаций</span><b>{aliceLearning.recommendation_count}</b></div><div><span>Доля рекомендаций</span><b>{aliceLearning.observation_count ? `${(aliceLearning.recommendation_count / aliceLearning.observation_count * 100).toFixed(1)}%` : "—"}</b></div></div><h3>Что проверить в первую очередь</h3>{aliceLearning.recommended_actions.length ? aliceLearning.recommended_actions.slice(0, 5).map((item) => <article className="geo-audit-action" key={item.feature}><Badge tone="warning">ГИПОТЕЗА</Badge><div><b>{item.action}</b><p>{aliceFeatureLabels[item.feature] ?? item.feature}: сейчас {Math.round(item.current_value * 100)}%</p><small>Ожидаемое изменение вероятности рекомендации: +{(item.predicted_delta * 100).toFixed(1)} п.п. · Подтвердите повторным исследованием</small></div></article>) : <div className="geo-empty"><strong>Пока нельзя честно рекомендовать действие</strong><p>Наблюдения собраны, но системе не хватает разнообразия успешных и неуспешных ответов либо устойчивого измеримого сигнала. Продолжайте одинаковые проверки — действие появится только при достаточных данных.</p></div>}<details><summary>Для эксперта: как рассчитан вывод</summary>{aliceLearning.top_factors.filter((item) => item.feature).slice(0, 8).map((item) => <div className="geo-audit-check" key={item.feature}><span>{item.direction === "POSITIVE" ? "↑" : item.direction === "NEGATIVE" ? "↓" : "?"}</span><div><b>{aliceFeatureLabels[item.feature ?? ""] ?? item.feature}</b><small>Наблюдаемая связь, а не доказанная причина</small></div><strong>{item.coefficient?.toFixed(3) ?? "—"}</strong></div>)}</details></> : <div className="geo-empty"><strong>Выводы ещё не рассчитаны</strong><p>Сначала нужны одинаковые вопросы с сохранёнными ответами YandexGPT. После нескольких исследований система сможет сравнить рекомендации и отказы.</p></div>}
           {aliceLearning.limitations.length ? <details><summary>Что важно учитывать</summary>{aliceLearning.limitations.map((item) => <p className="method-note" key={item}>{item}</p>)}</details> : null}</div> : <div className="geo-empty"><strong>Пока нет истории для сравнения</strong><p>Завершите первое исследование через YandexGPT. Каждый сохранённый ответ станет наблюдением для будущего сравнения.</p></div>}
       </section>

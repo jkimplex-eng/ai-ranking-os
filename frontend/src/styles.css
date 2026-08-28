@@ -232,3 +232,4 @@
 .graph-explainer b{font-size:2rem;line-height:1}
 .graph-explainer span,.graph-explainer p{margin:0;color:var(--muted);line-height:1.5}
 @media(max-width:800px){.research-selector{min-width:0;width:100%}.geo-hero-controls{justify-items:stretch}.graph-explainer{grid-template-columns:1fr 1fr}.graph-explainer p{grid-column:1/-1}}
+.operation-result{margin:0 0 20px;padding:14px 16px;border:1px solid rgba(52,211,153,.35);border-radius:12px;background:rgba(6,78,59,.28);color:#a7f3d0;line-height:1.5}
