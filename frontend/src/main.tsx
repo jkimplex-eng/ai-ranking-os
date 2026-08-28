@@ -384,7 +384,7 @@ function SettingsScreen({ user }: { user: string }) {
       {tab === "providers" && <><h2>LLM Providers</h2>{providers.length ? providers.map((provider) => <div className="setting-row" key={provider.id}><span>{provider.display_name}</span><b>{provider.availability}</b></div>) : <p className="empty-state">Провайдеры недоступны.</p>}</>}
       {tab === "integrations" && <><h2>Яндекс Вебмастер</h2><p>Подключите подтверждённые сайты и реальные поисковые запросы. Доступ выдаётся через Яндекс OAuth; пароль и OAuth-токен не отображаются и не передаются в браузер.</p>
         <div className="setting-row"><span>OAuth-доступ</span><Badge tone={webmaster?.connected ? "success" : "warning"}>{webmaster?.connected ? "ПОДКЛЮЧЁН" : "НЕ ПОДКЛЮЧЁН"}</Badge></div>
-        {webmaster?.connected ? <><div className="setting-row"><span>Доступные сайты</span><b>{webmasterHosts.length || "НЕТ"}</b></div><label>Подтверждённый сайт<select value={webmaster.selected_host_id ?? ""} onChange={(event) => { const host = webmasterHosts.find((item) => item.host_id === event.target.value); if (host) void api.selectYandexWebmasterHost(host.host_id, host.unicode_host_url || host.ascii_host_url).then((status) => { setWebmaster(status); setError(""); }); }}><option value="">Выберите подтверждённый сайт</option>{webmasterHosts.filter((host) => host.verified).map((host) => <option key={host.host_id} value={host.host_id}>{host.unicode_host_url || host.ascii_host_url} · подтверждён</option>)}</select></label><div className="button-row"><button className="secondary" disabled={webmasterBusy} onClick={connectWebmaster}>Подключить другой аккаунт</button><button className="secondary" disabled={webmasterBusy} onClick={() => { setWebmasterBusy(true); api.disconnectYandexWebmaster().then(() => { setWebmaster({ connected: false, status: "NOT_CONFIGURED" }); setWebmasterHosts([]); setError(""); }).finally(() => setWebmasterBusy(false)); }}>Отключить</button></div></> : <button className="primary-action" disabled={webmasterBusy} onClick={connectWebmaster}>Подключить Яндекс Вебмастер</button>}
+        {webmaster?.connected ? <><div className="setting-row"><span>Доступные сайты</span><b>{webmasterHosts.length || "НЕТ"}</b></div>{webmasterHosts.some((host) => host.verified) ? <label>Подтверждённый сайт<select value={webmaster.selected_host_id ?? ""} onChange={(event) => { const host = webmasterHosts.find((item) => item.host_id === event.target.value); if (host) void api.selectYandexWebmasterHost(host.host_id, host.unicode_host_url || host.ascii_host_url).then((status) => { setWebmaster(status); setError(""); }); }}><option value="">Выберите подтверждённый сайт</option>{webmasterHosts.filter((host) => host.verified).map((host) => <option key={host.host_id} value={host.host_id}>{host.unicode_host_url || host.ascii_host_url} · подтверждён</option>)}</select></label> : <div className="webmaster-empty"><h3>Почему список пуст</h3><p>OAuth работает, но подключённый Яндекс-аккаунт не вернул ни одного подтверждённого сайта. Приложение не может добавить сайт вместо владельца.</p><ol><li>Откройте Яндекс Вебмастер под тем же аккаунтом.</li><li>Добавьте сайт и подтвердите право владения.</li><li>Вернитесь сюда и нажмите «Обновить список».</li></ol><a href="https://webmaster.yandex.ru/sites/" target="_blank" rel="noreferrer">Открыть Яндекс Вебмастер ↗</a></div>}<div className="button-row"><button className="secondary" disabled={webmasterBusy} onClick={() => { setWebmasterBusy(true); api.yandexWebmasterHosts().then(setWebmasterHosts).catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось обновить сайты")).finally(() => setWebmasterBusy(false)); }}>Обновить список</button><button className="secondary" disabled={webmasterBusy} onClick={connectWebmaster}>Подключить другой аккаунт</button><button className="secondary" disabled={webmasterBusy} onClick={() => { setWebmasterBusy(true); api.disconnectYandexWebmaster().then(() => { setWebmaster({ connected: false, status: "NOT_CONFIGURED" }); setWebmasterHosts([]); setError(""); }).finally(() => setWebmasterBusy(false)); }}>Отключить</button></div></> : <button className="primary-action" disabled={webmasterBusy} onClick={connectWebmaster}>Подключить Яндекс Вебмастер</button>}
         <p className="empty-state">После выбора сайта система сможет использовать реальные запросы Яндекс Поиска при подготовке карты GEO-исследования. Данные «Видимость в Алисе AI» будут подключены только через официальный API или экспорт — без браузерного скрейпинга.</p></>}
       {tab === "preferences" && <><h2>Язык и регион</h2><label>Язык<select value={String(settings.language)} onChange={(event) => set("language", event.target.value)}><option value="ru">Русский</option><option value="en">English</option></select></label><label>Регион<select value={String(settings.region)} onChange={(event) => set("region", event.target.value)}><option>GLOBAL</option><option>RU</option><option>EU</option><option>US</option></select></label></>}
       {tab === "notifications" && <><h2>Уведомления</h2><label className="toggle-row"><input type="checkbox" checked={Boolean((settings.notifications as Record<string, boolean>)?.in_app)} onChange={(event) => set("notifications", { ...(settings.notifications as object), in_app: event.target.checked })}/>In-app</label><label className="toggle-row"><input type="checkbox" checked={Boolean((settings.notifications as Record<string, boolean>)?.email)} onChange={(event) => set("notifications", { ...(settings.notifications as object), email: event.target.checked })}/>Email</label></>}
@@ -531,6 +531,53 @@ function RecordsScreen({ kind, onNewResearch }: { kind: RecordsKind; onNewResear
   </main>;
 }
 
+function RecommendationsScreen({ onNewResearch }: { onNewResearch: () => void }) {
+  const [researches, setResearches] = useState<ResearchItem[]>([]);
+  const [researchId, setResearchId] = useState<number>();
+  const [report, setReport] = useState<ReportShape>();
+  const [platforms, setPlatforms] = useState<GeoPlatform[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    Promise.all([api.listResearch(), api.geoPlatforms().catch(() => [])]).then(([items, rows]) => {
+      const completed = [...items].filter((item) => item.status === "COMPLETED").sort((a, b) => b.id - a.id);
+      setResearches(completed);
+      setPlatforms(rows.filter((item) => item.active));
+      const remembered = Number(sessionStorage.getItem(ACTIVE_RESEARCH_KEY));
+      const selected = completed.some((item) => item.id === remembered) ? remembered : completed[0]?.id;
+      setResearchId(selected);
+      if (!selected) setLoading(false);
+    }).catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить исследования"));
+  }, []);
+  useEffect(() => {
+    if (!researchId) return;
+    sessionStorage.setItem(ACTIVE_RESEARCH_KEY, String(researchId));
+    api.finalReport(researchId).then((value) => setReport(value as ReportShape)).catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить план действий")).finally(() => setLoading(false));
+  }, [researchId]);
+  const brand = researchBrand(researches.find((item) => item.id === researchId));
+  const resourceEntries: Array<[string, { name: string; url: string; evidence: string }]> = [
+    ...(report?.sources ?? []).filter((item) => item.url).map((item): [string, { name: string; url: string; evidence: string }] => [item.url!, { name: item.title || item.source || item.url!.replace(/^https?:\/\//, "").split("/")[0], url: item.url!, evidence: "Этот источник действительно встретился в ответе ИИ" }]),
+    ...(report?.research_patterns?.source_patterns ?? []).filter((item) => /^https?:\/\//.test(item.resource)).map((item): [string, { name: string; url: string; evidence: string }] => [item.resource, { name: item.resource, url: item.resource, evidence: `Встретился в ${item.response_count} ответах исследуемой выборки` }]),
+  ];
+  const observedResources = [...new Map(resourceEntries).values()];
+  const categoryPlatforms = platforms.filter((item) => item.category === "UNIVERSAL" || item.category === String(researches.find((row) => row.id === researchId)?.metadata?.research_profile ?? "UNIVERSAL"));
+  return <main className="analytics-page recommendations-page">
+    <header className="analytics-hero"><div><span className="eyebrow">ПЛАН УЛУЧШЕНИЙ</span><h1>Что поможет бренду чаще появляться в ответах ИИ</h1><p>Только действия, связанные с данными выбранного исследования. Прогнозы не являются гарантией попадания в выдачу.</p></div>{researches.length ? <label className="research-selector">Бренд и исследование<select value={researchId ?? ""} onChange={(event) => { setLoading(true); setError(""); setReport(undefined); setResearchId(Number(event.target.value)); }}>{researches.map((item) => <option value={item.id} key={item.id}>{researchBrand(item)} · исследование #{item.id}</option>)}</select></label> : null}</header>
+    {error ? <div className="error" role="alert">{error}</div> : null}
+    {!researches.length && !loading ? <section className="analytics-card empty-state"><h2>Сначала проведите исследование</h2><p>Без ответов моделей нельзя честно определить проблему и назвать площадки.</p><button className="primary-action" onClick={onNewResearch}>Новое исследование</button></section> : loading ? <DashboardSkeleton /> : <>
+      <section className="analytics-card recommendation-summary"><div><span>Сейчас анализируется</span><strong>{brand}</strong><small>Исследование #{researchId}</small></div><div><span>Найдено действий</span><strong>{report?.geo_opportunities?.length ?? report?.recommendations?.length ?? 0}</strong><small>отсортированы по доказательности</small></div><div><span>Названо реальных источников</span><strong>{observedResources.length}</strong><small>{observedResources.length ? "из ответов моделей" : "источники не обнаружены"}</small></div></section>
+      {(report?.geo_opportunities?.length ? report.geo_opportunities : []).map((item, index) => <article className="analytics-card recommendation-detail" key={item.id}>
+        <header><div><span className="recommendation-number">{index + 1}</span><div><small>{metricNames[item.affected_metric] ?? item.affected_metric}</small><h2>{item.resource}</h2></div></div><Badge tone={item.confidence >= .7 ? "success" : item.confidence >= .45 ? "warning" : "neutral"}>Уверенность {Math.round(item.confidence * 100)}%</Badge></header>
+        <div className="recommendation-logic"><div><b>Почему это предлагается</b><p>{item.reason}</p></div><div><b>Что именно подготовить</b><p>{item.deliverable}</p></div><div><b>Как проверить результат</b><p>{item.verification}</p></div></div>
+        <div className="recommendation-meta"><span>Оценочный диапазон: <b>+{item.expected_effect_range[0]}…{item.expected_effect_range[1]}</b></span><span>Срок: <b>{item.estimated_days} дней</b></span><span>Сложность: <b>{({ LOW: "низкая", MEDIUM: "средняя", HIGH: "высокая" } as Record<string, string>)[item.effort] ?? item.effort}</b></span></div>
+        {item.affected_metric === "citation_score" ? <div className="resource-proof"><h3>Где публиковаться</h3>{observedResources.length ? <><p>Эти ресурсы уже встречались в ответах ИИ по выбранному исследованию:</p>{observedResources.slice(0, 8).map((source) => <a href={source.url} target="_blank" rel="noreferrer" key={source.url}><b>{source.name}</b><small>{source.evidence}</small></a>)}</> : categoryPlatforms.length ? <><p>ИИ не назвали источники. Ниже — площадки из реестра, которые ещё нужно проверить перед размещением:</p>{categoryPlatforms.slice(0, 8).map((platform) => <a href={`https://${platform.domain}`} target="_blank" rel="noreferrer" key={platform.id}><b>{platform.name}</b><small>{platform.category} · {platform.domain} · не подтверждено как источник текущей выдачи</small></a>)}</> : <div className="honest-empty"><b>Конкретные издания пока нельзя назвать доказательно</b><p>В ответах этого исследования нет ссылок, а в реестре площадок нет проверенных кандидатов категории. Следующий корректный шаг — собрать источники конкурентов и повторить исследование с моделями, возвращающими ссылки.</p></div>}</div> : null}
+        <p className="method-note">{item.causality_notice}</p>
+      </article>)}
+      {!report?.geo_opportunities?.length ? <section className="analytics-card empty-state"><h2>Доказательный план ещё не рассчитан</h2><p>Общие фразы вроде «улучшите контент» не показываются. Нужны обработанные ответы, карта запросов и источники.</p></section> : null}
+    </>}
+  </main>;
+}
+
 function CompetitorSocialPanel({ projectId, competitorId, competitorName }: { projectId: number; competitorId: number; competitorName: string }) {
   const [dashboard, setDashboard] = useState<SocialDashboard>();
   const [platform, setPlatform] = useState("TELEGRAM");
@@ -621,6 +668,7 @@ function CompetitorsScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
+  const [showNewProject, setShowNewProject] = useState(false);
   const [error, setError] = useState("");
   const dashboardRequest = useRef(0);
   const projectsRequest = useRef(0);
@@ -714,9 +762,10 @@ function CompetitorsScreen() {
     setError("");
     try {
       const project = await api.createWorkspaceProject({ name: projectName.trim() });
-      setProjects([project]);
+      setProjects((current) => [...current, project]);
       setProjectId(project.id);
       setProjectName("");
+      setShowNewProject(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось создать проект");
     } finally {
@@ -745,9 +794,10 @@ function CompetitorsScreen() {
 
   return <main className="analytics-page competitor-page">
     <header className="analytics-hero"><div><span className="eyebrow">КОНКУРЕНТНАЯ РАЗВЕДКА</span><h1>Конкуренты</h1><p>Ежедневно отслеживайте видимость конкурентов и источники, которые встречаются рядом с их рекомендациями.</p></div>
-      {projects.length > 0 && <select value={projectId ?? ""} onChange={(event) => setProjectId(Number(event.target.value))}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select>}
+      {projects.length > 0 && <div className="brand-switcher"><label>Какой бренд анализируем<select value={projectId ?? ""} onChange={(event) => setProjectId(Number(event.target.value))}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label><button className="secondary" onClick={() => setShowNewProject((value) => !value)}>+ Добавить другой бренд</button></div>}
     </header>
     {error && <div className="error" role="alert">{error}</div>}
+    {projects.length > 0 && showNewProject ? <section className="analytics-card competitor-first-project compact-project"><div><span className="eyebrow">НОВЫЙ БРЕНД</span><h2>Создать отдельное наблюдение</h2><p>Конкуренты и результаты разных брендов не будут смешиваться.</p></div><form onSubmit={createProject}><label htmlFor="competitor-add-project-name">Название бренда</label><div><input id="competitor-add-project-name" value={projectName} onChange={(event) => setProjectName(event.target.value)} placeholder="Например, Skillbox" required autoFocus /><button className="primary-action" disabled={creatingProject}>{creatingProject ? "Создаём…" : "Создать бренд"}</button></div></form></section> : null}
     {!projects.length ? <section className="analytics-card competitor-first-project"><div><span className="eyebrow">ПЕРВЫЙ ШАГ</span><h2>Создайте проект для вашего бренда</h2><p>Проект объединяет ваш бренд, исследования и конкурентов. Например: «Skinjestique».</p></div><form onSubmit={createProject}><label htmlFor="competitor-project-name">Название проекта</label><div><input id="competitor-project-name" value={projectName} onChange={(event) => setProjectName(event.target.value)} placeholder="Название вашего бренда" required autoFocus /><button className="primary-action" disabled={creatingProject}>{creatingProject ? "Создаём…" : "Создать и продолжить"}</button></div></form></section> : <>
       <section className="competitor-controls">
         <form className="analytics-card competitor-form" onSubmit={addCompetitor}><div><span className="eyebrow">НОВЫЙ КОНКУРЕНТ</span><h2>Добавить в наблюдение</h2></div><label>Название<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Например, Librederm" required /></label><label>Сайт<input value={domain} onChange={(event) => setDomain(event.target.value)} placeholder="librederm.ru" /></label><label>Другие названия<input value={aliases} onChange={(event) => setAliases(event.target.value)} placeholder="Алиасы через запятую" /></label><button className="primary-action" disabled={saving}>{saving ? "Сохраняем…" : "Добавить конкурента"}</button></form>
@@ -1628,11 +1678,19 @@ function Trend({ metric }: { metric?: TrendMetric }) {
 }
 
 function ActionCenter({ recommendations }: { recommendations: NonNullable<ReportShape["recommendations"]> }) {
+  const titles: Record<string, string> = {
+    recommendation_score: "Добиться рекомендаций бренда в покупательских запросах",
+    citation_score: "Получить независимые публикации и проверяемые ссылки",
+    mention_score: "Расширить присутствие бренда по целевым запросам",
+    coverage_score: "Проверить бренд в большем числе подключённых моделей",
+    confidence_score: "Увеличить доказательную выборку исследования",
+  };
+  const priorityLabels: Record<string, string> = { CRITICAL: "КРИТИЧНО", HIGH: "ВАЖНО", MEDIUM: "СРЕДНИЙ ПРИОРИТЕТ", LOW: "НИЗКИЙ ПРИОРИТЕТ" };
   return (
     <section className="action-center">
       <div className="section-head">
         <div>
-          <span className="eyebrow">ACTION CENTER</span>
+          <span className="eyebrow">ПЛАН ДЕЙСТВИЙ</span>
           <h2>Что делать дальше</h2>
           <p>Рекомендации, рассчитанные для последнего исследования.</p>
         </div>
@@ -1641,11 +1699,12 @@ function ActionCenter({ recommendations }: { recommendations: NonNullable<Report
         {recommendations.length ? recommendations.map((action, index) => (
           <article className="action-item" key={`${action.explanation}-${index}`}>
             <div>
-              <span className="priority">{action.priority ?? "Приоритет не указан"}</span>
-              <h3>{action.explanation ?? "Рекомендация"}</h3>
+              <span className="priority">{priorityLabels[action.priority ?? ""] ?? "ПРИОРИТЕТ НЕ УКАЗАН"}</span>
+              <h3>{titles[action.metric ?? ""] ?? "Улучшить измеряемый сигнал бренда"}</h3>
+              <p>{metricNames[action.metric ?? ""] ?? "Метрика"}: сейчас {action.metric_value?.toFixed(1) ?? "нет данных"} из 100.</p>
               <div className="action-facts">
-                <b>{action.metric ?? "Метрика не указана"}</b>
-                <span>{action.expected_effect ?? "Эффект не рассчитан"}</span>
+                <b>Основание: правило методологии v1.0 сработало на фактах последнего исследования</b>
+                <span>Конкретные площадки и способ проверки — в подробном плане</span>
               </div>
             </div>
           </article>
@@ -2077,6 +2136,9 @@ function Report({
   const currentPoint = visibilityMetric?.points.at(-1);
   const evidenceResearch = (report.research ?? result.research) as ResearchItem;
   const visibilityEvidence = metricEvidence("visibility_score", report, evidenceResearch);
+  const successfulResponses = report.explainability?.sample_scope?.successful_response_count ?? responses.filter((item) => !item.error_type).length;
+  const recommendedResponses = report.explainability?.responses.filter((item) => item.recommendation_ids.length > 0).length ?? 0;
+  const citedResponses = report.explainability?.responses.filter((item) => item.citation_ids.length > 0).length ?? 0;
   const planFor = (recommendation: NonNullable<ReportShape["recommendations"]>[number]) => result.actionPlan?.items.find((item) => item.recommendation.metric === recommendation.metric);
   const simulationFor = (recommendation: NonNullable<ReportShape["recommendations"]>[number]) => result.simulation?.simulations.find((item) => item.metric === recommendation.metric);
   const [selectedActions, setSelectedActions] = useState<number[]>([]);
@@ -2105,6 +2167,7 @@ function Report({
           <em className={latestDelta == null ? "" : latestDelta >= 0 ? "good" : "critical"}>{latestDelta == null ? "Нет сравнения" : `${latestDelta >= 0 ? "↑" : "↓"} ${Math.abs(latestDelta).toFixed(1)}%`}</em>
         </div>
       </section>
+      <section className="report-plain-summary" aria-label="Краткий вывод"><article><span>Что означает {visibility.toFixed(1)}</span><h2>{visibility >= 75 ? "Бренд заметен в этой выборке, но результат не универсален" : visibility >= 50 ? "Бренд упоминается, но не всегда становится рекомендацией" : "Бренд редко появляется в исследованных ответах"}</h2><p>Проверено {successfulResponses} успешных ответов по {report.explainability?.sample_scope?.query_count ?? report.query_catalog?.length ?? 0} запросам и {models.length} моделям. Оценка относится только к этой матрице.</p></article><article><span>Главное ограничение</span><h2>{weakest.label}: {weakest.value.toFixed(1)} из 100</h2><p>{weakest.label === "Цитирование" ? `Ссылки найдены в ${citedResponses} из ${successfulResponses} ответов. Без внешних источников ИИ не подтверждает выводы о бренде.` : weakest.label === "Рекомендации" ? `Бренд рекомендован в ${recommendedResponses} из ${successfulResponses} ответов. Простого упоминания недостаточно.` : "Подробное основание и ответы перечислены ниже."}</p></article><article><span>Что делать сначала</span><h2>Открыть раздел «Где публиковаться»</h2><p>Там показаны найденные источники, дефицитные запросы, конкретный материал и способ повторной проверки результата.</p><a href="#actions">Перейти к плану действий ↓</a></article></section>
       <nav className="report-nav" aria-label="Разделы отчёта"><a href="#summary">Сводка</a><a href="#demand-map">Запросы</a><a href="#patterns">Закономерности</a><a href="#models">Модели</a><a href="#entities">Сущности</a><a href="#sources">Источники</a><a href="#actions">Где публиковаться</a></nav>
       <section id="summary" className="panel report-proof"><div><span>Как сформирована оценка</span><strong>{visibility.toFixed(1)}</strong></div><dl><div><dt>Запросов</dt><dd>{report.explainability?.sample_scope?.query_count ?? report.query_catalog?.length ?? 0}</dd></div><div><dt>Моделей</dt><dd>{models.length}</dd></div><div><dt>Ответов</dt><dd>{responses.length}</dd></div><div><dt>Успешных</dt><dd>{report.explainability?.sample_scope?.successful_response_count ?? responses.length}</dd></div><div><dt>Исследование</dt><dd>#{result.research.id}</dd></div><div><dt>Алгоритм</dt><dd>{String(score.version ?? "не указан")}</dd></div></dl><p className="method-note">{report.explainability?.sample_scope?.limitation ?? "Результат относится только к исследованной выборке и не означает видимость во всех ИИ."}</p><details><summary>Показать расчёт</summary>{visibilityEvidence.lines.map((line) => <p key={line}>{line}</p>)}<code>{visibilityEvidence.formula}</code></details></section>
       <section id="demand-map" className="panel research-lab-section"><span className="section-label">КАРТА СПРОСА</span><h2>По каким запросам проверялся бренд</h2>{report.query_catalog?.length ? report.query_catalog.map((item) => <details className="evidence-details" key={item.id}><summary>{item.cluster} · {item.intent}</summary><p>{item.text}</p></details>) : <p className="empty-state">Для старого исследования карта смежных запросов не сохранена.</p>}</section>
@@ -2280,7 +2343,7 @@ function App() {
       ) : screen === "reports" ? (
         <RecordsScreen key="reports" kind="reports" onNewResearch={() => navigate("wizard")} />
       ) : screen === "recommendations" ? (
-        <RecordsScreen key="recommendations" kind="recommendations" onNewResearch={() => navigate("wizard")} />
+        <RecommendationsScreen key="recommendations" onNewResearch={() => navigate("wizard")} />
       ) : screen === "graph" ? (
         <GraphScreen />
       ) : screen === "geo" ? (
