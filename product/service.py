@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from contextlib import suppress
 from typing import Any
 from urllib.parse import urlparse
 from uuid import NAMESPACE_URL, uuid5
@@ -59,6 +60,7 @@ from research.scoring import SCORING_VERSION, SCORING_WEIGHTS
 from research.service import run_research
 from trend.research_adapter import build_trend_engine
 from yandex_intelligence.service import YandexIntelligenceQuerySource
+from yandex_wordstat.service import WordstatQuerySource
 
 
 class WizardValidationError(ValueError):
@@ -194,6 +196,7 @@ class ProductPipeline:
             [*competitor_profiles, *payload.competitors],
         )
         yandex_snapshot_id, yandex_queries = self._yandex_queries(payload)
+        wordstat_snapshot_id, wordstat_queries = self._wordstat_queries(payload)
         existing = {item["text"].casefold() for item in query_catalog}
         for index, text in enumerate(yandex_queries):
             if text.casefold() in existing:
@@ -218,6 +221,30 @@ class ProductPipeline:
                     "source_rank": str(index + 1),
                 }
             )
+        for index, text in enumerate(wordstat_queries):
+            if text.casefold() in existing:
+                continue
+            existing.add(text.casefold())
+            query_catalog.append(
+                {
+                    "id": str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            f"yandex-wordstat:{wordstat_snapshot_id}:{text}",
+                        )
+                    ),
+                    "cluster": "yandex_wordstat_observed",
+                    "intent": "observed_search_demand",
+                    "text": text,
+                    "buyer_stage": "observed",
+                    "brand_mode": (
+                        "branded" if payload.brand.casefold() in text.casefold() else "unbranded"
+                    ),
+                    "rationale": "Частотный запрос категории из официального Yandex Wordstat API",
+                    "source_snapshot_id": str(wordstat_snapshot_id),
+                    "source_rank": str(index + 1),
+                }
+            )
         estimated_cost *= len(query_catalog)
         estimated_time *= len(query_catalog)
         return WizardReview(
@@ -239,6 +266,10 @@ class ProductPipeline:
 
     def run(self, payload: WizardRequest) -> Research:
         review = self.review(payload)
+        organization_id = None
+        if self.user_id is not None:
+            with suppress(ValueError):
+                organization_id = default_organization(self.db, self.user_id)
         entity_id = payload.entity_id or uuid5(
             NAMESPACE_URL, f"ai-ranking-os:{payload.brand.casefold()}"
         )
@@ -248,6 +279,7 @@ class ProductPipeline:
                 title=review.title,
                 objective=review.prompt,
                 metadata={
+                    "organization_id": organization_id,
                     "brand": payload.brand,
                     "website_url": payload.website_url,
                     "brand_profile": review.brand_profile.model_dump(mode="json"),
@@ -443,6 +475,15 @@ class ProductPipeline:
         return YandexIntelligenceQuerySource(self.db).queries(
             organization_id, payload.website_url, limit=8
         )
+
+    def _wordstat_queries(self, payload: WizardRequest) -> tuple[int, list[str]]:
+        if self.user_id is None or payload.custom_queries:
+            return 0, []
+        try:
+            organization_id = default_organization(self.db, self.user_id)
+        except ValueError:
+            return 0, []
+        return WordstatQuerySource(self.db).queries(organization_id, payload.brand, limit=12)
 
 
 class FinalReportService:

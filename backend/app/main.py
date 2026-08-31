@@ -84,6 +84,7 @@ from trend.router import router as trend_router
 from workspace.router import router as workspace_router
 from yandex_intelligence.router import router as yandex_intelligence_router
 from yandex_webmaster.router import router as yandex_webmaster_router
+from yandex_wordstat.router import router as yandex_wordstat_router
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -163,6 +164,7 @@ app.include_router(llm_router)
 app.include_router(providers_router)
 app.include_router(provider_connections_router)
 app.include_router(yandex_webmaster_router)
+app.include_router(yandex_wordstat_router)
 app.include_router(yandex_intelligence_router)
 app.include_router(model_benchmark_router)
 app.include_router(model_evaluation_router)

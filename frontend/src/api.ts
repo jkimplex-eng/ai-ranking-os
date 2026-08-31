@@ -117,6 +117,11 @@ export type ProviderConnection = {
 export type ProviderConnectionTest = { provider: string; status: string; latency_ms: number; models: string[]; free_models: string[]; checked_at: string };
 export type YandexWebmasterStatus = { connected: boolean; status: string; selected_host_id?: string; selected_host_url?: string; last_checked_at?: string; last_success_at?: string; last_error?: string };
 export type YandexWebmasterHost = { host_id: string; ascii_host_url: string; unicode_host_url?: string; verified: boolean };
+export type WordstatConnection = { connected: boolean; status: string; folder_id?: string; auth_type?: "API_KEY" | "IAM_TOKEN"; last_checked_at?: string; last_success_at?: string; last_error?: string };
+export type WordstatQuery = { query: string; frequency: number; demand_rank: number; source_type: string; branded: boolean; selected_for_alice: boolean };
+export type WordstatSnapshot = { id: number; organization_id: number; brand: string; category: string; region_ids: number[]; device: string; status: string; queries: WordstatQuery[]; raw_count: number; limitations: string[]; algorithm_version: string; created_at: string };
+export type WordstatAnalyticsItem = { query: string; frequency: number; demand_rank: number; response_count: number; mention_count: number; recommendation_count: number; mention_rate: number; recommendation_rate: number; competing_brands: string[]; citation_domains: string[]; evidence_status: string; research_ids: number[] };
+export type WordstatAnalytics = { snapshot_id: number; brand: string; category: string; query_count: number; checked_query_count: number; total_frequency: number; weighted_visibility?: number; numerator: number; denominator: number; status: string; items: WordstatAnalyticsItem[]; methodology_version: string; limitations: string[] };
 export type YandexIntelligence = {
   id: number; organization_id: number; host_id: string; host_url: string;
   status: string; evidence_status: string; algorithm_version: string; created_at: string;
@@ -411,6 +416,12 @@ export class ApiClient {
   yandexWebmasterHosts() { return this.request<YandexWebmasterHost[]>("/integrations/yandex-webmaster/hosts"); }
   selectYandexWebmasterHost(host_id: string, host_url: string) { return this.request<YandexWebmasterStatus>("/integrations/yandex-webmaster/host", { method: "PUT", body: JSON.stringify({ host_id, host_url }) }); }
   disconnectYandexWebmaster() { return this.request<void>("/integrations/yandex-webmaster", { method: "DELETE" }); }
+  wordstatStatus() { return this.request<WordstatConnection>("/integrations/yandex-wordstat/status"); }
+  connectWordstat(payload: { folder_id: string; auth_type: "API_KEY" | "IAM_TOKEN"; credential: string }) { return this.request<WordstatConnection>("/integrations/yandex-wordstat/connection", { method: "PUT", body: JSON.stringify(payload) }); }
+  disconnectWordstat() { return this.request<void>("/integrations/yandex-wordstat/connection", { method: "DELETE" }); }
+  discoverWordstat(payload: { brand: string; category: string; region_ids: number[]; device: "all" | "desktop" | "phone" | "tablet"; limit: number }) { return this.request<WordstatSnapshot>("/integrations/yandex-wordstat/discover", { method: "POST", body: JSON.stringify(payload) }); }
+  latestWordstat(brand?: string) { return this.request<WordstatSnapshot>(`/integrations/yandex-wordstat/latest${brand ? `?brand=${encodeURIComponent(brand)}` : ""}`); }
+  wordstatAnalytics(brand?: string) { return this.request<WordstatAnalytics>(`/integrations/yandex-wordstat/analytics${brand ? `?brand=${encodeURIComponent(brand)}` : ""}`); }
   yandexIntelligence() { return this.request<YandexIntelligence>("/yandex-intelligence/dashboard"); }
   syncYandexIntelligence() { return this.request<YandexIntelligence>("/yandex-intelligence/sync", { method: "POST" }); }
   aliceLearningDashboard(brand?: string) { return this.request<AliceLearningDashboard>(`/alice-learning/dashboard${brand ? `?brand=${encodeURIComponent(brand)}` : ""}`); }

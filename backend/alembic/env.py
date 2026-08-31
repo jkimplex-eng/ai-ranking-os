@@ -60,6 +60,7 @@ from trend import models as trend_models  # noqa: F401
 from workspace import models as workspace_models  # noqa: F401
 from yandex_intelligence import models as yandex_intelligence_models  # noqa: F401
 from yandex_webmaster import models as yandex_webmaster_models  # noqa: F401
+from yandex_wordstat import models as yandex_wordstat_models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)
