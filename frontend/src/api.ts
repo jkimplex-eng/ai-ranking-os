@@ -121,7 +121,7 @@ export type WordstatConnection = { connected: boolean; status: string; folder_id
 export type WordstatQuery = { query: string; frequency: number; demand_rank: number; source_type: string; branded: boolean; selected_for_alice: boolean };
 export type WordstatSnapshot = { id: number; organization_id: number; brand: string; category: string; region_ids: number[]; device: string; status: string; queries: WordstatQuery[]; raw_count: number; limitations: string[]; algorithm_version: string; created_at: string };
 export type WordstatAnalyticsItem = { query: string; frequency: number; demand_rank: number; response_count: number; mention_count: number; recommendation_count: number; mention_rate: number; recommendation_rate: number; competing_brands: string[]; citation_domains: string[]; evidence_status: string; research_ids: number[] };
-export type WordstatAnalytics = { snapshot_id: number; brand: string; category: string; query_count: number; checked_query_count: number; total_frequency: number; weighted_visibility?: number; numerator: number; denominator: number; status: string; items: WordstatAnalyticsItem[]; methodology_version: string; limitations: string[] };
+export type WordstatAnalytics = { snapshot_id: number; brand: string; category: string; query_count: number; checked_query_count: number; total_frequency: number; weighted_visibility: number | null; numerator: number; denominator: number; status: string; items: WordstatAnalyticsItem[]; methodology_version: string; limitations: string[] };
 export type YandexIntelligence = {
   id: number; organization_id: number; host_id: string; host_url: string;
   status: string; evidence_status: string; algorithm_version: string; created_at: string;

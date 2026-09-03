@@ -443,6 +443,51 @@ test("GEO screen keeps working when one independent data source fails", async ({
   await expect(page.getByRole("heading", { name: "Какие вопросы чаще всего задают в Яндексе" })).toBeVisible();
 });
 
+test("GEO screen renders a new Wordstat snapshot before YandexGPT checks", async ({ page }) => {
+  const research = { id: 65, title: "AI Visibility: Skillbox", status: "COMPLETED", metadata: { brand: "Skillbox" }, created_at: "2026-09-03T00:00:00Z" };
+  const snapshot = {
+    id: 4, organization_id: 1, brand: "Skillbox", category: "онлайн-образование",
+    region_ids: [213], device: "all", status: "READY", raw_count: 1,
+    queries: [{ query: "курсы дизайна", frequency: 900, demand_rank: 1, source_type: "TOP", branded: false, selected_for_alice: true }],
+    limitations: [], algorithm_version: "1.0", created_at: "2026-09-03T00:00:00Z",
+  };
+  const analytics = {
+    snapshot_id: 4, brand: "Skillbox", category: "онлайн-образование", query_count: 1,
+    checked_query_count: 0, total_frequency: 900, weighted_visibility: null,
+    numerator: 0, denominator: 0, status: "NOT_MEASURED", methodology_version: "1.0",
+    limitations: [], items: [{ query: "курсы дизайна", frequency: 900, demand_rank: 1, response_count: 0, mention_count: 0, recommendation_count: 0, mention_rate: 0, recommendation_rate: 0, competing_brands: [], citation_domains: [], evidence_status: "NOT_MEASURED", research_ids: [] }],
+  };
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const json: unknown = path.endsWith("/auth/login")
+      ? { access_token: "access", refresh_token: "refresh-token-with-valid-length" }
+      : path.endsWith("/auth/me")
+        ? { id: 1, display_name: "Analyst", email: "analyst@example.com", roles: ["analyst"] }
+        : path.endsWith("/research")
+          ? [research]
+          : path.endsWith("/alice-learning/dashboard")
+            ? { status: "NO_MODEL", brand: "Skillbox", observation_count: 0, recommendation_count: 0, top_factors: [], recommended_actions: [], recent_predictions: [], limitations: [] }
+          : path.endsWith("/yandex-wordstat/status")
+            ? { connected: true, status: "CONNECTED" }
+            : path.endsWith("/yandex-wordstat/latest")
+              ? snapshot
+              : path.endsWith("/yandex-wordstat/analytics")
+                ? analytics
+                : path.endsWith("/system/health")
+                  ? { status: "healthy" }
+                  : [];
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(json) });
+  });
+  await page.goto("/geo-opportunities");
+  await page.getByLabel("Email").fill("analyst@example.com");
+  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByRole("button", { name: "Войти" }).click();
+  await expect(page.getByRole("heading", { name: "Где публиковаться, чтобы вас рекомендовали ИИ" })).toBeVisible();
+  await expect(page.getByText("курсы дизайна", { exact: true })).toBeVisible();
+  await expect(page.getByText("Нет данных", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Интерфейс восстановлен" })).toHaveCount(0);
+});
+
 test("a broken screen block no longer removes the application shell", async ({ page }) => {
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
