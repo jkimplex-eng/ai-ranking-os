@@ -1,4 +1,4 @@
-import { StrictMode, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Component, StrictMode, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ApiClient,
@@ -108,6 +108,37 @@ const metricMeta = [
 ] as const;
 
 type Screen = "home" | "expert" | "research" | "wizard" | "reports" | "report" | "recommendations" | "graph" | "geo" | "competitors" | "history" | "providers" | "analytics" | "notifications" | "organization" | "settings" | "feedback" | "profile" | "admin" | "onboarding";
+
+class ScreenErrorBoundary extends Component<
+  { children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("Screen rendering failed", error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <main className="analytics-page screen-fallback" role="alert">
+          <div className="analytics-card">
+            <span className="eyebrow">РАЗДЕЛ НЕ ЗАГРУЗИЛСЯ</span>
+            <h1>Интерфейс восстановлен</h1>
+            <p>Один из блоков получил некорректные данные. Остальная навигация продолжает работать.</p>
+            <button className="primary-action" onClick={() => window.location.reload()}>Повторить загрузку</button>
+          </div>
+        </main>
+      );
+    }
+    return this.props.children;
+  }
+}
 type ReportShape = {
   executive_summary?: string;
   research?: ResearchItem;
@@ -1122,16 +1153,30 @@ function GeoOpportunitiesScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [operationResult, setOperationResult] = useState("");
-  const load = useCallback(() => Promise.all([
-    api.geoPlatforms(), api.frozenPromptSets(), api.publicationInfluence(), api.geoSiteAudits(),
-    api.yandexIntelligence().catch(() => undefined),
-    api.aliceLearningDashboard().catch(() => undefined),
-    api.aliceAutomationDashboard().catch(() => undefined),
-    api.wordstatStatus().catch(() => undefined),
-    api.listResearch(),
-  ]).then(([items, sets, estimates, audits, intelligence, learning, automation, wordstatStatus, researchItems]) => {
-    setPlatforms(items); setPromptSets(sets); setLearnedInfluence(estimates); setSiteAudit(audits[0]);
-    const completed = [...researchItems]
+  const load = useCallback(async () => {
+    const failedBlocks: string[] = [];
+    const recover = async <T,>(label: string, request: Promise<T>, fallback: T): Promise<T> => {
+      try { return await request; }
+      catch { failedBlocks.push(label); return fallback; }
+    };
+    const [items, sets, estimates, audits, intelligence, learning, automation, wordstatStatus, researchItems] = await Promise.all([
+      recover("реестр площадок", api.geoPlatforms(), [] as GeoPlatform[]),
+      recover("наборы запросов", api.frozenPromptSets(), [] as FrozenPromptSet[]),
+      recover("история публикаций", api.publicationInfluence(), [] as PublicationInfluenceEstimate[]),
+      recover("GEO-аудиты", api.geoSiteAudits(), [] as GeoSiteAudit[]),
+      recover<YandexIntelligence | undefined>("Яндекс Вебмастер", api.yandexIntelligence(), undefined),
+      recover<AliceLearningDashboard | undefined>("закономерности Алисы", api.aliceLearningDashboard(), undefined),
+      recover<AliceAutomationDashboard | undefined>("мониторинг Алисы", api.aliceAutomationDashboard(), undefined),
+      recover<WordstatConnection | undefined>("Wordstat", api.wordstatStatus(), undefined),
+      recover("исследования", api.listResearch(), [] as ResearchItem[]),
+    ]);
+    const safeItems = Array.isArray(items) ? items : [];
+    const safeSets = Array.isArray(sets) ? sets : [];
+    const safeEstimates = Array.isArray(estimates) ? estimates : [];
+    const safeAudits = Array.isArray(audits) ? audits : [];
+    const safeResearchItems = Array.isArray(researchItems) ? researchItems : [];
+    setPlatforms(safeItems); setPromptSets(safeSets); setLearnedInfluence(safeEstimates); setSiteAudit(safeAudits[0]);
+    const completed = [...safeResearchItems]
       .filter((item) => item.status === "COMPLETED")
       .sort((left, right) => right.id - left.id);
     setResearches(completed);
@@ -1156,16 +1201,21 @@ function GeoOpportunitiesScreen() {
         : undefined,
     );
     setWordstatConnection(wordstatStatus);
-  }), []);
-  useEffect(() => { load().catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить GEO-данные")); }, [load]);
+    if (failedBlocks.length) setError(`Часть данных временно недоступна: ${failedBlocks.join(", ")}. Остальные блоки продолжают работать.`);
+  }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      load().catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить GEO-данные"));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
   const selectedResearch = researches.find((item) => item.id === selectedResearchId);
   const selectedBrand = researchBrand(selectedResearch);
   useEffect(() => {
     if (!selectedResearchId || !selectedBrand) return;
     sessionStorage.setItem(ACTIVE_RESEARCH_KEY, String(selectedResearchId));
-    setWordstatForm((current) => ({ ...current, brand: selectedBrand }));
     api.aliceLearningDashboard(selectedBrand).then(setAliceLearning).catch(() => undefined);
-    api.latestWordstat(selectedBrand).then((snapshot) => { setWordstatSnapshot(snapshot); setWordstatForm((current) => ({ ...current, category: snapshot.category })); }).catch(() => { setWordstatSnapshot(undefined); setWordstatAnalytics(undefined); });
+    api.latestWordstat(selectedBrand).then((snapshot) => { setWordstatSnapshot(snapshot); setWordstatForm((current) => ({ ...current, brand: selectedBrand, category: snapshot.category })); }).catch(() => { setWordstatSnapshot(undefined); setWordstatAnalytics(undefined); });
     api.wordstatAnalytics(selectedBrand).then(setWordstatAnalytics).catch(() => setWordstatAnalytics(undefined));
   }, [selectedBrand, selectedResearchId]);
   const discoverWordstat = async () => {
@@ -2340,9 +2390,13 @@ function App() {
     const path = screenPaths[next];
     window.history[replace ? "replaceState" : "pushState"]({ screen: next }, "", path);
     setScreen(next);
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, []);
   useEffect(() => {
-    const onPopState = () => setScreen(pathScreens[window.location.pathname] ?? "home");
+    const onPopState = () => {
+      setScreen(pathScreens[window.location.pathname] ?? "home");
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
@@ -2452,7 +2506,7 @@ function App() {
         navigate("home", true);
       }}
     >
-      {content}
+      <ScreenErrorBoundary key={screen}>{content}</ScreenErrorBoundary>
     </Shell>
   );
 }

@@ -339,7 +339,7 @@ test("authenticated routes survive refresh and browser history", async ({ page }
     ["Как начать", "/getting-started", "Начните с первого результата"],
     ["Все исследования", "/research", "Исследования"],
     ["Результаты", "/reports", "Отчёты"],
-    ["План действий", "/recommendations", "Рекомендации"],
+    ["План действий", "/recommendations", "Что поможет бренду чаще появляться в ответах ИИ"],
     ["Связи и источники", "/knowledge-graph", "Граф знаний"],
     ["Где публиковаться", "/geo-opportunities", "Где публиковаться, чтобы вас рекомендовали ИИ"],
     ["Конкуренты", "/competitors", "Конкуренты"],
@@ -354,9 +354,19 @@ test("authenticated routes survive refresh and browser history", async ({ page }
     ["Администрирование", "/admin", "Admin Console"],
   ] as const;
   for (const [link, path, heading] of routes) {
+    if (link === "Где публиковаться") {
+      await page.evaluate(() => {
+        document.body.style.minHeight = "5000px";
+        window.scrollTo(0, 3000);
+      });
+      expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    }
     await page.getByRole("navigation").getByRole("button").filter({ hasText: link }).click();
     await expect(page).toHaveURL(new RegExp(`${path.replace("/", "\\/")}$`));
     await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
+    if (link === "Где публиковаться") {
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+    }
   }
 });
 
@@ -389,7 +399,7 @@ test("GEO screen exposes real platform scoring and explainability", async ({ pag
   await expect(page.getByText("Находим спрос", { exact: true })).toBeVisible();
   await expect(page.getByText("Проверяем Алису", { exact: true })).toBeVisible();
   await expect(page.getByText("Предлагаем действие", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "По каким запросам вас находят — и где вы теряете возможность" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Какие вопросы чаще всего задают в Яндексе" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Что чаще встречается рядом с рекомендацией бренда" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Следим, помогли ли ваши действия" })).toBeVisible();
   await expect(page.getByText("Отраслевое СМИ")).toBeVisible();
@@ -407,6 +417,54 @@ test("GEO screen exposes real platform scoring and explainability", async ({ pag
   await expect(page.getByText("84.6")).toBeVisible();
   await expect(page.getByText("частичные данные")).toBeVisible();
   await expect(page.getByText(/не выдаёт корреляцию за доказанную причинность/)).toBeVisible();
+});
+
+test("GEO screen keeps working when one independent data source fails", async ({ page }) => {
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const isLogin = path.endsWith("/auth/login");
+    const isProfile = path.endsWith("/auth/me");
+    const isPlatformFailure = path.endsWith("/geo/platforms");
+    const json: unknown = isLogin
+      ? { access_token: "access", refresh_token: "refresh-token-with-valid-length" }
+      : isProfile
+        ? { id: 1, display_name: "Analyst", email: "analyst@example.com", roles: ["analyst"] }
+        : path.endsWith("/system/health")
+          ? { status: "healthy" }
+          : [];
+    await route.fulfill({ status: isPlatformFailure ? 503 : 200, contentType: "application/json", body: JSON.stringify(isPlatformFailure ? { detail: "temporarily unavailable" } : json) });
+  });
+  await page.goto("/geo-opportunities");
+  await page.getByLabel("Email").fill("analyst@example.com");
+  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByRole("button", { name: "Войти" }).click();
+  await expect(page.getByRole("heading", { name: "Где публиковаться, чтобы вас рекомендовали ИИ" })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("реестр площадок");
+  await expect(page.getByRole("heading", { name: "Какие вопросы чаще всего задают в Яндексе" })).toBeVisible();
+});
+
+test("a broken screen block no longer removes the application shell", async ({ page }) => {
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const json: unknown = path.endsWith("/auth/login")
+      ? { access_token: "access", refresh_token: "refresh-token-with-valid-length" }
+      : path.endsWith("/auth/me")
+        ? { id: 1, display_name: "Analyst", email: "analyst@example.com", roles: ["analyst"] }
+        : path.endsWith("/publication-learning/influence")
+          ? [{ id: 1, metric: "visibility_score", provider: "ALL", expected_delta: null }]
+          : path.endsWith("/system/health")
+            ? { status: "healthy" }
+            : [];
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(json) });
+  });
+  await page.goto("/geo-opportunities");
+  await page.getByLabel("Email").fill("analyst@example.com");
+  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByRole("button", { name: "Войти" }).click();
+  await expect(page.getByRole("heading", { name: "Интерфейс восстановлен" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Основная навигация" })).toBeVisible();
+  await page.getByRole("button", { name: /Обзор/ }).click();
+  await expect(page).toHaveURL(/\/$/);
 });
 
 test("executive report explains metrics, zero citations and graph evidence", async ({ page }) => {
