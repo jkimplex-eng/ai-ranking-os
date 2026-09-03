@@ -15,6 +15,7 @@ export type WizardPayload = {
   research_scope?: "ALL" | "SELECTED" | "RUSSIAN" | "COMMERCIAL" | "FREE" | "CONSENSUS" | "COMPARE";
   research_profile?: "GEO" | "ECOMMERCE" | "MEDICAL" | "BEAUTY" | "ENTERPRISE" | "UNIVERSAL";
   custom_queries?: string[];
+  query_limit?: 30 | 50 | 100;
 };
 export type BrandProfile = { version: string; brand: string; website_url: string; pages_analyzed: number; evidence_urls: string[]; description: string; categories: string[]; products: Array<{ name: string; category?: string; description?: string; price?: string | number; currency?: string; url?: string; evidence_url?: string }>; attributes: string[]; confidence: number; limitations: string[] };
 export type RouterModel = { id: string; provider: string; display_name: string; version: string; status: string; tier: string; capabilities: string[]; availability: number; pricing: { input_per_million: number; output_per_million: number } };
@@ -160,7 +161,7 @@ export type AliceAutomationPlan = {
   id: number; organization_id: number; owner_user_id: number; template_research_id: number;
   brand: string; website_url: string; language: string; region: string;
   research_profile: string; routing_profile: string; models: ModelSelection[];
-  repetitions: number; daily_query_limit: number; weekly_query_limit: number;
+  repetitions: number; daily_query_limit: number; weekly_query_limit: number; monitoring_frequency: "DAILY" | "WEEKLY";
   daily_budget_usd: number; monthly_budget_usd: number; is_enabled: boolean;
   next_run_at: string; last_run_at?: string; created_at: string; updated_at: string;
 };
@@ -431,9 +432,9 @@ export class ApiClient {
     template_research_id: number; brand: string; website_url: string; language?: string;
     region?: string; research_profile?: string; routing_profile?: string;
     models?: ModelSelection[]; repetitions?: number; daily_query_limit?: number;
-    weekly_query_limit?: number; daily_budget_usd?: number; monthly_budget_usd?: number;
+    weekly_query_limit?: number; daily_budget_usd?: number; monthly_budget_usd?: number; monitoring_frequency?: "DAILY" | "WEEKLY";
   }) { return this.request<AliceAutomationPlan>("/alice-learning/automation/plans", { method: "POST", body: JSON.stringify(payload) }); }
-  updateAliceAutomationPlan(id: number, payload: { is_enabled?: boolean }) { return this.request<AliceAutomationPlan>(`/alice-learning/automation/plans/${id}`, { method: "PATCH", body: JSON.stringify(payload) }); }
+  updateAliceAutomationPlan(id: number, payload: { is_enabled?: boolean; monitoring_frequency?: "DAILY" | "WEEKLY" }) { return this.request<AliceAutomationPlan>(`/alice-learning/automation/plans/${id}`, { method: "PATCH", body: JSON.stringify(payload) }); }
   runAliceAutomationPlan(id: number, kind: "DAILY" | "WEEKLY" | "MONTHLY" = "DAILY") { return this.request<AliceAutomationRun>(`/alice-learning/automation/plans/${id}/run`, { method: "POST", body: JSON.stringify({ kind }) }); }
   geoPlatforms() { return this.request<GeoPlatform[]>("/geo/platforms"); }
   createGeoPlatform(payload: {

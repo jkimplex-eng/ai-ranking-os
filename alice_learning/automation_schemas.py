@@ -14,10 +14,11 @@ class AutomationPlanCreate(BaseModel):
     routing_profile: str = Field(default="BALANCED", max_length=40)
     models: list[dict[str, str]] = Field(default_factory=list, max_length=20)
     repetitions: int = Field(default=3, ge=1, le=5)
-    daily_query_limit: int = Field(default=6, ge=1, le=20)
-    weekly_query_limit: int = Field(default=20, ge=4, le=60)
+    daily_query_limit: int = Field(default=30, ge=1, le=100)
+    weekly_query_limit: int = Field(default=30, ge=1, le=100)
     daily_budget_usd: float = Field(default=2.0, gt=0, le=10_000)
     monthly_budget_usd: float = Field(default=30.0, gt=0, le=100_000)
+    monitoring_frequency: Literal["DAILY", "WEEKLY"] = "DAILY"
     is_enabled: bool = True
 
     @model_validator(mode="after")
@@ -32,10 +33,11 @@ class AutomationPlanCreate(BaseModel):
 
 class AutomationPlanUpdate(BaseModel):
     repetitions: int | None = Field(default=None, ge=1, le=5)
-    daily_query_limit: int | None = Field(default=None, ge=1, le=20)
-    weekly_query_limit: int | None = Field(default=None, ge=4, le=60)
+    daily_query_limit: int | None = Field(default=None, ge=1, le=100)
+    weekly_query_limit: int | None = Field(default=None, ge=1, le=100)
     daily_budget_usd: float | None = Field(default=None, gt=0, le=10_000)
     monthly_budget_usd: float | None = Field(default=None, gt=0, le=100_000)
+    monitoring_frequency: Literal["DAILY", "WEEKLY"] | None = None
     is_enabled: bool | None = None
 
 
@@ -87,6 +89,7 @@ class AutomationPlanRead(BaseModel):
     weekly_query_limit: int
     daily_budget_usd: float
     monthly_budget_usd: float
+    monitoring_frequency: str
     is_enabled: bool
     next_run_at: datetime
     last_run_at: datetime | None

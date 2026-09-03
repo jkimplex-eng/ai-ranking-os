@@ -306,12 +306,12 @@ function Shell({
   useEffect(() => { api.systemHealth().then((health) => setSystemReady(health.status === "healthy" || health.status === "ready")).catch(() => setSystemReady(false)); }, []);
   const isAdmin = roles.some((role) => ["superadmin", "admin", "organization_admin", "SUPERADMIN", "ADMIN", "ORGANIZATION_ADMIN"].includes(role));
   const primaryNav = [
-    ["⌂", "Обзор", "home"], ["＋", "Новое исследование", "wizard"],
-    ["▤", "Результаты", "reports"], ["✓", "План действий", "recommendations"],
+    ["⌂", "Главный результат", "home"], ["＋", "Добавить компанию", "wizard"],
+    ["▤", "Отчёты", "reports"], ["✓", "Что делать", "recommendations"],
     ["◇", "Конкуренты", "competitors"],
   ] as const;
   const expertNavSource = [
-    ["?", "Как пользоваться", "expert"],
+    ["?", "Как это работает", "expert"],
     ["◉", "Все исследования", "research"], ["↗", "История изменений", "history"],
     ["⌘", "Связи и источники", "graph"], ["◈", "Где публиковаться", "geo"],
     ["✦", "Подключения ИИ", "providers"], ["◫", "Аналитика продукта", "analytics"],
@@ -338,7 +338,7 @@ function Shell({
         <nav aria-label="Основная навигация">
           <span className="nav-section-label">Главное</span>
           {renderNav(primaryNav)}
-          <details className="nav-group"><summary><span>⋯</span><span className="nav-label">Для экспертов</span></summary>{renderNav(visible(expertNavSource))}</details>
+          <details className="nav-group"><summary><span>⋯</span><span className="nav-label">Подробная аналитика</span></summary>{renderNav(visible(expertNavSource))}</details>
           <details className="nav-group"><summary><span>⚙</span><span className="nav-label">Рабочее пространство</span></summary>{renderNav(visible(workspaceNavSource))}</details>
         </nav>
         <div className="sidebar-foot">
@@ -374,7 +374,7 @@ function Shell({
         {children}
         <nav className="mobile-nav" aria-label="Мобильная навигация">
           {primaryNav.slice(0, 4).map(([icon, label, target]) => (
-            <button key={target} className={active === target ? "active" : ""} onClick={() => onNavigate(target)}><span>{icon}</span><small>{label === "Новое исследование" ? "Проверить" : label}</small></button>
+            <button key={target} className={active === target ? "active" : ""} onClick={() => onNavigate(target)}><span>{icon}</span><small>{label === "Добавить компанию" ? "Добавить" : label}</small></button>
           ))}
         </nav>
       </div>
@@ -1451,6 +1451,16 @@ function Dashboard({
   onNavigate: (screen: Screen) => void;
 }) {
   const [detail, setDetail] = useState<string>();
+  const downloadPlan = () => {
+    if (!report) return;
+    const blob = new Blob([JSON.stringify(report.report, null, 2)], { type: "application/json;charset=utf-8" });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = `geo-plan-${report.research.id}.json`;
+    link.click();
+    URL.revokeObjectURL(href);
+  };
   if (!report)
     return (
       <main className="page">
@@ -1464,8 +1474,8 @@ function Dashboard({
           <div className="choice-grid">
             <button className="choice primary-choice" onClick={onStart}>
               <span className="choice-icon">◎</span>
-              <b>Проверить бренд</b>
-              <small>Узнать видимость в ответах AI</small>
+              <b>Добавить компанию</b>
+              <small>Название и официальный сайт</small>
               <i>Начать →</i>
             </button>
             <button className="choice" onClick={() => onNavigate("competitors")}>
@@ -1530,9 +1540,14 @@ function Dashboard({
         <Button onClick={onStart}>Новое исследование</Button>
       </div>
       <section className="decision-strip" aria-label="Что важно сейчас">
-        <div><span>Текущий результат</span><strong>{healthLabel(visibility)}</strong><small>Видимость {visibility.toFixed(1)} из 100</small></div>
+        <button onClick={onStart}><span>1</span><strong>Добавить компанию</strong><small>Создать новое исследование →</small></button>
+        <button onClick={() => onNavigate("recommendations")}><span>2</span><strong>Запустить анализ</strong><small>Оценка и три приоритетных действия →</small></button>
+        <button onClick={downloadPlan}><span>3</span><strong>Скачать план действий</strong><small>Данные, причины, источники и ссылки →</small></button>
+      </section>
+      <section className="decision-strip" aria-label="Диагноз исследования">
+        <div><span>Единая оценка</span><strong>{visibility.toFixed(1)} из 100</strong><small>{healthLabel(visibility)}</small></div>
         <div><span>Главное ограничение</span><strong>{weakest.label}</strong><small>Оценка {weakest.value.toFixed(1)} из 100</small></div>
-        <button onClick={() => onNavigate("recommendations")}><span>Следующий шаг</span><strong>Открыть план улучшений</strong><small>Конкретные действия и ожидаемый эффект →</small></button>
+        <button onClick={() => onNavigate("recommendations")}><span>Что делать</span><strong>Три главных действия</strong><small>Полный план из 10 мер — внутри →</small></button>
       </section>
       <section className="dashboard-grid">
         <article className="hero-score panel">
@@ -1781,7 +1796,7 @@ function ActionCenter({ recommendations }: { recommendations: NonNullable<Report
         </div>
       </div>
       <div className="action-list">
-        {recommendations.length ? recommendations.map((action, index) => (
+        {recommendations.length ? recommendations.slice(0, 3).map((action, index) => (
           <article className="action-item" key={`${action.explanation}-${index}`}>
             <div>
               <span className="priority">{priorityLabels[action.priority ?? ""] ?? "ПРИОРИТЕТ НЕ УКАЗАН"}</span>
@@ -1836,11 +1851,15 @@ function Wizard({
     ["RU-PER", "Пермь"],
     ["RU-VGG", "Волгоград"],
   ] as const;
-  const saved = useMemo(() => { try { return JSON.parse(sessionStorage.getItem("research-wizard-v3") ?? "{}") as Partial<{ step: number; brand: string; websiteUrl: string; brandProfile: BrandProfile; region: string; language: string; profile: WizardPayload["routing_profile"]; scope: WizardPayload["research_scope"]; researchProfile: WizardPayload["research_profile"]; selectedModels: string[]; customQueries: string[] }>; } catch { return {}; } }, []);
-  const [step, setStep] = useState(saved.step && saved.step >= 1 && saved.step <= 8 ? saved.step : 1);
+  const saved = useMemo(() => { try { return JSON.parse(sessionStorage.getItem("research-wizard-v4") ?? "{}") as Partial<{ step: number; brand: string; websiteUrl: string; brandProfile: BrandProfile; category: string; region: string; language: string; profile: WizardPayload["routing_profile"]; scope: WizardPayload["research_scope"]; researchProfile: WizardPayload["research_profile"]; selectedModels: string[]; customQueries: string[]; queryLimit: 30 | 50 | 100; cadence: "DAILY" | "WEEKLY" }>; } catch { return {}; } }, []);
+  const [step, setStep] = useState(saved.step && saved.step >= 1 && saved.step <= 3 ? saved.step : 1);
   const [brand, setBrand] = useState(saved.brand ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(saved.websiteUrl ?? "");
   const [brandProfile, setBrandProfile] = useState<BrandProfile | undefined>(saved.brandProfile);
+  const [category, setCategory] = useState(saved.category ?? "");
+  const [queryLimit, setQueryLimit] = useState<30 | 50 | 100>(saved.queryLimit ?? 30);
+  const [cadence, setCadence] = useState<"DAILY" | "WEEKLY">(saved.cadence ?? "DAILY");
+  const [wordstatNote, setWordstatNote] = useState("");
   const [competitorName, setCompetitorName] = useState("");
   const [competitorWebsite, setCompetitorWebsite] = useState("");
   const [competitors, setCompetitors] = useState<Array<{ name: string; website_url?: string }>>([]);
@@ -1863,10 +1882,15 @@ function Wizard({
       .then(([registry, runtime]) => {
         setModels(registry.items);
         setRuntimeProviders(runtime.providers);
+        if (!saved.selectedModels?.length) {
+          const available = registry.items.filter((model) => runtime.providers.some((item) => (item.model_id === model.id || item.provider === model.provider) && item.interface.available === true));
+          const preferred = available.find((model) => ["yandex", "yandexgpt"].includes(model.provider.toLowerCase())) ?? available[0];
+          if (preferred) setSelectedModels([preferred.id]);
+        }
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось проверить подключение моделей"));
   }, []);
-  useEffect(() => { sessionStorage.setItem("research-wizard-v3", JSON.stringify({ step, brand, websiteUrl, brandProfile, region, language, profile, scope, researchProfile, selectedModels, customQueries })); }, [step, brand, websiteUrl, brandProfile, region, language, profile, scope, researchProfile, selectedModels, customQueries]);
+  useEffect(() => { sessionStorage.setItem("research-wizard-v4", JSON.stringify({ step, brand, websiteUrl, brandProfile, category, region, language, profile, scope, researchProfile, selectedModels, customQueries, queryLimit, cadence })); }, [step, brand, websiteUrl, brandProfile, category, region, language, profile, scope, researchProfile, selectedModels, customQueries, queryLimit, cadence]);
   const scopedModels = () => {
     const ready = models.filter((item) => modelIsReady(item));
     if (scope === "ALL") return ready;
@@ -1893,6 +1917,7 @@ function Wizard({
     prompt_code: "ai-visibility",
     research_template_code: "ai-visibility",
     custom_queries: customQueries,
+    query_limit: queryLimit,
   });
   async function next() {
     if (step === 1) {
@@ -1903,7 +1928,9 @@ function Wizard({
       setBusy(true);
       setError("");
       try {
-        setBrandProfile(await api.brandProfile(brand, websiteUrl));
+        const detected = await api.brandProfile(brand, websiteUrl);
+        setBrandProfile(detected);
+        setCategory(detected.categories[0] ?? detected.description ?? brand);
         setStep(2);
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Не удалось изучить сайт бренда");
@@ -1912,14 +1939,28 @@ function Wizard({
       }
       return;
     }
-    if (step < 7) return setStep(step + 1);
+    if (step !== 2) return;
     setBusy(true);
     setError("");
     try {
+      setWordstatNote("");
+      const cityIds: Record<string, number> = { "RU-MOW": 213, "RU-SPE": 2, "RU-NVS": 65, "RU-SVE": 54, "RU-TA": 43, "RU-KYA": 62, "RU-NIZ": 47, "RU-CHE": 56, "RU-BA": 172, "RU-SAM": 51, "RU-ROS": 39, "RU-KDA": 35, "RU-OMS": 66, "RU-VOR": 193, "RU-PER": 50, "RU-VGG": 38 };
+      const millionIds = Object.values(cityIds);
+      try {
+        const status = await api.wordstatStatus();
+        if (status.connected) {
+          const snapshot = await api.discoverWordstat({ brand, category: category || brand, region_ids: region === "RU" ? [] : region === "RU-MILLION" ? millionIds : cityIds[region] ? [cityIds[region]] : [], device: "all", limit: queryLimit });
+          setWordstatNote(`Wordstat нашёл ${snapshot.raw_count} фраз; в проверку отобраны ${snapshot.queries.length} самых частотных.`);
+        } else {
+          setWordstatNote("Wordstat не подключён: вопросы сформированы по сайту и категории. Подключить Wordstat можно в настройках интеграций.");
+        }
+      } catch (wordstatError) {
+        setWordstatNote(`Wordstat временно недоступен: ${wordstatError instanceof Error ? wordstatError.message : "ошибка запроса"}. Исследование можно продолжить с автоматически созданными вопросами.`);
+      }
       const generatedReview = await api.review({ ...payload(), custom_queries: [] });
       setReview(generatedReview);
       setCustomQueries(generatedReview.query_catalog.map((item) => item.text));
-      setStep(8);
+      setStep(3);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Не удалось проверить настройки",
@@ -1944,7 +1985,12 @@ function Wizard({
         result = await recoverResearchResult(knownResearchIds, brand);
       }
       if (result.research.status !== "COMPLETED") throw new Error("Исследование завершилось с ошибкой. Подробности доступны в разделе Research.");
-      sessionStorage.removeItem("research-wizard-v3");
+      try {
+        await api.createAliceAutomationPlan({ template_research_id: result.research.id, brand, website_url: websiteUrl, language, region, research_profile: researchProfile, routing_profile: profile, models: payload().models, repetitions: 1, daily_query_limit: queryLimit, weekly_query_limit: queryLimit, monitoring_frequency: cadence });
+      } catch {
+        // The completed one-off research remains valid even if recurring monitoring cannot be created.
+      }
+      sessionStorage.removeItem("research-wizard-v4");
       onComplete(result);
     } catch (e) {
       setError(
@@ -1975,40 +2021,31 @@ function Wizard({
     }
     throw new Error("Исследование продолжает выполняться. Его статус доступен в разделе «Исследования».");
   }
-  const titles = [
-    "Как называется бренд?",
-    "Где вы работаете?",
-    "На каком языке искать?",
-    "Какие ИИ проверить?",
-    "Как исследовать?",
-    "Какой профиль использовать?",
-    "Как выполнить исследование?",
-    "Всё готово к исследованию",
-  ];
+  const titles = ["Добавьте компанию", "Подтвердите спрос", "Проверьте вопросы"];
   return (
     <main className="wizard-page">
       <button
         className="back-link"
-        onClick={step === 1 ? () => { sessionStorage.removeItem("research-wizard-v3"); onCancel(); } : () => setStep(step - 1)}
+        onClick={step === 1 ? () => { sessionStorage.removeItem("research-wizard-v4"); onCancel(); } : () => setStep(step - 1)}
       >
         ← {step === 1 ? "На главную" : "Назад"}
       </button>
       <div className="stepper">
-        {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+        {[1, 2, 3].map((n) => (
           <span key={n} className={n <= step ? "active" : ""}>
             {n < step ? "✓" : n}
           </span>
         ))}
       </div>
       <section className="wizard-focus">
-        <span className="eyebrow">ШАГ {step} ИЗ 8</span>
+        <span className="eyebrow">ШАГ {step} ИЗ 3</span>
         <h1>{titles[step - 1]}</h1>
         <p>
           {step === 1
             ? "Укажите официальный сайт — сначала мы изучим категории, товары и характеристики бренда."
-            : step === 4
-              ? "Выберите конкретные модели из активного реестра платформы."
-              : "Это поможет сделать исследование точнее."}
+            : step === 2
+              ? "Мы определили категорию по сайту. Проверьте её, географию и частоту мониторинга."
+              : "Удалите лишнее или добавьте свои вопросы — именно их система задаст Алисе."}
         </p>
         {step === 1 && (
           <>
@@ -2045,6 +2082,7 @@ function Wizard({
             <input value={competitorWebsite} onChange={(event) => setCompetitorWebsite(event.target.value)} placeholder="Официальный сайт конкурента" />
             <button type="button" onClick={() => { if (!competitorName.trim()) return; setCompetitors((items) => [...items, { name: competitorName.trim(), website_url: competitorWebsite.trim() || undefined }]); setCompetitorName(""); setCompetitorWebsite(""); }}>Добавить конкурента</button>
             {competitors.map((item) => <p key={item.name}>{item.name} · {item.website_url || "сайт не указан"}</p>)}
+            <label className="hero-field">Категория спроса<input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Например, онлайн-образование" /></label>
           </div>
         )}
         {step === 2 && (
@@ -2059,15 +2097,21 @@ function Wizard({
                 {researchRegions.map(([value, label]) => (
                   <option value={value} key={value}>{label}</option>
                 ))}
+                <option value="RU-MILLION">Все города-миллионники</option>
               </select>
             </label>
             <p className="muted">
               «Вся Россия» измеряет федеральную выдачу. Город добавляется в каждый
               покупательский запрос и показывает локальные рекомендации ИИ.
             </p>
+            <div className="wizard-inline-actions">
+              <label>Сколько запросов<select value={queryLimit} onChange={(event) => setQueryLimit(Number(event.target.value) as 30 | 50 | 100)}><option value={30}>30 — рекомендуется</option><option value={50}>50</option><option value={100}>100</option></select></label>
+              <label>Повторять проверку<select value={cadence} onChange={(event) => setCadence(event.target.value as "DAILY" | "WEEKLY")}><option value="DAILY">Ежедневно</option><option value="WEEKLY">Еженедельно</option></select></label>
+            </div>
+            <details><summary>Дополнительные настройки</summary><p className="muted">По умолчанию проверяется подключённая Яндекс-модель. Здесь можно оставить известных конкурентов; остальных система найдёт в ответах автоматически.</p></details>
           </div>
         )}
-        {step === 3 && (
+        {false && step === 3 && (
           <div className="option-list">
             {[
               ["ru", "Русский"],
@@ -2084,18 +2128,18 @@ function Wizard({
             ))}
           </div>
         )}
-        {step === 4 && (
+        {false && step === 4 && (
           <div><div className="wizard-inline-actions"><button type="button" onClick={() => setSelectedModels(models.filter(modelIsReady).map((item) => item.id))}>Выбрать подключённые</button><button type="button" onClick={() => setSelectedModels([])}>Очистить</button><button type="button" onClick={() => localStorage.setItem("research-model-preset", JSON.stringify(selectedModels))}>Сохранить набор</button><button type="button" onClick={() => { try { const savedPreset = JSON.parse(localStorage.getItem("research-model-preset") ?? "[]") as string[]; setSelectedModels(savedPreset.filter((id) => models.some((model) => model.id === id && modelIsReady(model)))); } catch { setSelectedModels([]); } }}>Загрузить набор</button></div><div className="model-grid">
             {models.length ? models.map((model) => { const ready = modelIsReady(model); const runtime = runtimeFor(model); return <button type="button" disabled={!ready} aria-disabled={!ready} className={`model ${selectedModels.includes(model.id) ? "active" : ""} ${ready ? "ready" : "not-ready"}`} key={model.id} onClick={() => setSelectedModels((current) => current.includes(model.id) ? current.filter((id) => id !== model.id) : [...current, model.id])}><span className="provider-icon">{selectedModels.includes(model.id) ? "✓" : ready ? "○" : "×"}</span><b>{modelTitle(model)}</b><small>{model.provider === "ollama" ? "Локальная бесплатная модель" : `${model.provider} · ${model.version}`}</small><i className={ready ? "provider-ready" : "provider-offline"}>{ready ? "Подключена" : runtime?.interface.error ? "Ошибка подключения" : "Не подключена"}</i></button>; }) : <p className="empty-state">Активные модели не найдены в реестре. Проверьте настройки провайдеров.</p>}
           </div></div>
         )}
-        {step === 5 && (
+        {false && step === 5 && (
           <div className="option-list">{[["ALL", "Все модели"], ["SELECTED", "Только выбранные"], ["RUSSIAN", "Только российские"], ["COMMERCIAL", "Только коммерческие"], ["FREE", "Только бесплатные"], ["CONSENSUS", "Консенсус"], ["COMPARE", "Сравнить модели"]].map(([value, label]) => <button type="button" className={scope === value ? "selected" : ""} onClick={() => setScope(value as typeof scope)} key={value}><span>{label}</span><small>{value}</small></button>)}</div>
         )}
-        {step === 6 && (
+        {false && step === 6 && (
           <div className="option-list">{[["GEO", "GEO"], ["ECOMMERCE", "Электронная коммерция"], ["MEDICAL", "Медицина"], ["BEAUTY", "Красота"], ["ENTERPRISE", "Корпоративный"], ["UNIVERSAL", "Универсальный"]].map(([value, label]) => <button type="button" className={researchProfile === value ? "selected" : ""} onClick={() => setResearchProfile(value as typeof researchProfile)} key={value}><span>{label}</span><small>Профиль сохраняется в методологии</small></button>)}</div>
         )}
-        {step === 7 && (
+        {false && step === 7 && (
           <div className="model-grid routing-profile-grid">
             {routingProfiles.map(([value, title, description, icon]) => {
               if (!["FAST", "BALANCED", "HIGH_QUALITY"].includes(value)) return null;
@@ -2115,7 +2159,7 @@ function Wizard({
             })}
           </div>
         )}
-        {step === 8 && (
+        {step === 3 && (
           <div className="review-card">
             <div>
               <span>Бренд</span>
@@ -2138,10 +2182,14 @@ function Wizard({
             <p>{review?.prompt}</p>
             <div><span>Выбранные модели</span><b>{review?.selected_models?.join(", ") || review?.provider_models?.join(", ") || "Router не вернул план"}</b></div>
             <div><span>Покупательских запросов</span><b>{customQueries.length}</b></div>
+            <div><span>Источник спроса</span><b>Wordstat · частотность Яндекс Поиска</b></div>
+            <div><span>Проверяемая система</span><b>Пользовательская Алиса</b></div>
+            <div><span>Мониторинг</span><b>{cadence === "DAILY" ? "Ежедневно" : "Еженедельно"}</b></div>
             <div><span>Всего проверок</span><b>{customQueries.length * Math.max(scopedModels().length, 1)}</b></div>
             <div><span>Оценка времени</span><b>{review?.estimated_time_ms ? `${review.estimated_time_ms} ms` : "Не рассчитана"}</b></div>
             <div><span>Оценка стоимости</span><b>{review?.estimated_cost_usd != null ? `$${review.estimated_cost_usd.toFixed(6)}` : "Не рассчитана"}</b></div>
             {customQueries.length ? <details open><summary>Проверить и изменить вопросы покупателей</summary><p className="muted">Матрица: 70% естественных запросов без бренда, 20% сравнений и 10% контрольных брендовых вопросов.</p>{customQueries.map((query, index) => { const scenario = review?.query_catalog[index]; return <div className="query-editor" key={`${index}-${query.slice(0, 24)}`}><small>{scenario?.brand_mode === "branded" ? "БРЕНДОВЫЙ КОНТРОЛЬ" : scenario?.brand_mode === "comparative" ? "СРАВНЕНИЕ" : "ЕСТЕСТВЕННЫЙ СПРОС"} · {scenario?.rationale ?? "Пользовательский запрос"}</small><textarea aria-label={`Запрос ${index + 1}`} value={query} onChange={(event) => setCustomQueries((items) => items.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} /><button type="button" onClick={() => setCustomQueries((items) => items.filter((_, itemIndex) => itemIndex !== index))}>Удалить</button></div>; })}<button type="button" onClick={() => setCustomQueries((items) => [...items, ""])}>Добавить свой вопрос</button></details> : null}
+            {wordstatNote && <p className="muted">{wordstatNote}</p>}
           </div>
         )}
         {error && (
@@ -2150,12 +2198,12 @@ function Wizard({
           </div>
         )}
         <div className="wizard-actions">
-          {step < 8 ? (
+          {step < 3 ? (
             <button
               onClick={next}
-              disabled={busy || !brand || (step === 4 && selectedModels.length === 0) || (step === 7 && scopedModels().length === 0)}
+              disabled={busy || !brand || (step === 2 && (!category.trim() || scopedModels().length === 0))}
             >
-              {busy ? "Проверяем…" : step === 7 ? "Проверить" : "Продолжить"} →
+              {busy ? "Собираем спрос…" : step === 2 ? "Собрать вопросы" : "Продолжить"} →
             </button>
           ) : (
             <button onClick={run} disabled={busy}>

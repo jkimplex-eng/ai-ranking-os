@@ -140,7 +140,8 @@ class WizardRequest(BaseModel):
     variables: dict[str, str] = Field(default_factory=dict)
     brand_profile: dict[str, Any] | None = None
     competitors: list[dict[str, str]] = Field(default_factory=list, max_length=20)
-    custom_queries: list[str] = Field(default_factory=list, max_length=60)
+    custom_queries: list[str] = Field(default_factory=list, max_length=120)
+    query_limit: int = Field(default=30, ge=1, le=100)
 
     @field_validator("custom_queries")
     @classmethod

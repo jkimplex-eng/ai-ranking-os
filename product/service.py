@@ -483,7 +483,9 @@ class ProductPipeline:
             organization_id = default_organization(self.db, self.user_id)
         except ValueError:
             return 0, []
-        return WordstatQuerySource(self.db).queries(organization_id, payload.brand, limit=12)
+        return WordstatQuerySource(self.db).queries(
+            organization_id, payload.brand, limit=payload.query_limit
+        )
 
 
 class FinalReportService:

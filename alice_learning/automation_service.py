@@ -71,8 +71,9 @@ class AliceAutomationService:
                 weekly_query_limit=payload.weekly_query_limit,
                 daily_budget_usd=payload.daily_budget_usd,
                 monthly_budget_usd=payload.monthly_budget_usd,
+                monitoring_frequency=payload.monitoring_frequency,
                 is_enabled=payload.is_enabled,
-                next_run_at=now + timedelta(days=1),
+                next_run_at=self._next_run(now, payload.monitoring_frequency),
             )
         )
         self._query_set(plan, "CONTROL", list(context.queries), context.metadata)
@@ -88,6 +89,8 @@ class AliceAutomationService:
             raise AliceAutomationError("Месячный бюджет не может быть меньше дневного")
         for key, value in values.items():
             setattr(plan, key, value)
+        if "monitoring_frequency" in values:
+            plan.next_run_at = self._next_run(self._aware(self.clock()), plan.monitoring_frequency)
         return self.repository.save(plan)
 
     def list(self, organization_id: int):
@@ -116,7 +119,7 @@ class AliceAutomationService:
         now = self._aware(self.clock())
         results = []
         for plan in self.repository.due(now):
-            kind = "MONTHLY" if now.day == 1 else "WEEKLY" if now.weekday() == 0 else "DAILY"
+            kind = plan.monitoring_frequency
             results.append(
                 self.run(plan.organization_id, plan.id, kind, scheduled_for=plan.next_run_at)
             )
@@ -172,7 +175,7 @@ class AliceAutomationService:
                 "HIGH",
                 run.id,
             )
-            plan.next_run_at = self._next_daily(now)
+            plan.next_run_at = self._next_run(now, plan.monitoring_frequency)
             self.repository.save(plan)
             return run
         run = AliceAutomationRun(
@@ -214,7 +217,7 @@ class AliceAutomationService:
             run.error = str(error)[:4000]
         run.finished_at = self._aware(self.clock())
         plan.last_run_at = run.finished_at
-        plan.next_run_at = self._next_daily(run.finished_at)
+        plan.next_run_at = self._next_run(run.finished_at, plan.monitoring_frequency)
         self.repository.save(run)
         self.repository.save(plan)
         event = "RESEARCH_COMPLETED" if run.status == "COMPLETED" else "RESEARCH_FAILED"
@@ -308,8 +311,9 @@ class AliceAutomationService:
         return bool(models) and all(item.get("provider") in {"ollama", "local"} for item in models)
 
     @staticmethod
-    def _next_daily(value: datetime) -> datetime:
-        return value.replace(hour=3, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    def _next_run(value: datetime, frequency: str) -> datetime:
+        days = 7 if frequency == "WEEKLY" else 1
+        return value.replace(hour=3, minute=0, second=0, microsecond=0) + timedelta(days=days)
 
     @staticmethod
     def _aware(value: datetime) -> datetime:

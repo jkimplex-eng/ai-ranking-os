@@ -216,18 +216,12 @@ test("wizard transparently refreshes an expired access token", async ({ page }) 
   await page.getByLabel("Email").fill("analyst@example.com");
   await page.getByLabel("Пароль").fill("strong-password");
   await page.getByRole("button", { name: "Войти" }).click();
-  await page.getByRole("button", { name: "Проверить бренд" }).click();
+  await page.getByRole("button", { name: /Добавить компанию/ }).first().click();
   await page.getByLabel("Название бренда").fill("Acme");
   await page.getByLabel("Официальный сайт").fill("https://acme.example");
   await page.getByRole("button", { name: /Продолжить/ }).click();
   await page.getByLabel("Регион исследования").selectOption("RU-MOW");
-  await page.getByRole("button", { name: /Продолжить/ }).click();
-  await page.getByRole("button", { name: /Продолжить/ }).click();
-  await page.getByRole("button", { name: /Qwen/ }).click();
-  await page.getByRole("button", { name: /Продолжить/ }).click();
-  await page.getByRole("button", { name: /Продолжить/ }).click();
-  await page.getByRole("button", { name: /Продолжить/ }).click();
-  await page.getByRole("button", { name: "Проверить" }).click();
+  await page.getByRole("button", { name: /Собрать вопросы/ }).click();
 
   await expect(page.getByLabel("Запрос 1")).toHaveValue("Какую увлажняющую сыворотку выбрать?");
   expect(refreshed).toBe(true);
@@ -267,12 +261,11 @@ test("wizard recovers a completed research after the run connection is lost", as
   await page.getByLabel("Email").fill("analyst@example.com");
   await page.getByLabel("Пароль").fill("strong-password");
   await page.getByRole("button", { name: "Войти" }).click();
-  await page.getByRole("button", { name: "Проверить бренд" }).click();
+  await page.getByRole("button", { name: /Добавить компанию/ }).first().click();
   await page.getByLabel("Название бренда").fill("Acme");
   await page.getByLabel("Официальный сайт").fill("https://acme.example");
-  for (let step = 1; step <= 3; step += 1) await page.getByRole("button", { name: /Продолжить/ }).click();
-  await page.getByRole("button", { name: /Qwen/ }).click();
-  for (let step = 1; step <= 4; step += 1) await page.getByRole("button", { name: /Продолжить|Проверить/ }).click();
+  await page.getByRole("button", { name: /Продолжить/ }).click();
+  await page.getByRole("button", { name: /Собрать вопросы/ }).click();
   await page.getByRole("button", { name: "Запустить исследование" }).click();
 
   await expect(page).toHaveURL(/\/reports\/latest$/);

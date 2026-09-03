@@ -129,9 +129,7 @@ class QueryMapBuilder:
         )
         if is_english:
             needs = list(
-                dict.fromkeys(
-                    [*attributes, *self._default_needs(profile, True, fallback_category)]
-                )
+                dict.fromkeys([*attributes, *self._default_needs(profile, True, fallback_category)])
             )[:4]
             terms = [self._product_term(item, True) for item in categories]
             templates = [
@@ -406,16 +404,13 @@ class QueryMapBuilder:
             ]
         first = competitors[0] if competitors else f"ведущие бренды категории «{category}»"
         second = (
-            competitors[1]
-            if len(competitors) > 1
-            else f"популярные бренды категории «{category}»"
+            competitors[1] if len(competitors) > 1 else f"популярные бренды категории «{category}»"
         )
         alternative = (
             f"Какие альтернативы {first} имеют похожие характеристики {price_context}?"
             if competitors
             else (
-                f"Какие бренды категории «{category}» имеют похожие "
-                f"характеристики {price_context}?"
+                f"Какие бренды категории «{category}» имеют похожие характеристики {price_context}?"
             )
         )
         replacement = (
@@ -939,13 +934,141 @@ class GeoOpportunityPlanner:
                     days=30,
                 )
             )
+        baseline_actions = [
+            (
+                "ENTITY",
+                "Официальный сайт: карточка компании и структурированные данные",
+                (
+                    "ИИ должен однозначно связать название компании, официальный домен, "
+                    "услуги и регион."
+                ),
+                (
+                    "Добавить Organization/Brand JSON-LD, реквизиты, контакты, "
+                    "canonical URL и единое описание компании."
+                ),
+                "mention_score",
+                (2, 8),
+                0.45,
+                "LOW",
+                14,
+            ),
+            (
+                "DEMAND_CONTENT",
+                "Официальный сайт: ответы на частотные вопросы Wordstat",
+                f"Проверено {len(deficits)} запросов с дефицитом присутствия бренда.",
+                (
+                    "Для приоритетных запросов создать самостоятельные страницы "
+                    "с прямым ответом, фактами и датой обновления."
+                ),
+                "coverage_score",
+                (3, 12),
+                0.5,
+                "MEDIUM",
+                21,
+            ),
+            (
+                "FAQ",
+                "Официальный сайт: FAQ покупателей",
+                (
+                    "Структурированные ответы помогают извлечь условия выбора, "
+                    "ограничения и отличия продукта."
+                ),
+                (
+                    "Собрать FAQ из выбранных запросов, дать короткий ответ и "
+                    "развернутое доказательство, добавить FAQPage-разметку."
+                ),
+                "coverage_score",
+                (2, 9),
+                0.4,
+                "LOW",
+                14,
+            ),
+            (
+                "EVIDENCE",
+                "Официальный сайт: авторы, методология и первичные доказательства",
+                (
+                    "Рекомендации без проверяемого автора, даты и первичного "
+                    "источника слабее подтверждаются."
+                ),
+                (
+                    "Указать экспертов и редакционную политику; каждое числовое "
+                    "утверждение связать с первичным источником."
+                ),
+                "citation_score",
+                (3, 10),
+                0.5,
+                "MEDIUM",
+                21,
+            ),
+            (
+                "SOURCE_MONITORING",
+                "Мониторинг источников Алисы и конкурентов",
+                (
+                    f"В текущей выборке найдено {len(sources)} повторяющихся источников "
+                    f"и {len(competitors)} конкурентов."
+                ),
+                (
+                    "Ежедневно или еженедельно сохранять названные URL, домены, "
+                    "конкурентов и позиции по неизменному набору вопросов."
+                ),
+                "citation_score",
+                (0, 8),
+                0.55,
+                "LOW",
+                30,
+            ),
+            (
+                "VERIFICATION",
+                "Контрольное повторное исследование",
+                (
+                    "Наблюдаемая связь не доказывает, что отдельная публикация "
+                    "стала причиной изменения рекомендации."
+                ),
+                (
+                    "Зафиксировать действие и URL, затем повторить тот же набор "
+                    "запросов и сравнить с контрольной группой."
+                ),
+                "confidence_score",
+                (0, 10),
+                0.75,
+                "LOW",
+                30,
+            ),
+        ]
+        existing_resources = {item["resource"] for item in actions}
+        for (
+            channel,
+            resource,
+            reason,
+            deliverable,
+            metric,
+            impact,
+            confidence,
+            effort,
+            days,
+        ) in baseline_actions:
+            if resource in existing_resources:
+                continue
+            actions.append(
+                self._action(
+                    channel=channel,
+                    resource=resource,
+                    reason=reason,
+                    deliverable=deliverable,
+                    metric=metric,
+                    impact=impact,
+                    confidence=confidence,
+                    effort=effort,
+                    days=days,
+                )
+            )
         return sorted(
             actions,
             key=lambda item: (
                 -(sum(item["expected_effect_range"]) / 2 * item["confidence"]),
                 item["estimated_days"],
             ),
-        )
+        )[:10]
 
     def _action(
         self,
