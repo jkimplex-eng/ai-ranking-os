@@ -1,0 +1,398 @@
+from __future__ import annotations
+
+import ipaddress
+import json
+import re
+import socket
+import time
+from copy import deepcopy
+from dataclasses import dataclass, field
+from html.parser import HTMLParser
+from threading import RLock
+from typing import Any, Protocol
+from urllib.parse import urljoin, urlparse
+
+import httpx
+
+
+class BrandDiscoveryError(ValueError):
+    pass
+
+
+class PageFetcher(Protocol):
+    def fetch(self, url: str) -> tuple[str, str]: ...
+
+
+class PublicHttpPageFetcher:
+    """Fetch public HTTP pages with SSRF and response-size protection."""
+
+    def fetch(self, url: str) -> tuple[str, str]:
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise BrandDiscoveryError("Укажите публичный URL сайта с http:// или https://")
+        self._assert_public_host(parsed.hostname)
+        with httpx.Client(
+            follow_redirects=True,
+            timeout=httpx.Timeout(15.0),
+            headers={"User-Agent": "AI-Ranking-OS-Brand-Research/1.0"},
+        ) as client:
+            response = client.get(url)
+            response.raise_for_status()
+            final = urlparse(str(response.url))
+            if not final.hostname:
+                raise BrandDiscoveryError("Сайт вернул некорректный адрес")
+            self._assert_public_host(final.hostname)
+            content_type = response.headers.get("content-type", "")
+            if "html" not in content_type.casefold():
+                raise BrandDiscoveryError("Страница сайта не содержит HTML")
+            body = response.content[:2_000_000].decode(response.encoding or "utf-8", "replace")
+            return str(response.url), body
+
+    @staticmethod
+    def _assert_public_host(host: str) -> None:
+        try:
+            addresses = {item[4][0] for item in socket.getaddrinfo(host, None)}
+        except socket.gaierror as error:
+            raise BrandDiscoveryError("Домен сайта не найден") from error
+        if not addresses:
+            raise BrandDiscoveryError("Домен сайта не найден")
+        for address in addresses:
+            ip = ipaddress.ip_address(address)
+            if not ip.is_global:
+                raise BrandDiscoveryError("Разрешено анализировать только публичные сайты")
+
+
+@dataclass
+class ParsedPage:
+    url: str
+    title: str = ""
+    description: str = ""
+    headings: list[str] = field(default_factory=list)
+    text: list[str] = field(default_factory=list)
+    links: list[str] = field(default_factory=list)
+    json_ld: list[dict[str, Any]] = field(default_factory=list)
+
+
+class _BrandHtmlParser(HTMLParser):
+    def __init__(self, url: str) -> None:
+        super().__init__()
+        self.page = ParsedPage(url=url)
+        self._tag = ""
+        self._json_ld = False
+        self._json_chunks: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._tag = tag
+        values = dict(attrs)
+        if tag == "a" and values.get("href"):
+            self.page.links.append(urljoin(self.page.url, values["href"] or ""))
+        if tag == "meta" and values.get("name", "").casefold() == "description":
+            self.page.description = (values.get("content") or "").strip()
+        if tag == "script" and "ld+json" in values.get("type", "").casefold():
+            self._json_ld = True
+            self._json_chunks = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "script" and self._json_ld:
+            try:
+                value = json.loads("".join(self._json_chunks))
+                items = value if isinstance(value, list) else [value]
+                self.page.json_ld.extend(item for item in items if isinstance(item, dict))
+            except json.JSONDecodeError:
+                pass
+            self._json_ld = False
+        self._tag = ""
+
+    def handle_data(self, data: str) -> None:
+        value = " ".join(data.split())
+        if not value:
+            return
+        if self._json_ld:
+            self._json_chunks.append(data)
+        elif self._tag == "title":
+            self.page.title += value
+        elif self._tag in {"h1", "h2", "h3"}:
+            self.page.headings.append(value)
+        elif self._tag not in {"script", "style", "noscript"}:
+            self.page.text.append(value)
+
+
+class BrandIntelligenceEngine:
+    VERSION = "1.0"
+    PRODUCT_HINTS = (
+        "product",
+        "catalog",
+        "shop",
+        "collection",
+        "course",
+        "courses",
+        "profession",
+        "education",
+        "kurs",
+        "obuchen",
+        "uslug",
+        "serum",
+        "cream",
+        "сывор",
+        "крем",
+        "каталог",
+    )
+
+    def __init__(
+        self,
+        fetcher: PageFetcher | None = None,
+        *,
+        max_pages: int = 12,
+        cache_ttl_seconds: float = 600,
+    ) -> None:
+        self.fetcher = fetcher or PublicHttpPageFetcher()
+        self.max_pages = max_pages
+        self.cache_ttl_seconds = cache_ttl_seconds
+        self._cache: dict[tuple[str, str], tuple[float, dict[str, Any]]] = {}
+        self._cache_lock = RLock()
+
+    def analyze(self, *, brand: str, website_url: str) -> dict[str, Any]:
+        root_url = self._normalize_url(website_url)
+        cache_key = (brand.strip().casefold(), root_url.casefold())
+        with self._cache_lock:
+            cached = self._cache.get(cache_key)
+            if cached and time.monotonic() - cached[0] < self.cache_ttl_seconds:
+                return deepcopy(cached[1])
+        root_host = urlparse(root_url).hostname
+        queue = [root_url]
+        visited: set[str] = set()
+        pages: list[ParsedPage] = []
+        while queue and len(pages) < self.max_pages:
+            requested = queue.pop(0)
+            if requested in visited:
+                continue
+            visited.add(requested)
+            try:
+                final_url, html = self.fetcher.fetch(requested)
+            except (BrandDiscoveryError, httpx.HTTPError) as error:
+                if not pages:
+                    raise BrandDiscoveryError(
+                        "Не удалось прочитать официальный сайт бренда"
+                    ) from error
+                continue
+            parser = _BrandHtmlParser(final_url)
+            parser.feed(html)
+            pages.append(parser.page)
+            candidates = [
+                link.split("#", 1)[0]
+                for link in parser.page.links
+                if urlparse(link).hostname == root_host
+                and (
+                    any(hint in link.casefold() for hint in self.PRODUCT_HINTS)
+                    or ("/catalog/" in link.casefold() and link.casefold().endswith(".html"))
+                )
+            ]
+            product_pages = [link for link in candidates if link.casefold().endswith(".html")]
+            category_pages = [link for link in candidates if link not in product_pages]
+            additions = [
+                link
+                for link in [*product_pages, *category_pages]
+                if link not in visited and link not in queue
+            ]
+            queue = [*product_pages, *queue, *category_pages]
+            queue = list(
+                dict.fromkeys(link for link in queue if link in additions or link not in visited)
+            )
+
+        products = self._products(pages)
+        categories = self._categories(pages, products)
+        attributes = self._attributes(pages, products)
+        result = {
+            "version": self.VERSION,
+            "brand": brand.strip(),
+            "website_url": root_url,
+            "pages_analyzed": len(pages),
+            "evidence_urls": [page.url for page in pages],
+            "description": next((page.description for page in pages if page.description), ""),
+            "categories": categories[:12],
+            "products": products[:30],
+            "attributes": attributes[:20],
+            "confidence": round(min(0.95, 0.35 + len(pages) * 0.04 + len(products) * 0.03), 2),
+            "limitations": [
+                "Профиль построен только по публичным страницам официального сайта.",
+                "Цена и характеристики отсутствуют, если сайт не публикует их в HTML или JSON-LD.",
+            ],
+        }
+        with self._cache_lock:
+            self._cache[cache_key] = (time.monotonic(), deepcopy(result))
+        return result
+
+    @staticmethod
+    def _normalize_url(value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise BrandDiscoveryError("Официальный сайт обязателен для исследования")
+        if "://" not in value:
+            value = f"https://{value}"
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise BrandDiscoveryError("Укажите корректный URL официального сайта")
+        return value
+
+    @classmethod
+    def _products(cls, pages: list[ParsedPage]) -> list[dict[str, Any]]:
+        found: dict[str, dict[str, Any]] = {}
+        for page in pages:
+            for node in cls._json_nodes(page.json_ld):
+                types = node.get("@type", [])
+                types = [types] if isinstance(types, str) else types
+                if "Product" not in types or not node.get("name"):
+                    continue
+                offers = node.get("offers") if isinstance(node.get("offers"), dict) else {}
+                name = str(node["name"]).strip()
+                found[name.casefold()] = {
+                    "name": name,
+                    "category": str(node.get("category") or "").strip(),
+                    "description": str(node.get("description") or "").strip()[:500],
+                    "price": offers.get("price") or node.get("price"),
+                    "currency": offers.get("priceCurrency") or node.get("priceCurrency"),
+                    "url": str(node.get("url") or page.url),
+                    "evidence_url": page.url,
+                }
+            if page.url.casefold().endswith(".html") and page.headings:
+                heading = page.headings[0]
+                visible = " ".join(page.text)
+                price_match = re.search(r"(\d[\d\s]{2,8})\s*(?:₽|руб)", visible, re.I)
+                price = price_match.group(1).replace(" ", "") if price_match else None
+                found.setdefault(
+                    heading.casefold(),
+                    {
+                        "name": heading,
+                        "category": "",
+                        "description": page.description[:500],
+                        "price": price,
+                        "currency": "RUB" if price else None,
+                        "url": page.url,
+                        "evidence_url": page.url,
+                    },
+                )
+        return list(found.values())
+
+    @staticmethod
+    def _json_nodes(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        nodes: list[dict[str, Any]] = []
+        for value in values:
+            graph = value.get("@graph")
+            nodes.extend(item for item in graph if isinstance(item, dict)) if isinstance(
+                graph, list
+            ) else nodes.append(value)
+        return nodes
+
+    @staticmethod
+    def _categories(pages: list[ParsedPage], products: list[dict[str, Any]]) -> list[str]:
+        values = {str(item["category"]).strip() for item in products if item.get("category")}
+        product_text = " ".join(str(item.get("name") or "") for item in products).casefold()
+        site_text = " ".join(
+            [
+                *[page.title for page in pages],
+                *[page.description for page in pages],
+                *[heading for page in pages for heading in page.headings],
+                *[text for page in pages for text in page.text[:300]],
+            ]
+        ).casefold()
+        identity_text = " ".join(
+            [
+                *[page.title for page in pages[:2]],
+                *[page.description for page in pages[:2]],
+                *[heading for page in pages[:2] for heading in page.headings[:12]],
+            ]
+        ).casefold()
+        taxonomy = {
+            "Сыворотки": ("сыворот", "serum"),
+            "Кремы": ("крем", "cream"),
+            "Тонеры": ("тонер", "toner"),
+            "Маски": ("маск", "mask"),
+            "Средства очищения": ("очищ", "cleanser", "пудр", "пенк"),
+            "SPF-защита": ("spf", "sunscreen"),
+        }
+        values.update(
+            category
+            for category, markers in taxonomy.items()
+            if any(marker in product_text for marker in markers)
+        )
+        vertical_taxonomy = {
+            "Онлайн-образование": (
+                "онлайн-образован",
+                "онлайн обучение",
+                "онлайн-курс",
+                "онлайн-курсы",
+                "обучение",
+                "курсы",
+                "профессия с нуля",
+                "образовательная платформа",
+                "курсы программирования",
+            ),
+            "Финансовые услуги": ("банк", "кредит", "вклад", "страхован", "инвестиц"),
+            "Недвижимость": ("недвижимост", "квартир", "жилой комплекс", "застройщик"),
+            "Туризм и путешествия": ("туризм", "путешеств", "отел", "авиабилет"),
+            "Программное обеспечение": ("программное обеспечение", "saas", "crm", "erp"),
+            "Маркетинг и реклама": ("маркетинг", "реклам", "продвижение бренда"),
+        }
+        vertical_scores = {
+            category: sum(
+                identity_text.count(marker) * 10 + site_text.count(marker)
+                for marker in markers
+            )
+            for category, markers in vertical_taxonomy.items()
+        }
+        primary_vertical, primary_score = max(
+            vertical_scores.items(), key=lambda item: item[1], default=("", 0)
+        )
+        if primary_score > 0:
+            values.add(primary_vertical)
+        for page in pages:
+            if page.url.casefold().endswith(".html"):
+                continue
+            for heading in page.headings:
+                lowered = heading.casefold()
+                if any(
+                    token in lowered
+                    for token in ("сывор", "крем", "serum", "cream", "маск", "cleanser", "уход")
+                ):
+                    values.add(heading)
+        return sorted(values, key=str.casefold)
+
+    @staticmethod
+    def _attributes(pages: list[ParsedPage], products: list[dict[str, Any]]) -> list[str]:
+        text = " ".join(
+            [item.get("description", "") for item in products]
+            + [page.description for page in pages]
+            + [page.title for page in pages]
+            + [heading for page in pages for heading in page.headings]
+            + [value for page in pages for value in page.text[:300]]
+        ).casefold()
+        vocabulary = {
+            "увлажняющий": ("увлажняющ",),
+            "омолаживающий": ("омолаживающ",),
+            "чувствительная кожа": ("чувствительн",),
+            "проблемная кожа": ("проблемн",),
+            "гиалуроновая кислота": ("гиалуронов",),
+            "витамин c": ("витамин c",),
+            "ниацинамид": ("ниацинамид",),
+            "retinol": ("retinol",),
+            "hydrating": ("hydrating",),
+            "sensitive skin": ("sensitive skin",),
+            "anti-aging": ("anti-aging",),
+            "acne": ("acne",),
+            "barrier": ("barrier",),
+            "обучение с нуля": ("с нуля", "без опыта"),
+            "освоение новой профессии": ("новая професс", "освоить профес"),
+            "помощь с трудоустройством": ("трудоустрой", "карьерный центр"),
+            "гибкий график обучения": ("гибкий график", "в своём темпе", "в своем темпе"),
+            "практические проекты": ("практические проект", "портфолио"),
+        }
+        return [
+            canonical
+            for canonical, forms in vocabulary.items()
+            if any(form in text for form in forms)
+        ]
+
+
+# Reuse a server-verified profile across adjacent wizard calls without trusting
+# data sent back by the browser.
+brand_intelligence_engine = BrandIntelligenceEngine()

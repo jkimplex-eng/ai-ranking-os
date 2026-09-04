@@ -6,9 +6,11 @@ from contextlib import asynccontextmanager
 from time import perf_counter, time
 
 from fastapi import FastAPI, Request
+from sqlalchemy import inspect
 
 from ai_visibility.router import router as ai_visibility_router
 from alert.router import router as alert_router
+from alice_learning.router import router as alice_learning_router
 from analytics.router import router as analytics_router
 from apikeys.router import router as api_keys_router
 from audit.router import router as audit_router
@@ -27,13 +29,18 @@ from benchmark.router import router as benchmark_router
 from cache.router import router as cache_router
 from change_detection.router import router as change_detection_router
 from closed_beta.router import router as closed_beta_router
+from competitor_intelligence.router import router as competitor_intelligence_router
 from cost_analytics.router import router as cost_analytics_router
 from decision_center.router import router as decision_center_router
+from eis.router import router as eis_router
 from entity_extraction.router import router as entity_extraction_router
 from entity_linking.router import router as entity_linking_router
 from execution_engine.router import router as execution_engine_router
 from export_engine.router import router as export_router
 from feedback_center.router import router as feedback_center_router
+from frozen_prompts.router import router as frozen_prompts_router
+from geo_platforms.router import router as geo_platforms_router
+from geo_site_audit.router import router as geo_site_audit_router
 from graph.router import router as graph_router
 from graph_search.router import router as graph_search_router
 from hardening.router import router as hardening_router
@@ -51,9 +58,14 @@ from product_analytics.repository import ProductAnalyticsRepository
 from product_analytics.router import router as product_analytics_router
 from product_analytics.service import ProductAnalyticsService
 from project_monitoring.router import router as project_monitoring_router
+from provider_connections.crypto import SecretCipher
+from provider_connections.repository import ProviderConnectionRepository
+from provider_connections.router import router as provider_connections_router
+from provider_connections.service import hydrate_provider_credentials
 from provider_discovery.router import router as provider_discovery_router
 from provider_recommendation.router import router as provider_recommendation_router
 from provider_registry.router import router as provider_registry_router
+from publication_learning.router import router as publication_learning_router
 from query_executor.router import router as query_executor_router
 from query_intent.router import router as query_intent_router
 from rate_limit.router import router as rate_limit_router
@@ -65,10 +77,14 @@ from relationship_discovery.router import router as relationship_discovery_route
 from report_center.router import router as report_center_router
 from report_sharing.router import router as report_sharing_router
 from research.router import router as research_router
+from research_lab.router import router as research_lab_router
 from scheduler.router import router as scheduler_router
 from segmentation.router import router as segmentation_router
 from trend.router import router as trend_router
 from workspace.router import router as workspace_router
+from yandex_intelligence.router import router as yandex_intelligence_router
+from yandex_webmaster.router import router as yandex_webmaster_router
+from yandex_wordstat.router import router as yandex_wordstat_router
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -81,6 +97,17 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     errors = validate_startup(settings)
     if errors:
         raise RuntimeError("Startup validation failed: " + "; ".join(errors))
+    with SessionLocal() as db:
+        if inspect(db.get_bind()).has_table("provider_connections"):
+            hydrate_provider_credentials(
+                ProviderConnectionRepository(db),
+                SecretCipher(settings.provider_secret_key or settings.auth_jwt_secret),
+            )
+        else:
+            logger.warning(
+                "provider_credentials_hydration_skipped",
+                extra={"reason": "table_missing"},
+            )
     if os.getenv("PROVIDER_CATALOG_URL"):
         from provider_discovery.service import ProviderDiscoveryService
 
@@ -110,16 +137,24 @@ app.include_router(organization_workspace_router)
 app.include_router(cache_router)
 app.include_router(change_detection_router)
 app.include_router(closed_beta_router)
+app.include_router(competitor_intelligence_router)
 app.include_router(rate_limit_router)
 app.include_router(hardening_router)
 app.include_router(execution_engine_router)
 app.include_router(feedback_center_router)
 app.include_router(ai_visibility_router)
+app.include_router(alice_learning_router)
 app.include_router(entity_extraction_router)
 app.include_router(query_intent_router)
 app.include_router(product_router)
 app.include_router(product_analytics_router)
 app.include_router(project_monitoring_router)
+app.include_router(research_lab_router)
+app.include_router(publication_learning_router)
+app.include_router(geo_platforms_router)
+app.include_router(geo_site_audit_router)
+app.include_router(frozen_prompts_router)
+app.include_router(eis_router)
 app.include_router(research_router)
 app.include_router(recommendation_router)
 app.include_router(recommendation_simulation_router)
@@ -127,6 +162,10 @@ app.include_router(recommendation_templates_router)
 app.include_router(query_executor_router)
 app.include_router(llm_router)
 app.include_router(providers_router)
+app.include_router(provider_connections_router)
+app.include_router(yandex_webmaster_router)
+app.include_router(yandex_wordstat_router)
+app.include_router(yandex_intelligence_router)
 app.include_router(model_benchmark_router)
 app.include_router(model_evaluation_router)
 app.include_router(notification_center_router)
@@ -201,9 +240,7 @@ async def observe_http(request: Request, call_next):
     )
     if not request.url.path.startswith("/product-analytics"):
         try:
-            principal_user_id = getattr(
-                principal, "user_id", getattr(principal, "id", None)
-            )
+            principal_user_id = getattr(principal, "user_id", getattr(principal, "id", None))
             with SessionLocal() as analytics_db:
                 ProductAnalyticsService(ProductAnalyticsRepository(analytics_db)).record(
                     request_event(

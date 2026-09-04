@@ -19,7 +19,9 @@ def call(path: str, *, method: str = "GET", payload=None, token: str | None = No
         headers["Authorization"] = f"Bearer {token}"
     try:
         request = Request(f"{BASE_URL}{path}", data=data, headers=headers, method=method)
-        with urlopen(request, timeout=180) as response:
+        # Local providers execute the full query matrix synchronously in v1.1.
+        # Keep the release smoke above the production proxy budget.
+        with urlopen(request, timeout=900) as response:
             return response.status, json.load(response)
     except HTTPError as error:
         raise RuntimeError(f"{path}: HTTP {error.code}: {error.read().decode()}") from error
@@ -39,13 +41,30 @@ def main() -> None:
     )
     assert status == 200
     token = tokens["access_token"]
+    provider = os.environ.get("SMOKE_PROVIDER", "openai")
+    model = os.environ.get("SMOKE_MODEL", "gpt-4o-mini")
+    website_url = os.environ.get("SMOKE_WEBSITE_URL", "https://skinjestique.ru")
     payload = {
         "brand": "Skinjestique",
-        "models": [{"provider": "openai", "model": "gpt-4o-mini"}],
+        "website_url": website_url,
+        "models": [{"provider": provider, "model": model}],
         "languages": ["en"],
         "regions": ["GLOBAL"],
         "prompt_code": "ai-visibility",
         "research_template_code": "ai-visibility",
+        "brand_profile": {
+            "version": "1.0",
+            "brand": "Skinjestique",
+            "website_url": website_url,
+            "pages_analyzed": 1,
+            "evidence_urls": [website_url],
+            "description": "Skinjestique beauty brand",
+            "categories": ["cosmetics"],
+            "products": [{"name": "Hydrating Serum"}],
+            "attributes": ["hydrating"],
+            "confidence": 0.8,
+            "limitations": [],
+        },
     }
     status, review = call(
         "/api/research/wizard/review", method="POST", payload=payload, token=token

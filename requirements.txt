@@ -14,3 +14,8 @@ pyarrow>=18,<30
 PyJWT>=2.10,<3.0
 argon2-cffi>=23.1,<26.0
 email-validator>=2.2,<3.0
+cryptography>=45,<47
+telethon>=1.40,<2.0
+pysocks>=1.7,<2.0
+python-socks[asyncio]>=2.7,<3.0
+tgnet @ https://github.com/nsdkinx/tgnet/archive/4f3ebe77c65fcb77afa5404926b13e38f5c4f43e.zip

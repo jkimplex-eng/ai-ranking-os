@@ -131,7 +131,7 @@ def test_history_is_sorted_paginated_and_aggregated(
         newest_id,
         middle_id,
     ]
-    assert all(item["score_version"] == "1.0" for item in history["items"])
+    assert all(item["score_version"] == "1.2" for item in history["items"])
     assert all(item["model_count"] == 1 for item in history["items"])
     assert all(
         item["processed_response_count"] == 1 for item in history["items"]

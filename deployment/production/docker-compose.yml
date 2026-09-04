@@ -101,6 +101,9 @@ services:
       DATABASE_POOL_TIMEOUT_SECONDS: ${DATABASE_POOL_TIMEOUT_SECONDS:-30}
       DATABASE_POOL_RECYCLE_SECONDS: ${DATABASE_POOL_RECYCLE_SECONDS:-1800}
       GRACEFUL_SHUTDOWN_SECONDS: ${GRACEFUL_SHUTDOWN_SECONDS:-30}
+      YANDEX_WEBMASTER_CLIENT_ID: ${YANDEX_WEBMASTER_CLIENT_ID:-}
+      YANDEX_WEBMASTER_CLIENT_SECRET: ${YANDEX_WEBMASTER_CLIENT_SECRET:-}
+      YANDEX_WEBMASTER_REDIRECT_URI: ${YANDEX_WEBMASTER_REDIRECT_URI:-https://app.разуммаркета.рф/api/integrations/yandex-webmaster/callback}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
