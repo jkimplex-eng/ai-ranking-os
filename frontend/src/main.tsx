@@ -1453,11 +1453,17 @@ function Dashboard({
   const [detail, setDetail] = useState<string>();
   const downloadPlan = () => {
     if (!report) return;
-    const blob = new Blob([JSON.stringify(report.report, null, 2)], { type: "application/json;charset=utf-8" });
+    const reportData = report.report as ReportShape;
+    const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
+    const actions = (reportData.geo_opportunities ?? []).slice(0, 10).map((item, index) => `<article><h2>${index + 1}. ${escapeHtml(item.resource)}</h2><p><b>Почему:</b> ${escapeHtml(item.reason)}</p><p><b>Что сделать:</b> ${escapeHtml(item.deliverable)}</p><p><b>Как проверить:</b> ${escapeHtml(item.verification)}</p><small>Уверенность ${Math.round(item.confidence * 100)}% · срок ${item.estimated_days} дней · это прогноз, а не гарантия</small></article>`).join("");
+    const sources = (reportData.sources ?? []).filter((item) => item.url).map((item) => `<li><a href="${escapeHtml(item.url)}">${escapeHtml(item.title || item.source || item.url)}</a></li>`).join("");
+    const scoreValue = valueOf(reportData.score ?? {}, "visibility_score");
+    const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>GEO-план — ${escapeHtml(report.research.title)}</title><style>body{font:16px Arial,sans-serif;color:#162033;max-width:920px;margin:40px auto;padding:0 24px;line-height:1.5}header{border-bottom:3px solid #347cf7;margin-bottom:28px}h1{font-size:34px}article{padding:18px 0;border-bottom:1px solid #d8e0ea}small{color:#5b6575}a{color:#145ac5}@media print{body{margin:0}}</style></head><body><header><p>AI Ranking OS · исследование #${report.research.id}</p><h1>${escapeHtml(report.research.title)}</h1><p><b>Единая GEO-оценка: ${scoreValue.toFixed(1)} из 100</b></p></header><h1>План действий</h1>${actions || "<p>Действия ещё не рассчитаны.</p>"}<h1>Источники со ссылками</h1><ul>${sources || "<li>В ответах текущего исследования ссылки не обнаружены.</li>"}</ul><p><small>Отчёт фиксирует только исследованную выборку запросов, региона, времени и модели. Причинный эффект подтверждается повторным исследованием.</small></p></body></html>`;
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const href = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = href;
-    link.download = `geo-plan-${report.research.id}.json`;
+    link.download = `geo-plan-${report.research.id}.html`;
     link.click();
     URL.revokeObjectURL(href);
   };
@@ -1541,7 +1547,7 @@ function Dashboard({
       </div>
       <section className="decision-strip" aria-label="Что важно сейчас">
         <button onClick={onStart}><span>1</span><strong>Добавить компанию</strong><small>Создать новое исследование →</small></button>
-        <button onClick={() => onNavigate("recommendations")}><span>2</span><strong>Запустить анализ</strong><small>Оценка и три приоритетных действия →</small></button>
+        <button onClick={onStart}><span>2</span><strong>Запустить анализ</strong><small>Оценка и три приоритетных действия →</small></button>
         <button onClick={downloadPlan}><span>3</span><strong>Скачать план действий</strong><small>Данные, причины, источники и ссылки →</small></button>
       </section>
       <section className="decision-strip" aria-label="Диагноз исследования">
