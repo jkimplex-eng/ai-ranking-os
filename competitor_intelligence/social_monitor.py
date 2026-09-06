@@ -158,6 +158,9 @@ class WebsiteSocialDiscovery:
 
 
 class HttpSocialCollector:
+    def __init__(self, db: Session | None = None) -> None:
+        self.db = db
+
     def collect(self, source: CompetitorSocialSource, token: str | None) -> list[CollectedPost]:
         platform = SocialPlatform(source.platform)
         if platform == SocialPlatform.WEB:
@@ -165,6 +168,11 @@ class HttpSocialCollector:
         if platform == SocialPlatform.YOUTUBE:
             return self._youtube(source.external_id)
         if platform == SocialPlatform.TELEGRAM:
+            if self.db is not None:
+                # Import lazily: the Telegram adapter shares our error/data types.
+                from competitor_intelligence.telegram_connector import TelegramConnectionService
+
+                return TelegramConnectionService(self.db).channel_posts(source)
             return self._telegram(source.external_id)
         if not token:
             raise SocialMonitorError(f"Для {platform.value} нужен официальный API-токен")
@@ -218,7 +226,7 @@ class HttpSocialCollector:
     def _youtube(self, channel_id: str) -> list[CollectedPost]:
         if not channel_id.startswith("UC"):
             profile = self._get(f"https://www.youtube.com/@{channel_id.lstrip('@')}").text
-            match = re.search(r'"channelId":"(UC[\w-]+)"', profile)
+            match = re.search(r'"(?:channelId|externalId)"\s*:\s*"(UC[\w-]{22})"', profile)
             if not match:
                 raise SocialMonitorError("YouTube Channel ID не найден")
             channel_id = match.group(1)
@@ -335,7 +343,7 @@ class CompetitorSocialMonitorService:
         self.db = db
         self.repository = CompetitorIntelligenceRepository(db)
         self.automatic_web_search = collector is None
-        self.collector = collector or HttpSocialCollector()
+        self.collector = collector or HttpSocialCollector(db)
         self.discovery = discovery or WebsiteSocialDiscovery()
         settings = get_settings()
         secret = settings.provider_secret_key or settings.auth_jwt_secret

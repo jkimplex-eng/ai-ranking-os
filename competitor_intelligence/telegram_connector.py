@@ -27,7 +27,7 @@ from competitor_intelligence.schemas import (
     TelegramProxyInput,
     TelegramSearchRequest,
 )
-from competitor_intelligence.social_monitor import SocialMonitorError
+from competitor_intelligence.social_monitor import CollectedPost, SocialMonitorError
 from provider_connections.crypto import SecretCipher
 from workspace.models import Project, ProjectCompetitor, UserWorkspace
 from workspace.repository import CompetitorRepository, ProjectRepository, WorkspaceRepository
@@ -52,6 +52,10 @@ class TelegramMessage:
 
 
 class TelegramGatewayPort(Protocol):
+    def channel_messages(
+        self, api_id: int, api_hash: str, session: str, username: str, proxy: dict | None
+    ) -> list[TelegramMessage]: ...
+
     def send_code(
         self, api_id: int, api_hash: str, phone: str, proxy: dict | None
     ) -> TelegramChallenge: ...
@@ -88,6 +92,32 @@ class TelegramGatewayPort(Protocol):
 
 
 class TelethonGateway:
+    def channel_messages(
+        self, api_id: int, api_hash: str, session: str, username: str, proxy: dict | None
+    ) -> list[TelegramMessage]:
+        async def run() -> list[TelegramMessage]:
+            from types import SimpleNamespace
+
+            client = self._client(session, api_id, api_hash, proxy)
+            try:
+                async with asyncio.timeout(45):
+                    await client.connect()
+                    if not await client.is_user_authorized():
+                        raise SocialMonitorError(
+                            "Telegram-сессия истекла; подключите аккаунт повторно"
+                        )
+                    channel = await client.get_entity(username.lstrip("@"))
+                    if not getattr(channel, "broadcast", False) or not getattr(
+                        channel, "username", None
+                    ):
+                        raise SocialMonitorError("Источник должен быть публичным Telegram-каналом")
+                    messages = await client.get_messages(channel, limit=50)
+                    return self._messages(SimpleNamespace(chats=[channel], messages=messages))
+            finally:
+                await client.disconnect()
+
+        return self._run(run())
+
     @staticmethod
     def _mtproxy_secret(secret: str) -> bytes:
         """Decode Telegram's hexadecimal or URL-safe base64 proxy secret."""
@@ -406,6 +436,41 @@ class TelethonGateway:
 
 
 class TelegramConnectionService:
+    def channel_posts(self, source: CompetitorSocialSource) -> list[CollectedPost]:
+        owner_id = self.db.scalar(
+            select(UserWorkspace.user_id)
+            .join(Project, Project.workspace_id == UserWorkspace.id)
+            .join(ProjectCompetitor, ProjectCompetitor.project_id == Project.id)
+            .where(ProjectCompetitor.id == source.competitor_id)
+        )
+        if owner_id is None:
+            raise SocialMonitorError("Владелец источника не найден")
+        item = self._required(owner_id)
+        if item.status != "CONNECTED" or not item.encrypted_session:
+            raise SocialMonitorError("Подключите Telegram в кабинете владельца источника")
+        try:
+            messages = self.gateway.channel_messages(
+                item.api_id,
+                self.cipher.decrypt(item.encrypted_api_hash),
+                self.cipher.decrypt(item.encrypted_session),
+                source.external_id,
+                self._proxy(item),
+            )
+        except Exception as error:
+            raise SocialMonitorError(self._safe_error(error)) from error
+        return [
+            CollectedPost(
+                external_id=f"{message.channel_username}/{message.message_id}",
+                url=f"https://t.me/{message.channel_username}/{message.message_id}",
+                title=message.content[:120] or None,
+                content=message.content,
+                published_at=message.published_at,
+                views=message.views,
+                shares=message.forwards,
+            )
+            for message in messages
+        ]
+
     def __init__(self, db: Session, gateway: TelegramGatewayPort | None = None) -> None:
         self.db = db
         self.gateway = gateway or TelethonGateway()
