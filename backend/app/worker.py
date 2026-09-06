@@ -15,6 +15,8 @@ from competitor_intelligence.telegram_connector import TelegramConnectionService
 from provider_connections.crypto import SecretCipher
 from provider_connections.repository import ProviderConnectionRepository
 from provider_connections.service import hydrate_provider_credentials
+from recommendation.simulation import models as simulation_models  # noqa: F401
+from recommendation.templates import models as template_models  # noqa: F401
 from research.queue import process_next
 from scheduler.research_adapter import build_scheduler_engine
 
