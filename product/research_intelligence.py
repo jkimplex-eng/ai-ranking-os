@@ -650,10 +650,16 @@ class ResearchPatternAnalyzer:
         competitor_counts: Counter[str] = Counter()
         source_counts: Counter[str] = Counter()
         for response in responses:
+            # Provider failures are missing measurements, not negative brand evidence.
+            if response.get("error_type") or not str(response.get("content") or "").strip():
+                continue
             response_entities = entities_by_response[response["id"]]
-            mentioned = target in response["content"].casefold() or any(
-                target in {item["name"].casefold(), item["canonical_name"].casefold()}
-                for item in response_entities
+            mentioned = bool(target) and (
+                target in response["content"].casefold()
+                or any(
+                    target in {item["name"].casefold(), item["canonical_name"].casefold()}
+                    for item in response_entities
+                )
             )
             competitors = sorted(
                 {
@@ -665,14 +671,20 @@ class ResearchPatternAnalyzer:
             )
             competitor_counts.update(competitors)
             sources = []
+            source_urls = []
             for citation in citations_by_response[response["id"]]:
-                source = (
-                    urlparse(citation.get("url") or "").hostname
-                    or citation.get("source")
-                    or citation.get("title")
-                )
-                if source:
-                    sources.append(source.casefold())
+                raw_url = citation.get("url") or ""
+                try:
+                    parsed = urlparse(raw_url)
+                    if (
+                        parsed.scheme in {"http", "https"}
+                        and parsed.hostname
+                        and not parsed.username
+                    ):
+                        sources.append(parsed.hostname.casefold())
+                        source_urls.append(raw_url)
+                except ValueError:
+                    continue
             source_counts.update(set(sources))
             scenario = catalog_by_text.get(response["prompt"], {})
             matrix.append(
@@ -681,11 +693,13 @@ class ResearchPatternAnalyzer:
                     "query_id": scenario.get("id"),
                     "cluster": scenario.get("cluster", "custom"),
                     "query": response["prompt"],
+                    "answer": response["content"],
                     "provider": response["provider"],
                     "model": response["model"],
                     "mentioned": mentioned,
                     "competitors": competitors,
                     "sources": sorted(set(sources)),
+                    "source_urls": sorted(set(source_urls)),
                 }
             )
         deficits = [item for item in matrix if not item["mentioned"]]
@@ -694,7 +708,8 @@ class ResearchPatternAnalyzer:
             "sample": {
                 "queries": len(query_catalog),
                 "responses": len(responses),
-                "successful_responses": sum(not item.get("error_type") for item in responses),
+                "successful_responses": len(matrix),
+                "excluded_responses": len(responses) - len(matrix),
                 "providers": sorted({item["provider"] for item in responses}),
                 "models": sorted({f"{item['provider']}/{item['model']}" for item in responses}),
             },
@@ -829,246 +844,141 @@ class CompetitiveInfluenceEngine:
 
 
 class GeoOpportunityPlanner:
-    VERSION = "1.0"
+    """Build auditable tasks; observations never imply a guaranteed score increase."""
 
-    def build(self, patterns: dict[str, Any]) -> list[dict[str, Any]]:
-        deficits = patterns["deficit_queries"]
-        sources = patterns["source_patterns"]
-        competitors = patterns["competitors"]
-        total = max(patterns["sample"]["responses"], 1)
-        actions = []
-        if sources:
-            for source in sources[:5]:
-                confidence = min(0.95, 0.45 + source["response_count"] / total)
-                actions.append(
-                    self._action(
-                        channel="EARNED_MEDIA",
-                        resource=source["resource"],
-                        reason=(
-                            f"Ресурс обнаружен в {source['response_count']} ответах "
-                            "исследуемой выборки."
-                        ),
-                        deliverable=(
-                            "Подготовить независимый экспертный материал с проверяемыми "
-                            "фактами о бренде."
-                        ),
-                        metric="citation_score",
-                        impact=(6, 18),
-                        confidence=confidence,
-                        effort="HIGH",
-                        days=30,
-                    )
-                )
-        else:
+    VERSION = "2.0"
+
+    def build(self, patterns: dict[str, Any], target_website: str = "") -> list[dict[str, Any]]:
+        matrix = patterns.get("query_matrix", [])
+        deficits = patterns.get("deficit_queries", [])
+        actions: list[dict[str, Any]] = []
+        try:
+            target_host = (urlparse(target_website).hostname or "").removeprefix("www.")
+        except ValueError:
+            target_host = ""
+        for source in patterns.get("source_patterns", [])[:5]:
+            resource = source["resource"]
+            owned = bool(target_host) and resource.removeprefix("www.") == target_host
+            evidence = [row for row in matrix if resource in row.get("sources", [])]
             actions.append(
                 self._action(
-                    channel="OWNED_MEDIA",
-                    resource="Официальный сайт: раздел исследований, FAQ и источников",
-                    reason="Ни одна модель не привела проверяемого внешнего источника о бренде.",
-                    deliverable=(
-                        "Опубликовать факты, методологию, авторов, даты, ссылки на "
-                        "первичные данные и FAQ."
-                    ),
-                    metric="citation_score",
-                    impact=(3, 12),
-                    confidence=0.55,
-                    effort="MEDIUM",
-                    days=21,
-                )
-            )
-            actions.append(
-                self._action(
-                    channel="INDUSTRY_MEDIA",
-                    resource="Проверяемые отраслевые СМИ и экспертные площадки категории",
+                    channel="OWNED_MEDIA" if owned else "EARNED_MEDIA",
+                    resource=resource,
                     reason=(
-                        "В выборке отсутствуют независимые подтверждения; конкретные "
-                        "домены пока не выявлены."
+                        f"Ресурс указан в {source['response_count']} ответах выборки. Это "
+                        f"наблюдение, не доказательство влияния на рекомендацию."
                     ),
                     deliverable=(
-                        "Получить редакционную публикацию, обзор или экспертный "
-                        "комментарий с раскрытием источников."
+                        "Изучить приведённые статьи и правила редакции. Предложить материал "
+                        "по указанному ниже вопросу: прямой ответ, проверяемые факты, метод "
+                        "сравнения, ограничения и первичные ссылки. Не заказывать фиктивные "
+                        "отзывы."
                     ),
                     metric="citation_score",
-                    impact=(5, 15),
-                    confidence=0.4,
-                    effort="HIGH",
-                    days=45,
+                    evidence=evidence,
+                    owner="PR-менеджер и профильный эксперт",
+                    prerequisites=(
+                        "Проверить тематику, актуальность страницы, контакты и условия "
+                        "редакции. Возможность публикации и авторитетность площадки пока не "
+                        "подтверждены."
+                    ),
                 )
             )
+            if owned:
+                actions[-1]["deliverable"] = (
+                    "Проверить уже цитируемые страницы своего сайта по вопросам ниже. "
+                    "Уточнить факты и условия, устранить устаревшие сведения; сохранить полезный "
+                    "ответ и адрес страницы. Это собственный источник, не независимая публикация."
+                )
+                actions[-1]["prerequisites"] = (
+                    "Доступ к редактированию указанных страниц своего сайта."
+                )
+                actions[-1]["owner"] = "Редактор и эксперт компании"
         if deficits:
-            clusters = sorted({item["cluster"] for item in deficits})
             actions.append(
                 self._action(
                     channel="CONTENT_GAP",
-                    resource="Контент-хаб бренда",
+                    resource="Официальный сайт: ответы на вопросы без упоминания бренда",
                     reason=(
-                        f"Бренд отсутствует в {len(deficits)} ответах; дефицитные "
-                        f"кластеры: {', '.join(clusters)}."
+                        f"В {len(deficits)} успешно полученных ответах бренд не упомянут. "
+                        f"Это не означает, что нужных страниц нет на сайте."
                     ),
                     deliverable=(
-                        "Создать отдельные доказательные материалы под каждый "
-                        "дефицитный кластер запросов."
+                        "Проверить существующие страницы по вопросам ниже. Если прямого "
+                        "ответа нет — подготовить его: кому подходит услуга, условия, цена "
+                        "или принцип расчёта, ограничения, автор и подтверждающие ссылки. "
+                        "Не создавать дубли ради каждого ключевого слова."
                     ),
                     metric="mention_score",
-                    impact=(5, 20),
-                    confidence=min(0.9, 0.5 + len(deficits) / total * 0.3),
-                    effort="MEDIUM",
-                    days=28,
+                    evidence=deficits,
+                    owner="Редактор и эксперт компании",
+                    prerequisites=(
+                        "Доступ к редактированию сайта. Сначала проверить, существует ли "
+                        "подходящая страница."
+                    ),
                 )
             )
+        competitors = [
+            item for item in patterns.get("competitors", []) if item.get("response_count", 0)
+        ]
         if competitors:
-            leaders = ", ".join(item["name"] for item in competitors[:3])
+            names = [item["name"] for item in competitors[:3]]
+            evidence = [
+                row for row in matrix if set(names).intersection(row.get("competitors", []))
+            ]
             actions.append(
                 self._action(
                     channel="COMPARISON",
-                    resource="Независимые сравнения и страницы альтернатив",
-                    reason=f"Вместо бренда модели регулярно называют: {leaders}.",
+                    resource="Сравнение с компаниями из ответов",
+                    reason=(
+                        f"Модели назвали: {', '.join(names)}. Упоминание конкурента само по "
+                        f"себе не является рекомендацией."
+                    ),
                     deliverable=(
-                        "Подготовить проверяемое сравнение по критериям, где "
-                        "преимущества подтверждены данными."
+                        "Открыть ответы по вопросам ниже. Выписать явно названные причины "
+                        "выбора конкурентов и проверить их по первичным источникам. "
+                        "Подготовить честное сравнение условий и подтверждённых отличий "
+                        "своей компании."
                     ),
                     metric="recommendation_score",
-                    impact=(4, 14),
-                    confidence=0.65,
-                    effort="MEDIUM",
-                    days=30,
+                    evidence=evidence,
+                    owner="Маркетолог и продуктовый эксперт",
+                    prerequisites=(
+                        "Не приписывать модели причины, которых нет в тексте ответа. Не "
+                        "использовать недоказанные преимущества."
+                    ),
                 )
             )
-        baseline_actions = [
-            (
-                "ENTITY",
-                "Официальный сайт: карточка компании и структурированные данные",
-                (
-                    "ИИ должен однозначно связать название компании, официальный домен, "
-                    "услуги и регион."
-                ),
-                (
-                    "Добавить Organization/Brand JSON-LD, реквизиты, контакты, "
-                    "canonical URL и единое описание компании."
-                ),
-                "mention_score",
-                (2, 8),
-                0.45,
-                "LOW",
-                14,
-            ),
-            (
-                "DEMAND_CONTENT",
-                "Официальный сайт: ответы на частотные вопросы Wordstat",
-                f"Проверено {len(deficits)} запросов с дефицитом присутствия бренда.",
-                (
-                    "Для приоритетных запросов создать самостоятельные страницы "
-                    "с прямым ответом, фактами и датой обновления."
-                ),
-                "coverage_score",
-                (3, 12),
-                0.5,
-                "MEDIUM",
-                21,
-            ),
-            (
-                "FAQ",
-                "Официальный сайт: FAQ покупателей",
-                (
-                    "Структурированные ответы помогают извлечь условия выбора, "
-                    "ограничения и отличия продукта."
-                ),
-                (
-                    "Собрать FAQ из выбранных запросов, дать короткий ответ и "
-                    "развернутое доказательство, добавить FAQPage-разметку."
-                ),
-                "coverage_score",
-                (2, 9),
-                0.4,
-                "LOW",
-                14,
-            ),
-            (
-                "EVIDENCE",
-                "Официальный сайт: авторы, методология и первичные доказательства",
-                (
-                    "Рекомендации без проверяемого автора, даты и первичного "
-                    "источника слабее подтверждаются."
-                ),
-                (
-                    "Указать экспертов и редакционную политику; каждое числовое "
-                    "утверждение связать с первичным источником."
-                ),
-                "citation_score",
-                (3, 10),
-                0.5,
-                "MEDIUM",
-                21,
-            ),
-            (
-                "SOURCE_MONITORING",
-                "Мониторинг источников Алисы и конкурентов",
-                (
-                    f"В текущей выборке найдено {len(sources)} повторяющихся источников "
-                    f"и {len(competitors)} конкурентов."
-                ),
-                (
-                    "Ежедневно или еженедельно сохранять названные URL, домены, "
-                    "конкурентов и позиции по неизменному набору вопросов."
-                ),
-                "citation_score",
-                (0, 8),
-                0.55,
-                "LOW",
-                30,
-            ),
-            (
-                "VERIFICATION",
-                "Контрольное повторное исследование",
-                (
-                    "Наблюдаемая связь не доказывает, что отдельная публикация "
-                    "стала причиной изменения рекомендации."
-                ),
-                (
-                    "Зафиксировать действие и URL, затем повторить тот же набор "
-                    "запросов и сравнить с контрольной группой."
-                ),
-                "confidence_score",
-                (0, 10),
-                0.75,
-                "LOW",
-                30,
-            ),
-        ]
-        existing_resources = {item["resource"] for item in actions}
-        for (
-            channel,
-            resource,
-            reason,
-            deliverable,
-            metric,
-            impact,
-            confidence,
-            effort,
-            days,
-        ) in baseline_actions:
-            if resource in existing_resources:
-                continue
+        if not actions:
             actions.append(
                 self._action(
-                    channel=channel,
-                    resource=resource,
-                    reason=reason,
-                    deliverable=deliverable,
-                    metric=metric,
-                    impact=impact,
-                    confidence=confidence,
-                    effort=effort,
-                    days=days,
+                    channel="DIAGNOSTIC",
+                    resource="Официальный сайт и источники: сначала собрать доказательства",
+                    reason=(
+                        "В доступной выборке нет достаточных данных для конкретного плана "
+                        "размещений."
+                    ),
+                    deliverable=(
+                        "Проверить успешность ответов и наличие ссылок. Провести аудит "
+                        "сайта и исследование с источниками; только после этого выбирать "
+                        "страницы для изменения и издания для публикации."
+                    ),
+                    metric="citation_score",
+                    evidence=matrix,
+                    owner="Менеджер исследования",
+                    prerequisites=(
+                        "Подключённый источник ответов. Ответ API-модели нельзя выдавать за "
+                        "пользовательскую Алису."
+                    ),
                 )
             )
-        return sorted(
-            actions,
-            key=lambda item: (
-                -(sum(item["expected_effect_range"]) / 2 * item["confidence"]),
-                item["estimated_days"],
-            ),
-        )[:10]
+        for index, action in enumerate(actions):
+            action["priority"] = index + 1
+            action["priority_reason"] = (
+                "Сначала наблюдаемые источники, затем пробелы в ответах и сравнение "
+                "конкурентов; это порядок проверки, не прогноз прироста."
+            )
+        return actions[:10]
 
     def _action(
         self,
@@ -1078,11 +988,18 @@ class GeoOpportunityPlanner:
         reason: str,
         deliverable: str,
         metric: str,
-        impact: tuple[int, int],
-        confidence: float,
-        effort: str,
-        days: int,
+        evidence: list[dict[str, Any]],
+        owner: str,
+        prerequisites: str,
     ) -> dict[str, Any]:
+        urls = sorted(
+            {
+                url
+                for row in evidence
+                for url in row.get("source_urls", [])
+                if channel != "EARNED_MEDIA" or urlparse(url).hostname == resource
+            }
+        )
         return {
             "id": str(uuid5(NAMESPACE_URL, f"geo-opportunity:{resource}:{metric}")),
             "version": self.VERSION,
@@ -1091,14 +1008,43 @@ class GeoOpportunityPlanner:
             "reason": reason,
             "deliverable": deliverable,
             "affected_metric": metric,
-            "expected_effect_range": list(impact),
-            "confidence": round(confidence, 2),
-            "effort": effort,
-            "estimated_days": days,
+            "expected_effect_range": [],
+            "effect_explanation": (
+                "Численный прирост не рассчитан: нет контролируемых измерений эффекта."
+            ),
+            "confidence": 0,
+            "confidence_explanation": "Вероятность улучшения не оценена.",
+            "evidence_count": len(evidence),
+            "evidence_status": "OBSERVED" if evidence else "NEEDS_DATA",
+            "evidence": [
+                {
+                    "response_id": row["response_id"],
+                    "query": row["query"],
+                    "answer": row.get("answer", ""),
+                    "provider": row["provider"],
+                    "model": row["model"],
+                    "mentioned": row["mentioned"],
+                    "competitors": row.get("competitors", []),
+                    "urls": [url for url in row.get("source_urls", []) if url in urls],
+                }
+                for row in evidence
+            ],
+            "source_urls": urls,
+            "owner": owner,
+            "prerequisites": prerequisites,
+            "effort": "HIGH" if channel == "EARNED_MEDIA" else "MEDIUM",
+            "estimated_days": 30,
+            "duration_explanation": (
+                "Контроль через 30 дней; срок подготовки согласуйте с исполнителем."
+            ),
             "verification": (
-                "Повторить идентичную матрицу запросов после публикации и сравнить ответы."
+                "Зафиксировать изменённый URL и дату. Через 30 дней повторить те же "
+                "вопросы в той же системе и регионе. Сравнить упоминания, "
+                "рекомендации и ссылки; сохранить также вопросы без изменений как "
+                "контроль."
             ),
             "causality_notice": (
-                "Прогноз является гипотезой; рост подтверждается только повторным измерением."
+                "Это проверяемая гипотеза. Совпадение изменений не раскрывает "
+                "закрытый алгоритм Алисы и не доказывает причинность."
             ),
         }

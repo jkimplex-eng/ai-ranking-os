@@ -18,6 +18,7 @@ from competitor_intelligence.models import (
     CompetitorSocialSource,
     TelegramConnection,
 )
+from competitor_intelligence.notifications import notify_new_posts
 from competitor_intelligence.repository import CompetitorIntelligenceRepository
 from competitor_intelligence.schemas import (
     TelegramCodeVerify,
@@ -365,9 +366,7 @@ class TelethonGateway:
             try:
                 await client.connect()
                 if not await client.is_user_authorized():
-                    raise SocialMonitorError(
-                        "Telegram-сессия истекла; подключите аккаунт повторно"
-                    )
+                    raise SocialMonitorError("Telegram-сессия истекла; подключите аккаунт повторно")
             finally:
                 await client.disconnect()
 
@@ -484,9 +483,7 @@ class TelegramConnectionService:
             self.db.delete(item)
             self.db.commit()
 
-    def set_proxy(
-        self, user_id: int, payload: TelegramProxyInput
-    ) -> TelegramConnectionRead:
+    def set_proxy(self, user_id: int, payload: TelegramProxyInput) -> TelegramConnectionRead:
         item = self._required(user_id)
         if item.status != "CONNECTED" or not item.encrypted_session:
             raise SocialMonitorError("Сначала подключите Telegram")
@@ -569,6 +566,8 @@ class TelegramConnectionService:
             for source in repository.social_sources(competitor_id)
             if source.platform == "TELEGRAM"
         }
+        had_baseline = bool(sources)
+        discovered_posts: dict[int, list[dict]] = {}
         now = datetime.now(UTC)
         for message in messages.values():
             source_key = message.channel_username or message.channel_id
@@ -606,12 +605,23 @@ class TelegramConnectionService:
                     published_at=message.published_at,
                 )
                 self.db.add(post)
+                discovered_posts.setdefault(source.id, []).append(
+                    {
+                        "url": post.url,
+                        "title": message.channel_title,
+                        "published_at": message.published_at.isoformat(),
+                    }
+                )
             post.title = message.channel_title
             post.content = message.content
             post.views = message.views
             post.shares = message.forwards
             post.raw_metrics = {"matched_queries": queries, "source": "TELEGRAM_MTPROTO"}
             post.last_seen_at = now
+        if had_baseline:
+            for source in sources.values():
+                if source.id in discovered_posts:
+                    notify_new_posts(self.db, source, discovered_posts[source.id])
         item.last_connected_at = now
         item.next_search_at = now + timedelta(days=1)
         item.last_error = None

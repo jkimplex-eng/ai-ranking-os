@@ -521,7 +521,12 @@ class FinalReportService:
             query_catalog=query_catalog,
             manual_competitors=research.metadata_payload.get("manual_competitors", []),
         )
-        opportunities = GeoOpportunityPlanner().build(patterns)
+        opportunities = GeoOpportunityPlanner().build(
+            patterns, target_website=str(research.metadata_payload.get("website_url") or "")
+        )
+        from product.source_evidence import source_evidence
+
+        source_analysis = source_evidence(patterns)
         competitive_influence = CompetitiveInfluenceEngine().compare(
             target_profile=research.metadata_payload.get("brand_profile", {}),
             competitor_profiles=research.metadata_payload.get("competitor_profiles", []),
@@ -554,6 +559,7 @@ class FinalReportService:
             "query_catalog": query_catalog,
             "research_patterns": patterns,
             "geo_opportunities": opportunities,
+            "source_analysis": source_analysis,
             "competitive_influence": competitive_influence,
             "publication_learning": publication_learning,
         }

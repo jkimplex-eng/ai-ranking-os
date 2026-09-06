@@ -454,8 +454,7 @@ def test_competitor_intelligence_is_documented_in_openapi(client: TestClient) ->
     )
     assert (
         "/competitor-intelligence/projects/{project_id}/competitors/{competitor_id}"
-        "/social/{source_id}/posts/{post_id}"
-        in paths
+        "/social/{source_id}/posts/{post_id}" in paths
     )
     assert "/competitor-intelligence/telegram/connection/send-code" in paths
     assert "/competitor-intelligence/telegram/connection/verify" in paths
@@ -567,6 +566,55 @@ def test_social_monitor_saves_real_collector_results(client: TestClient) -> None
     assert "не доказывает влияние" in dashboard.json()["limitation"]
 
 
+def test_new_material_notification_is_scoped_and_not_repeated(client: TestClient) -> None:
+    from dataclasses import replace
+
+    from notification_center.models import Notification
+    from workspace.models import Project, UserWorkspace
+
+    project_id, competitor_id = _project_and_competitor(client)
+    with TestingSession() as db:
+        service = CompetitorSocialMonitorService(db, _SocialCollector())
+        service.create(
+            1,
+            project_id,
+            competitor_id,
+            SocialSourceCreate(
+                platform="TELEGRAM",
+                profile_url="https://t.me/skinjestique",
+                external_id="skinjestique",
+            ),
+        )
+        assert not list(
+            db.scalars(select(Notification).where(Notification.resource_type == "COMPETITOR"))
+        )
+        # Use a non-default owner to prove there is no hardcoded user=1 delivery.
+        project = db.get(Project, project_id)
+        workspace = db.get(UserWorkspace, project.workspace_id)
+        workspace.user_id = 42
+        db.commit()
+        original = service.collector
+
+        class NewCollector:
+            def collect(self, source, token):
+                posts = original.collect(source, token)
+                return posts + [
+                    replace(posts[0], external_id="43", url="https://t.me/skinjestique/43")
+                ]
+
+        service.collector = NewCollector()
+        source = service.repository.social_sources(competitor_id)[0]
+        service.refresh_source(source)
+        service.refresh_source(source)
+        notifications = list(
+            db.scalars(select(Notification).where(Notification.resource_type == "COMPETITOR"))
+        )
+        assert len(notifications) == 1
+        assert notifications[0].user_id == 42
+        assert notifications[0].metadata_payload["new_count"] == 1
+        assert notifications[0].metadata_payload["posts"][0]["url"].endswith("/43")
+
+
 def test_social_posts_and_sources_can_be_deleted(client: TestClient) -> None:
     project_id, competitor_id = _project_and_competitor(client)
     with TestingSession() as db:
@@ -629,6 +677,28 @@ def test_telegram_connection_encrypts_credentials_and_searches_message_content(
         count = service.search_competitor(
             1, project_id, competitor_id, TelegramSearchRequest(limit=20)
         )
+        from dataclasses import replace
+
+        from notification_center.models import Notification
+
+        assert not list(
+            db.scalars(select(Notification).where(Notification.resource_type == "COMPETITOR"))
+        )
+        original_gateway = service.gateway
+
+        class UpdatedGateway:
+            def search(self, *args):
+                found = original_gateway.search(*args)
+                return found + [replace(found[0], message_id=999)]
+
+        service.gateway = UpdatedGateway()
+        service.search_competitor(1, project_id, competitor_id, TelegramSearchRequest(limit=20))
+        service.search_competitor(1, project_id, competitor_id, TelegramSearchRequest(limit=20))
+        notices = list(
+            db.scalars(select(Notification).where(Notification.resource_type == "COMPETITOR"))
+        )
+        assert len(notices) == 1
+        assert notices[0].metadata_payload["new_count"] == 1
         stored = service.db.scalar(
             select(TelegramConnection).where(TelegramConnection.user_id == 1)
         )
@@ -640,7 +710,7 @@ def test_telegram_connection_encrypts_credentials_and_searches_message_content(
     dashboard = client.get(
         f"/competitor-intelligence/projects/{project_id}/competitors/{competitor_id}/social"
     ).json()
-    assert dashboard["total_posts"] == 1
+    assert dashboard["total_posts"] == 2
     assert all("Публикация про" in post["content"] for post in dashboard["sources"][0]["posts"])
 
 
@@ -673,9 +743,7 @@ def test_telegram_proxy_is_checked_and_encrypted(client: TestClient, monkeypatch
                 password="secret",
             ),
         )
-        stored = db.scalar(
-            select(TelegramConnection).where(TelegramConnection.user_id == 1)
-        )
+        stored = db.scalar(select(TelegramConnection).where(TelegramConnection.user_id == 1))
 
     assert result.proxy_configured is True
     assert gateway.checked_proxy == {
@@ -689,9 +757,7 @@ def test_telegram_proxy_is_checked_and_encrypted(client: TestClient, monkeypatch
     assert "proxy.example.com" not in stored.encrypted_proxy
 
 
-def test_telegram_webshare_falls_back_from_http_to_socks5(
-    client: TestClient, monkeypatch
-) -> None:
+def test_telegram_webshare_falls_back_from_http_to_socks5(client: TestClient, monkeypatch) -> None:
     class FallbackGateway(_TelegramGateway):
         protocols: list[str] = []
 
@@ -728,9 +794,7 @@ def test_telegram_webshare_falls_back_from_http_to_socks5(
                 password="secret",
             ),
         )
-        stored = db.scalar(
-            select(TelegramConnection).where(TelegramConnection.user_id == 1)
-        )
+        stored = db.scalar(select(TelegramConnection).where(TelegramConnection.user_id == 1))
         saved_proxy = service._proxy(stored)
 
     assert result.proxy_configured is True

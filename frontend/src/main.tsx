@@ -1,5 +1,7 @@
 import { Component, StrictMode, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import { EvidencePlan, type EvidenceAction, type SourceAnalysis } from "./EvidencePlan";
+import { SiteImprovementPanel } from "./SiteImprovementPanel";
 import {
   ApiClient,
   type ActionPlanItem,
@@ -186,7 +188,8 @@ type ReportShape = {
     competitors: Array<{ name: string; response_count: number }>;
     source_patterns: Array<{ resource: string; response_count: number }>;
   };
-  geo_opportunities?: Array<{ id: string; channel: string; resource: string; reason: string; deliverable: string; affected_metric: string; expected_effect_range: number[]; confidence: number; effort: string; estimated_days: number; verification: string; causality_notice: string }>;
+  geo_opportunities?: EvidenceAction[];
+  source_analysis?: SourceAnalysis;
   competitive_influence?: { version: string; causality_status: string; verification: string; competitors: Array<{ competitor: string; website_url: string; response_count: number; profile_confidence: number; evidence_urls: string[]; matched_products: Array<{ target_product: string; competitor_product: string; feature_similarity: number; target_price?: string | number; competitor_price?: string | number; currency?: string; target_evidence_url?: string; competitor_evidence_url?: string }> }>; source_influence: Array<{ resource: string; response_count: number; relationship: string; explanation: string }> };
   publication_learning?: { status: string; explanation: string; experiments: Array<{ id: number; publication_id: number; baseline_research_id: number; followup_research_id: number; evidence_grade: string; evidence_level: string; causality_status: string; metric_deltas: Record<string, number>; adjusted_metric_deltas: Record<string, number>; design_type: string; treatment_pairs: number; control_pairs: number; effect_method: string; sample_size: number }>; influence_estimates: Array<{ id: number; resource_domain: string; channel: string; content_type: string; metric: string; provider: string; model: string; sample_size: number; expected_delta: number; confidence_min: number; confidence_max: number; confidence_score: number; evidence_grade: string; evidence_level: string; controlled_experiments: number; effect_method: string }> };
 };
@@ -573,14 +576,12 @@ function RecommendationsScreen({ onNewResearch }: { onNewResearch: () => void })
   const [researches, setResearches] = useState<ResearchItem[]>([]);
   const [researchId, setResearchId] = useState<number>();
   const [report, setReport] = useState<ReportShape>();
-  const [platforms, setPlatforms] = useState<GeoPlatform[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   useEffect(() => {
-    Promise.all([api.listResearch(), api.geoPlatforms().catch(() => [])]).then(([items, rows]) => {
+    api.listResearch().then((items) => {
       const completed = [...items].filter((item) => item.status === "COMPLETED").sort((a, b) => b.id - a.id);
       setResearches(completed);
-      setPlatforms(rows.filter((item) => item.active));
       const remembered = Number(sessionStorage.getItem(ACTIVE_RESEARCH_KEY));
       const selected = completed.some((item) => item.id === remembered) ? remembered : completed[0]?.id;
       setResearchId(selected);
@@ -589,8 +590,12 @@ function RecommendationsScreen({ onNewResearch }: { onNewResearch: () => void })
   }, []);
   useEffect(() => {
     if (!researchId) return;
+    let cancelled = false;
+    setLoading(true);
+    setError("");
     sessionStorage.setItem(ACTIVE_RESEARCH_KEY, String(researchId));
-    api.finalReport(researchId).then((value) => setReport(value as ReportShape)).catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить план действий")).finally(() => setLoading(false));
+    api.finalReport(researchId).then((value) => { if (!cancelled) setReport(value as ReportShape); }).catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : "Не удалось загрузить план действий"); }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [researchId]);
   const brand = researchBrand(researches.find((item) => item.id === researchId));
   const resourceEntries: Array<[string, { name: string; url: string; evidence: string }]> = [
@@ -598,19 +603,13 @@ function RecommendationsScreen({ onNewResearch }: { onNewResearch: () => void })
     ...(report?.research_patterns?.source_patterns ?? []).filter((item) => /^https?:\/\//.test(item.resource)).map((item): [string, { name: string; url: string; evidence: string }] => [item.resource, { name: item.resource, url: item.resource, evidence: `Встретился в ${item.response_count} ответах исследуемой выборки` }]),
   ];
   const observedResources = [...new Map(resourceEntries).values()];
-  const categoryPlatforms = platforms.filter((item) => item.category === "UNIVERSAL" || item.category === String(researches.find((row) => row.id === researchId)?.metadata?.research_profile ?? "UNIVERSAL"));
   return <main className="analytics-page recommendations-page">
     <header className="analytics-hero"><div><span className="eyebrow">ПЛАН УЛУЧШЕНИЙ</span><h1>Что поможет бренду чаще появляться в ответах ИИ</h1><p>Только действия, связанные с данными выбранного исследования. Прогнозы не являются гарантией попадания в выдачу.</p></div>{researches.length ? <label className="research-selector">Бренд и исследование<select value={researchId ?? ""} onChange={(event) => { setLoading(true); setError(""); setReport(undefined); setResearchId(Number(event.target.value)); }}>{researches.map((item) => <option value={item.id} key={item.id}>{researchBrand(item)} · исследование #{item.id}</option>)}</select></label> : null}</header>
     {error ? <div className="error" role="alert">{error}</div> : null}
     {!researches.length && !loading ? <section className="analytics-card empty-state"><h2>Сначала проведите исследование</h2><p>Без ответов моделей нельзя честно определить проблему и назвать площадки.</p><button className="primary-action" onClick={onNewResearch}>Новое исследование</button></section> : loading ? <DashboardSkeleton /> : <>
       <section className="analytics-card recommendation-summary"><div><span>Сейчас анализируется</span><strong>{brand}</strong><small>Исследование #{researchId}</small></div><div><span>Найдено действий</span><strong>{report?.geo_opportunities?.length ?? report?.recommendations?.length ?? 0}</strong><small>отсортированы по доказательности</small></div><div><span>Названо реальных источников</span><strong>{observedResources.length}</strong><small>{observedResources.length ? "из ответов моделей" : "источники не обнаружены"}</small></div></section>
-      {(report?.geo_opportunities?.length ? report.geo_opportunities : []).map((item, index) => <article className="analytics-card recommendation-detail" key={item.id}>
-        <header><div><span className="recommendation-number">{index + 1}</span><div><small>{metricNames[item.affected_metric] ?? item.affected_metric}</small><h2>{item.resource}</h2></div></div><Badge tone={item.confidence >= .7 ? "success" : item.confidence >= .45 ? "warning" : "neutral"}>Уверенность {Math.round(item.confidence * 100)}%</Badge></header>
-        <div className="recommendation-logic"><div><b>Почему это предлагается</b><p>{item.reason}</p></div><div><b>Что именно подготовить</b><p>{item.deliverable}</p></div><div><b>Как проверить результат</b><p>{item.verification}</p></div></div>
-        <div className="recommendation-meta"><span>Оценочный диапазон: <b>+{item.expected_effect_range[0]}…{item.expected_effect_range[1]}</b></span><span>Срок: <b>{item.estimated_days} дней</b></span><span>Сложность: <b>{({ LOW: "низкая", MEDIUM: "средняя", HIGH: "высокая" } as Record<string, string>)[item.effort] ?? item.effort}</b></span></div>
-        {item.affected_metric === "citation_score" ? <div className="resource-proof"><h3>Где публиковаться</h3>{observedResources.length ? <><p>Эти ресурсы уже встречались в ответах ИИ по выбранному исследованию:</p>{observedResources.slice(0, 8).map((source) => <a href={source.url} target="_blank" rel="noreferrer" key={source.url}><b>{source.name}</b><small>{source.evidence}</small></a>)}</> : categoryPlatforms.length ? <><p>ИИ не назвали источники. Ниже — площадки из реестра, которые ещё нужно проверить перед размещением:</p>{categoryPlatforms.slice(0, 8).map((platform) => <a href={`https://${platform.domain}`} target="_blank" rel="noreferrer" key={platform.id}><b>{platform.name}</b><small>{platform.category} · {platform.domain} · не подтверждено как источник текущей выдачи</small></a>)}</> : <div className="honest-empty"><b>Конкретные издания пока нельзя назвать доказательно</b><p>В ответах этого исследования нет ссылок, а в реестре площадок нет проверенных кандидатов категории. Следующий корректный шаг — собрать источники конкурентов и повторить исследование с моделями, возвращающими ссылки.</p></div>}</div> : null}
-        <p className="method-note">{item.causality_notice}</p>
-      </article>)}
+      {report?.geo_opportunities?.length ? <EvidencePlan actions={report.geo_opportunities} sources={report.source_analysis} /> : null}
+      {report && <SiteImprovementPanel key={researchId} api={api} brand={brand} website={String(researches.find(item => item.id === researchId)?.metadata?.website_url ?? "")} projectId={researches.find(item => item.id === researchId)?.project_id ?? undefined} />}
       {!report?.geo_opportunities?.length ? <section className="analytics-card empty-state"><h2>Доказательный план ещё не рассчитан</h2><p>Общие фразы вроде «улучшите контент» не показываются. Нужны обработанные ответы, карта запросов и источники.</p></section> : null}
     </>}
   </main>;
@@ -962,7 +961,7 @@ function NotificationsScreen() {
     </div>
     <section className="notification-list">{items.length ? items.map((item) => <article className={`notification-item ${item.is_read ? "" : "unread"}`} key={item.id}>
       <span className={`notification-priority ${item.priority.toLowerCase()}`} />
-      <div><small>{item.category} · {new Date(item.created_at).toLocaleString("ru-RU")}</small><h3>{item.title}</h3><p>{item.message}</p></div>
+      <div><small>{item.category} · {new Date(item.created_at).toLocaleString("ru-RU")}</small><h3>{item.title}</h3><p>{item.message}</p>{Array.isArray(item.metadata?.posts) && item.metadata.posts.filter(post => typeof post.url === "string" && /^https?:\/\//i.test(post.url)).map(post => <p key={post.url}><a href={post.url} target="_blank" rel="noreferrer">{post.title || "Открыть материал"}</a></p>)}</div>
       <div className="notification-actions">{!item.is_read && <button onClick={() => api.markNotificationRead(item.id).then(load)}>Прочитано</button>}<button onClick={() => api.archiveNotification(item.id).then(load)}>В архив</button></div>
     </article>) : <div className="analytics-card empty-state">Здесь пока нет уведомлений.</div>}</section>
   </main>;
@@ -2189,7 +2188,7 @@ function Wizard({
             <div><span>Выбранные модели</span><b>{review?.selected_models?.join(", ") || review?.provider_models?.join(", ") || "Router не вернул план"}</b></div>
             <div><span>Покупательских запросов</span><b>{customQueries.length}</b></div>
             <div><span>Источник спроса</span><b>Wordstat · частотность Яндекс Поиска</b></div>
-            <div><span>Проверяемая система</span><b>Пользовательская Алиса</b></div>
+            <div><span>Проверяемая система</span><b>API выбранных моделей (не пользовательская Алиса)</b></div>
             <div><span>Мониторинг</span><b>{cadence === "DAILY" ? "Ежедневно" : "Еженедельно"}</b></div>
             <div><span>Всего проверок</span><b>{customQueries.length * Math.max(scopedModels().length, 1)}</b></div>
             <div><span>Оценка времени</span><b>{review?.estimated_time_ms ? `${review.estimated_time_ms} ms` : "Не рассчитана"}</b></div>
@@ -2390,7 +2389,7 @@ function Report({
             <h2>Где и что публиковать</h2>
           </div>
         </div>
-        {report.geo_opportunities?.length ? report.geo_opportunities.map((item) => <article className="action-card" key={item.id}><div className="action-top"><span className="priority">{item.channel}</span><span>{metricNames[item.affected_metric] ?? item.affected_metric}</span></div><h3>{item.resource}</h3><p><b>Почему:</b> {item.reason}</p><p><b>Что подготовить:</b> {item.deliverable}</p><div className="action-meta"><div><span>Ожидаемый диапазон</span><b>+{item.expected_effect_range[0]}…{item.expected_effect_range[1]}</b></div><div><span>Уверенность</span><b>{Math.round(item.confidence * 100)}%</b></div><div><span>Срок</span><b>{item.estimated_days} дней</b></div></div><p><b>Проверка:</b> {item.verification}</p><small>{item.causality_notice}</small></article>) : report.recommendations?.length ? report.recommendations.map((recommendation, index) => <RecommendationCard recommendation={recommendation} plan={planFor(recommendation)} simulation={simulationFor(recommendation)} key={`${recommendation.explanation}-${index}`} />) : <div className="empty-state">Недостаточно данных для доказательного плана публикаций.</div>}
+        {report.geo_opportunities?.length ? <EvidencePlan actions={report.geo_opportunities} sources={report.source_analysis} /> : report.recommendations?.length ? report.recommendations.map((recommendation, index) => <RecommendationCard recommendation={recommendation} plan={planFor(recommendation)} simulation={simulationFor(recommendation)} key={`${recommendation.explanation}-${index}`} />) : <div className="empty-state">Недостаточно данных для доказательного плана публикаций.</div>}
       </section>
       <section className="panel research-lab-section"><span className="section-label">СИМУЛЯТОР ДЕЙСТВИЙ</span><h2>Прогноз при выполнении выбранных рекомендаций</h2><p>Детерминированный прогноз версии {result.simulation?.model_version ?? "не рассчитан"}. Это ожидаемый эффект, а не обещание результата.</p>{result.simulation?.simulations.length ? <><div className="simulator-list">{result.simulation.simulations.map((item) => { const recommendation = report.recommendations?.find((candidate) => candidate.id === item.recommendation_id); return <label key={item.recommendation_id}><input type="checkbox" checked={selectedActions.includes(item.recommendation_id)} onChange={() => setSelectedActions((current) => current.includes(item.recommendation_id) ? current.filter((id) => id !== item.recommendation_id) : [...current, item.recommendation_id])} /><span>{recommendation?.explanation ?? `Рекомендация #${item.recommendation_id}`}</span><b>прогноз +{item.predicted_delta.toFixed(1)}</b></label>; })}</div><div className="simulation-total"><span>AI-видимость</span><strong>{visibility.toFixed(1)} → {simulatedVisibility.toFixed(1)}</strong><small>Выбрано действий: {selectedActions.length}</small></div></> : <p className="empty-state">Прогнозы не рассчитаны. Сначала сформируйте рекомендации и симуляцию.</p>}</section>
       <section className="report-footer panel">

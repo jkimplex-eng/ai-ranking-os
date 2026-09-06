@@ -82,9 +82,9 @@ def test_brand_intelligence_detects_education_without_beauty_fallback() -> None:
 
 
 def test_brand_category_is_business_vertical_not_individual_course_topics() -> None:
-    profile = BrandIntelligenceEngine(
-        EducationWithCourseTopicsFetcher(), max_pages=1
-    ).analyze(brand="Education Brand", website_url="https://education.example")
+    profile = BrandIntelligenceEngine(EducationWithCourseTopicsFetcher(), max_pages=1).analyze(
+        brand="Education Brand", website_url="https://education.example"
+    )
 
     assert profile["categories"] == ["Онлайн-образование"]
 
@@ -127,9 +127,7 @@ def test_skillbox_uses_curated_buyer_query_set() -> None:
         "marketing",
     }
     assert catalog[0].text == "Где учиться дизайну с нуля онлайн?"
-    assert catalog[-1].text == (
-        "Где учиться маркетингу для работы с российскими компаниями?"
-    )
+    assert catalog[-1].text == ("Где учиться маркетингу для работы с российскими компаниями?")
     assert all(item.brand_mode == "unbranded" for item in catalog)
 
 
@@ -405,3 +403,70 @@ def test_empty_sources_produce_honest_resource_categories() -> None:
     opportunities = GeoOpportunityPlanner().build(patterns)
     assert opportunities[0]["resource"].startswith("Официальный сайт")
     assert all("конкретные домены" not in item["resource"] for item in opportunities)
+
+
+def test_failed_answers_are_not_brand_deficits_and_sources_keep_evidence() -> None:
+    patterns = ResearchPatternAnalyzer().analyze(
+        brand="Skillbox",
+        query_catalog=[],
+        entities=[],
+        responses=[
+            {
+                "id": 1,
+                "provider": "yandex",
+                "model": "api",
+                "prompt": "Где учиться?",
+                "content": "Skillbox",
+                "error_type": None,
+            },
+            {
+                "id": 2,
+                "provider": "yandex",
+                "model": "api",
+                "prompt": "Где учиться?",
+                "content": "timeout",
+                "error_type": "TIMEOUT",
+            },
+            {
+                "id": 3,
+                "provider": "yandex",
+                "model": "api",
+                "prompt": "Где учиться?",
+                "content": "",
+                "error_type": None,
+            },
+        ],
+        citations=[
+            {"response_id": 1, "url": "https://example.org/article"},
+            {"response_id": 1, "url": "javascript:alert(1)", "title": "Fake source"},
+            {"response_id": 2, "url": "https://failed.example/article"},
+        ],
+    )
+    assert patterns["sample"]["successful_responses"] == 1
+    assert patterns["sample"]["excluded_responses"] == 2
+    assert patterns["deficit_queries"] == []
+    assert patterns["source_patterns"] == [{"resource": "example.org", "response_count": 1}]
+    action = GeoOpportunityPlanner().build(patterns)[0]
+    assert action["source_urls"] == ["https://example.org/article"]
+    assert action["evidence"][0]["response_id"] == 1
+    assert action["expected_effect_range"] == []
+    assert "не подтверждены" in action["prerequisites"]
+    assert action["evidence"][0]["answer"] == "Skillbox"
+    own_action = GeoOpportunityPlanner().build(patterns, target_website="https://example.org")[0]
+    assert own_action["channel"] == "OWNED_MEDIA"
+    assert "собственный источник" in own_action["deliverable"]
+
+
+def test_plan_does_not_pad_actions_or_claim_unobserved_site_defects() -> None:
+    actions = GeoOpportunityPlanner().build(
+        {
+            "sample": {"responses": 0},
+            "deficit_queries": [],
+            "source_patterns": [],
+            "competitors": [],
+            "query_matrix": [],
+        }
+    )
+    assert len(actions) == 1
+    assert actions[0]["channel"] == "DIAGNOSTIC"
+    assert actions[0]["evidence_status"] == "NEEDS_DATA"

@@ -15,10 +15,12 @@ from typing import Protocol
 from urllib.parse import quote_plus, urljoin, urlparse
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.config import get_settings
 from competitor_intelligence.models import CompetitorSocialPost, CompetitorSocialSource
+from competitor_intelligence.notifications import notify_new_posts
 from competitor_intelligence.repository import CompetitorIntelligenceRepository
 from competitor_intelligence.schemas import (
     SocialDashboardRead,
@@ -182,9 +184,7 @@ class HttpSocialCollector:
         for item in root.findall("./channel/item")[:50]:
             url = (item.findtext("link") or "").strip()
             title = html.unescape((item.findtext("title") or "").strip())
-            description = html.unescape(
-                re.sub(r"<[^>]+>", " ", item.findtext("description") or "")
-            )
+            description = html.unescape(re.sub(r"<[^>]+>", " ", item.findtext("description") or ""))
             description = " ".join(description.split())
             if not url:
                 continue
@@ -453,13 +453,23 @@ class CompetitorSocialMonitorService:
 
     def refresh_source(self, source: CompetitorSocialSource) -> None:
         now = datetime.now(UTC)
+        # Serialize scans of the same source; post identity and notification share a commit.
+        self.db.scalar(
+            select(CompetitorSocialSource)
+            .where(CompetitorSocialSource.id == source.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        had_baseline = source.status == "CONNECTED" or bool(self.repository.social_posts(source.id))
+        new_posts = []
         try:
             token = (
                 self.cipher.decrypt(source.encrypted_token)
                 if source.encrypted_token and self.cipher
                 else None
             )
-            for collected in self.collector.collect(source, token):
+            collected_posts = list(self.collector.collect(source, token))
+            for collected in collected_posts:
                 item = self.repository.social_post(source.id, collected.external_id)
                 if item is None:
                     item = CompetitorSocialPost(
@@ -469,6 +479,13 @@ class CompetitorSocialMonitorService:
                         published_at=collected.published_at,
                     )
                     self.db.add(item)
+                    new_posts.append(
+                        {
+                            "url": collected.url,
+                            "title": collected.title,
+                            "published_at": collected.published_at.isoformat(),
+                        }
+                    )
                 item.title = collected.title
                 item.content = collected.content
                 item.views = collected.views
@@ -491,6 +508,8 @@ class CompetitorSocialMonitorService:
                 item.last_seen_at = now
             source.status = "CONNECTED"
             source.last_error = None
+            if had_baseline and new_posts:
+                notify_new_posts(self.db, source, new_posts)
         except (SocialMonitorError, httpx.HTTPError, ET.ParseError, ValueError) as error:
             source.status = "NOT_CONFIGURED" if "токен" in str(error).casefold() else "ERROR"
             source.last_error = str(error)[:1000]

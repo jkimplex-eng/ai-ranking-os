@@ -65,7 +65,7 @@ export type ActionPlanItem = { recommendation: RecommendationItem; template?: { 
 export type ActionPlan = { research_id: number; engine_version: string; generated_at: string; items: ActionPlanItem[] };
 export type SimulationItem = { recommendation_id: number; metric: string; current_metric: number; expected_metric_change: number; predicted_visibility: number; predicted_delta: number; confidence_min: number; confidence_expected: number; confidence_max: number; estimated_duration_days: number; model_version: string };
 export type SimulationResult = { research_id: number; model_version: string; simulated_at: string; simulations: SimulationItem[] };
-export type ResearchItem = { id: number; title: string; status: string; progress_percent?: number; total_tasks?: number; completed_tasks?: number; failed_tasks?: number; created_at?: string; updated_at?: string; metadata?: Record<string, unknown> };
+export type ResearchItem = { id: number; project_id?: number | null; title: string; status: string; progress_percent?: number; total_tasks?: number; completed_tasks?: number; failed_tasks?: number; created_at?: string; updated_at?: string; metadata?: Record<string, unknown> };
 export type ResearchTaskItem = { id: number; research_id: number; status: string; provider?: string; model?: string; execution_id?: number; created_at: string; updated_at: string; error?: string };
 export type ExecutionItem = { id: number; state: string; started_at?: string; finished_at?: string; duration_ms?: number; attempt_count: number; error?: string };
 export type WorkspaceProjectItem = { id: number; name: string; description: string; research_count: number };
@@ -231,6 +231,7 @@ export type ProductAnalyticsDashboard = {
 };
 export type NotificationItem = {
   id: number;
+  metadata?: { posts?: Array<{ url: string; title?: string }> };
   event_type: string;
   category: string;
   priority: string;
