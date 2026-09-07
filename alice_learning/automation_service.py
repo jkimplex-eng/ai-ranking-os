@@ -119,6 +119,11 @@ class AliceAutomationService:
         now = self._aware(self.clock())
         results = []
         for plan in self.repository.due(now):
+            # A previous run may still be processing when the scheduler wakes
+            # up.  Treat that as a normal no-op for scheduled work; a manual
+            # run still receives the explicit conflict from ``run`` below.
+            if self.repository.active_run(plan.id):
+                continue
             kind = plan.monitoring_frequency
             results.append(
                 self.run(plan.organization_id, plan.id, kind, scheduled_for=plan.next_run_at)
