@@ -1950,6 +1950,10 @@ function Wizard({
       return;
     }
     if (step !== 2) return;
+    if (scopedModels().length === 0) {
+      setError("Нет подключённой модели для проверки. Откройте «Подробная аналитика → Подключения ИИ», подключите YandexGPT или другую модель и вернитесь сюда.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -2211,7 +2215,7 @@ function Wizard({
           {step < 3 ? (
             <button
               onClick={next}
-              disabled={busy || !brand || (step === 2 && (!category.trim() || scopedModels().length === 0))}
+              disabled={busy || !brand || (step === 2 && !category.trim())}
             >
               {busy ? "Собираем спрос…" : step === 2 ? "Собрать вопросы" : "Продолжить"} →
             </button>
