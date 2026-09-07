@@ -501,6 +501,8 @@ class QueryMapBuilder:
 
     @staticmethod
     def _recommendation_question(term: str, need: str) -> str:
+        if term in {"продукты и услуги", "сервисы и решения для бизнеса", "товары и услуги"}:
+            return f"Какой сервис или решение выбрать для {need}?"
         if term in {"сыворотку", "маску"}:
             return f"Какую {term} вы бы порекомендовали для {need}?"
         if term.startswith("средство"):
