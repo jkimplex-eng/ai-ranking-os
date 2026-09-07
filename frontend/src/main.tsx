@@ -2,6 +2,8 @@ import { Component, StrictMode, useCallback, useEffect, useMemo, useRef, useStat
 import { createRoot } from "react-dom/client";
 import { EvidencePlan, type EvidenceAction, type SourceAnalysis } from "./EvidencePlan";
 import { SiteImprovementPanel } from "./SiteImprovementPanel";
+import { ClientManagement } from "./ClientManagement";
+import { ClientRegistration } from "./ClientRegistration";
 import {
   ApiClient,
   type ActionPlanItem,
@@ -307,7 +309,7 @@ function Shell({
 }) {
   const [systemReady, setSystemReady] = useState<boolean>();
   useEffect(() => { api.systemHealth().then((health) => setSystemReady(health.status === "healthy" || health.status === "ready")).catch(() => setSystemReady(false)); }, []);
-  const isAdmin = roles.some((role) => ["superadmin", "admin", "organization_admin", "SUPERADMIN", "ADMIN", "ORGANIZATION_ADMIN"].includes(role));
+  const isAdmin = roles.some((role) => ["superadmin", "admin", "SUPERADMIN", "ADMIN"].includes(role));
   const primaryNav = [
     ["⌂", "Главный результат", "home"], ["＋", "Добавить компанию", "wizard"],
     ["▤", "Отчёты", "reports"], ["✓", "Что делать", "recommendations"],
@@ -896,7 +898,8 @@ function AdminConsoleScreen() {
             : section === "Jobs" ? data?.jobs.map((item) => [`Execution #${item.id}`, item.state, `${item.attempts} попыток`])
               : section === "Feedback" ? data?.feedback.map((item) => [item.title, item.feedback_type, item.priority, item.status])
                 : section === "Audit" ? data?.audit.map((item) => [item.action, item.category, item.resource, item.actor_id]) : undefined;
-  return <main className="analytics-page admin-page"><header className="analytics-hero"><div><span className="eyebrow">CONTROL PLANE</span><h1>Admin Console</h1><p>Пользователи, инфраструктура и продукт — в едином операционном контуре.</p></div><Badge tone={error ? "warning" : "success"}>● {error ? "Требует внимания" : "Система работает"}</Badge></header>
+  return <main className="analytics-page admin-page"><header className="analytics-hero"><div><span className="eyebrow">ВЛАДЕЛЕЦ ПЛАТФОРМЫ</span><h1>Управление платформой</h1><p>Клиенты, лимиты и состояние приложения.</p></div><Badge tone={error ? "warning" : "success"}>● {error ? "Требует внимания" : "Система работает"}</Badge></header>
+    <ClientManagement api={api} />
     <div className="admin-layout"><nav className="admin-nav">{sections.map((item) => <button key={item} className={section === item ? "active" : ""} onClick={() => setSection(item)}>{item}</button>)}</nav><section className="analytics-card admin-content"><div className="admin-toolbar"><div><span className="eyebrow">{section.toUpperCase()}</span><h2>{section}</h2></div>{section === "Users" && <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск пользователя" />}</div>
       {error ? <div className="error">{error}</div> : !data ? <Skeleton /> : section === "Product Analytics" ? <div className="admin-summary"><strong>{numeric(data.users as unknown as Record<string, unknown>, "length")}</strong><p>Подробная продуктовая аналитика доступна в основном разделе Product Analytics.</p></div> : section === "Health" ? <pre className="health-json">{JSON.stringify(data.health, null, 2)}</pre> : section === "Settings" ? <p className="empty-state">Системные и пользовательские параметры доступны через Settings Center.</p> : <div className="admin-table">{rows?.length ? rows.map((row, index) => <div className="admin-row" key={`${section}-${index}`}>{row.map((value, cell) => <span key={cell}>{value}</span>)}</div>) : <p className="empty-state">Нет данных для отображения.</p>}</div>}
     </section></div></main>;
@@ -1087,6 +1090,7 @@ function ProvidersDashboard() {
           {providerHint === "yandex" && <label>Folder ID каталога<input value={folderId} onChange={(event) => setFolderId(event.target.value)} placeholder="Например: b1g…" minLength={8} required autoComplete="off" /></label>}
           <button disabled={connecting || apiKey.trim().length < 8 || (providerHint === "yandex" && folderId.trim().length < 8)}>{connecting ? "Проверяем…" : "Определить и подключить"}</button>
         </form>
+        <ClientRegistration api={api} />
         <small className="provider-safety">Ключ не отправляется разным компаниям: если формат неоднозначен, приложение попросит выбрать провайдера.</small>
       </section>
       {notice && <div className="success-message" role="status">{notice}</div>}
@@ -2472,7 +2476,7 @@ function App() {
       .catch(() => undefined)
       .finally(() => setLoading(false));
   }, [user, report, loadReport]);
-  const isAdmin = roles.some((role) => ["superadmin", "admin", "organization_admin", "SUPERADMIN", "ADMIN", "ORGANIZATION_ADMIN"].includes(role));
+  const isAdmin = roles.some((role) => ["superadmin", "admin", "SUPERADMIN", "ADMIN"].includes(role));
   const content = useMemo(
     () =>
       screen === "wizard" ? (

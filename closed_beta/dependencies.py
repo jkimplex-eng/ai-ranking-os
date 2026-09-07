@@ -29,6 +29,8 @@ def require_beta_admin(
     db: Annotated[Session, Depends(get_db)],
 ) -> int:
     principal = getattr(request.state, "principal", None)
+    if get_settings().security_enforce_auth and principal is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
     user_id = int(getattr(principal, "user_id", getattr(principal, "id", 1)))
     if get_settings().security_enforce_auth and not RbacBetaRoles(db).is_admin(user_id):
         raise HTTPException(status_code=403, detail="Closed Beta administrator required")
