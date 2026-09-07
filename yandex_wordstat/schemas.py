@@ -69,6 +69,9 @@ class WordstatQueryAnalyticsItem(BaseModel):
     citation_domains: list[str] = Field(default_factory=list)
     evidence_status: str
     research_ids: list[int] = Field(default_factory=list)
+    verdicts: list[dict] = Field(default_factory=list)
+    ambiguous_count: int = 0
+    excluded_response_count: int = 0
 
 
 class WordstatAnalyticsRead(BaseModel):

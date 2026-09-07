@@ -9,7 +9,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from provider_connections.crypto import SecretCipher
-from research.models import ExtractedEntity, Research, ResearchTask, Response
+from research.brand_verdict import VERSION as VERDICT_VERSION
+from research.brand_verdict import classify_brand
+from research.models import (
+    ExtractedEntity,
+    Research,
+    ResearchTask,
+    Response,
+    ResponseProcessingStatus,
+)
 from yandex_wordstat.models import WordstatConnection, WordstatDemandSnapshot
 from yandex_wordstat.repository import WordstatRepository
 from yandex_wordstat.schemas import (
@@ -206,9 +214,16 @@ class WordstatService:
                 )
             ).all()
         grouped: dict[str, list[tuple[Response, ResearchTask]]] = {key: [] for key in query_keys}
+        excluded = dict.fromkeys(query_keys, 0)
         for response, task in rows:
             key = " ".join(task.query.casefold().split())
             if key in grouped:
+                if (
+                    response.processing_status != ResponseProcessingStatus.PROCESSED
+                    or not response.content.strip()
+                ):
+                    excluded[key] += 1
+                    continue
                 grouped[key].append((response, task))
         items = []
         numerator = 0.0
@@ -220,12 +235,12 @@ class WordstatService:
             competitors: set[str] = set()
             domains: set[str] = set()
             used_researches: set[int] = set()
+            verdicts = []
             for response, task in observations:
-                content = response.content.casefold()
-                mentioned = snapshot.brand.casefold() in content
-                recommended = mentioned and any(
-                    token in content for token in ("рекоменд", "совету", "подойд", "выбор")
-                )
+                verdict = classify_brand(response.content, snapshot.brand)
+                mentioned = verdict.status not in {"NOT_MEASURED", "NOT_MENTIONED"}
+                recommended = verdict.status == "RECOMMENDED"
+                verdicts.append({"response_id": response.id, **verdict.to_dict()})
                 mentions += int(mentioned)
                 recommendations += int(recommended)
                 used_researches.add(task.research_id)
@@ -264,6 +279,9 @@ class WordstatService:
                     citation_domains=sorted(domains),
                     evidence_status="MEASURED" if response_count else "NOT_MEASURED",
                     research_ids=sorted(used_researches),
+                    verdicts=verdicts,
+                    ambiguous_count=sum(v["status"] == "AMBIGUOUS" for v in verdicts),
+                    excluded_response_count=excluded[key],
                 )
             )
         checked = sum(item.response_count > 0 for item in items)
@@ -283,8 +301,11 @@ class WordstatService:
             if checked
             else "NOT_MEASURED",
             items=items,
-            methodology_version=self.VERSION,
+            methodology_version=f"1.1/{VERDICT_VERSION}",
             limitations=[
+                "Используются консервативные текстовые правила: неоднозначные ответы "
+                "требуют проверки и не считаются явными рекомендациями. Это новая "
+                "аналитика, а не пересчёт исторических баллов исследования.",
                 "Взвешенная видимость = сумма(частотность × доля рекомендаций бренда) / "
                 "сумма частотностей проверенных запросов.",
                 "Непроверенные запросы не входят в знаменатель и явно помечены NOT_MEASURED.",
