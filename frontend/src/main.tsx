@@ -276,6 +276,7 @@ function Login({ onReady }: { onReady: (profile: AuthProfile) => void }) {
             {busy ? "Входим…" : "Войти"}
           </button>
         </form>
+        <ClientRegistration api={api} />
       </section>
       <aside className="login-story">
         <span>AI visibility, made actionable</span>
