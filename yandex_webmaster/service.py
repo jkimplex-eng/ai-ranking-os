@@ -209,8 +209,12 @@ class YandexWebmasterService:
                 host_id=str(item.get("host_id", "")),
                 ascii_host_url=item.get("ascii_host_url") or item.get("unicode_host_url") or "",
                 unicode_host_url=item.get("unicode_host_url"),
-                verified=str(item.get("verification", {}).get("verification_state", "")).upper()
-                == "VERIFIED",
+                verified=(
+                    item["verified"] is True
+                    if "verified" in item
+                    else str((item.get("verification") or {}).get("verification_state", "")).upper()
+                    == "VERIFIED"
+                ),
             )
             for item in response.json().get("hosts", [])
         ]
