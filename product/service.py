@@ -280,6 +280,7 @@ class ProductPipeline:
                 objective=review.prompt,
                 metadata={
                     "organization_id": organization_id,
+                    "created_by_user_id": self.user_id,
                     "brand": payload.brand,
                     "website_url": payload.website_url,
                     "brand_profile": review.brand_profile.model_dump(mode="json"),

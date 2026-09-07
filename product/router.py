@@ -27,10 +27,11 @@ from product.schemas import (
     WizardRunResult,
 )
 from product.service import FinalReportService, ProductPipeline, WizardValidationError
+from research.access import require_research_access
 from research.models import ResearchStatus
 from research.schemas import ResearchRead
 
-router = APIRouter(tags=["product"])
+router = APIRouter(tags=["product"], dependencies=[Depends(require_research_access)])
 DbSession = Annotated[Session, Depends(get_db)]
 
 

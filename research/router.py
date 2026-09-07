@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
 from research import service
+from research.access import require_research_access
 from research.comparison import ComparisonNotReadyError, ComparisonService
 from research.extraction import ExtractionProcessingError, ExtractionService
 from research.history import ResearchHistoryService
@@ -39,7 +40,7 @@ from research.schemas import (
 )
 from research.scoring import ScoringNotReadyError, ScoringService
 
-router = APIRouter(tags=["research"])
+router = APIRouter(tags=["research"], dependencies=[Depends(require_research_access)])
 DbSession = Annotated[Session, Depends(get_db)]
 Offset = Annotated[int, Query(ge=0)]
 Limit = Annotated[int, Query(ge=1, le=100)]
