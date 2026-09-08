@@ -93,6 +93,8 @@ def test_geo_site_audit_is_evidence_based_and_persisted(client: TestClient) -> N
     assert result.evidence["robots_status"] == 200
     assert result.evidence["crawl_scope"]["pages_scanned"] == 1
     assert result.evidence["knowledge_graph"]["nodes"]
+    assert result.evidence["roadmap"]["current"] == result.score
+    assert "не гарантирует рекомендацию" in result.evidence["roadmap"]["condition"]
 
     stored = client.get("/geo/site-audits")
     assert stored.status_code == 200

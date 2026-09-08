@@ -176,6 +176,7 @@ class GeoSiteAuditService:
                     "pages": pages,
                 },
                 "knowledge_graph": graph,
+                "roadmap": self._readiness_roadmap(checks),
             },
             algorithm_version=self.VERSION,
             limitation=self.LIMITATION,
@@ -601,6 +602,31 @@ class GeoSiteAuditService:
             if score >= 45
             else "Критические пробелы"
         )
+
+    @staticmethod
+    def _readiness_roadmap(checks: list[AuditCheck]) -> dict:
+        """Conditional readiness projections, deliberately separate from AI visibility."""
+        current = round(sum(item.points for item in checks), 1)
+        missing = sorted(
+            (item for item in checks if not item.passed), key=lambda item: -item.max_points
+        )
+        immediate = missing[:3]
+        next_stage = missing[3:]
+        after_immediate = round(current + sum(item.max_points for item in immediate), 1)
+        after_all = round(after_immediate + sum(item.max_points for item in next_stage), 1)
+        return {
+            "metric": "GEO readiness score",
+            "current": current,
+            "after_priority_actions": min(100, after_immediate),
+            "after_all_detected_actions": min(100, after_all),
+            "priority_check_codes": [item.code for item in immediate],
+            "next_check_codes": [item.code for item in next_stage],
+            "condition": (
+                "Это арифметический сценарий только для проверок, которые сейчас не пройдены. "
+                "Он не прогнозирует и не гарантирует рекомендацию в Алисе, Яндекс Поиске "
+                "или YandexGPT."
+            ),
+        }
 
     @staticmethod
     def _opportunities(checks: list[AuditCheck]) -> list[AuditOpportunity]:
