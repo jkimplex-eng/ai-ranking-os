@@ -8,6 +8,7 @@ from collections import defaultdict
 from html.parser import HTMLParser
 from typing import Protocol
 from urllib.parse import urljoin, urlparse
+from xml.etree import ElementTree
 
 import httpx
 from sqlalchemy.orm import Session
@@ -116,7 +117,8 @@ class _AuditParser(HTMLParser):
 
 
 class GeoSiteAuditService:
-    VERSION = "1.0"
+    VERSION = "1.1"
+    MAX_CRAWLED_PAGES = 40
     LIMITATION = (
         "Оценка измеряет публичные GEO-сигналы сайта. Она не доказывает индексацию "
         "или причинное влияние на закрытые алгоритмы AI-платформ."
@@ -141,6 +143,7 @@ class GeoSiteAuditService:
         robots = self._optional(f"{origin}/robots.txt")
         sitemap_url = self._sitemap_url(origin, robots[1])
         sitemap = self._optional(sitemap_url)
+        pages, graph = self._crawl_public_pages(final, parser, sitemap[1])
         checks = self._checks(payload.brand, final, parser, html, status, latency, robots, sitemap)
         scores: defaultdict[str, float] = defaultdict(float)
         for check in checks:
@@ -165,6 +168,14 @@ class GeoSiteAuditService:
                 "sitemap_url": sitemap_url,
                 "sitemap_status": sitemap[0],
                 "json_ld_types": sorted(self._types(parser.json_ld)),
+                "crawl_scope": {
+                    "strategy": "главная страница, sitemap и внутренние ссылки того же хоста",
+                    "max_pages": self.MAX_CRAWLED_PAGES,
+                    "pages_discovered": len(pages),
+                    "pages_scanned": sum(item["status"] == 200 for item in pages),
+                    "pages": pages,
+                },
+                "knowledge_graph": graph,
             },
             algorithm_version=self.VERSION,
             limitation=self.LIMITATION,
@@ -186,6 +197,110 @@ class GeoSiteAuditService:
             return status, body
         except (SiteAuditError, httpx.HTTPError):
             return 0, ""
+
+    def _crawl_public_pages(
+        self,
+        root_url: str,
+        root_page: _AuditParser,
+        sitemap: str,
+    ) -> tuple[list[dict], dict]:
+        """Build a bounded, same-host evidence map; it is not a claim of full indexing."""
+        root = urlparse(root_url)
+        candidates = [root_url]
+        candidates.extend(self._sitemap_urls(sitemap, root))
+        candidates.extend(urljoin(root_url, link) for link in root_page.links)
+
+        accepted: list[str] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            parsed = urlparse(candidate)
+            normalized = parsed._replace(fragment="").geturl()
+            if (
+                parsed.scheme not in {"http", "https"}
+                or parsed.hostname != root.hostname
+                or normalized in seen
+            ):
+                continue
+            seen.add(normalized)
+            accepted.append(normalized)
+            if len(accepted) >= self.MAX_CRAWLED_PAGES:
+                break
+
+        pages: list[dict] = []
+        parsed_pages: dict[str, _AuditParser] = {root_url: root_page}
+        for candidate in accepted:
+            if candidate == root_url:
+                page = root_page
+                status = 200
+                content_type = "text/html"
+            else:
+                try:
+                    final, body, status, _, content_type = self.fetcher.fetch(candidate)
+                except (SiteAuditError, httpx.HTTPError):
+                    pages.append({"url": candidate, "status": 0, "error": "страница недоступна"})
+                    continue
+                if (
+                    urlparse(final).hostname != root.hostname
+                    or "html" not in content_type.casefold()
+                ):
+                    pages.append(
+                        {"url": candidate, "status": status, "error": "не HTML того же сайта"}
+                    )
+                    continue
+                if final in parsed_pages:
+                    continue
+                page = _AuditParser()
+                page.feed(body)
+                parsed_pages[final] = page
+                candidate = final
+            pages.append(
+                {
+                    "url": candidate,
+                    "status": status,
+                    "title": page.title or None,
+                    "h1": page.h1[:2],
+                    "json_ld_types": sorted(self._types(page.json_ld)),
+                    "internal_links": sum(
+                        urlparse(urljoin(candidate, link)).hostname == root.hostname
+                        for link in page.links
+                    ),
+                }
+            )
+        return pages, self._site_graph(parsed_pages, root.hostname or "")
+
+    @staticmethod
+    def _sitemap_urls(sitemap: str, root: object) -> list[str]:
+        if not sitemap or not hasattr(root, "hostname"):
+            return []
+        try:
+            document = ElementTree.fromstring(sitemap)
+        except ElementTree.ParseError:
+            return []
+        urls = [item.text.strip() for item in document.findall(".//{*}loc") if item.text]
+        return [
+            item
+            for item in urls
+            if urlparse(item).scheme in {"http", "https"}
+            and urlparse(item).hostname == getattr(root, "hostname", None)
+        ]
+
+    def _site_graph(self, pages: dict[str, _AuditParser], hostname: str) -> dict:
+        nodes: list[dict] = []
+        edges: list[dict] = []
+        for url, page in pages.items():
+            nodes.append({"id": url, "type": "WebPage", "label": page.title or url})
+            for schema_type in sorted(self._types(page.json_ld)):
+                schema_id = f"{url}#{schema_type}"
+                nodes.append({"id": schema_id, "type": schema_type, "label": schema_type})
+                edges.append({"from": url, "to": schema_id, "relation": "DESCRIBES"})
+            for link in page.links:
+                target = urljoin(url, link).split("#", 1)[0]
+                target_host = urlparse(target).hostname
+                if target_host == hostname:
+                    edges.append({"from": url, "to": target, "relation": "LINKS_TO"})
+                elif target_host:
+                    edges.append({"from": url, "to": target, "relation": "CITES"})
+        return {"nodes": nodes, "edges": edges}
 
     @staticmethod
     def _sitemap_url(origin: str, robots: str) -> str:

@@ -137,6 +137,24 @@ class BrandIntelligenceEngine:
         "крем",
         "каталог",
     )
+    CONTENT_HINTS = (
+        "about",
+        "faq",
+        "methodology",
+        "docs",
+        "documentation",
+        "blog",
+        "research",
+        "pricing",
+        "product",
+        "service",
+        "о-компании",
+        "метод",
+        "вопрос",
+        "документац",
+        "исследован",
+        "тариф",
+    )
 
     def __init__(
         self,
@@ -183,7 +201,10 @@ class BrandIntelligenceEngine:
                 for link in parser.page.links
                 if urlparse(link).hostname == root_host
                 and (
-                    any(hint in link.casefold() for hint in self.PRODUCT_HINTS)
+                    any(
+                        hint in link.casefold()
+                        for hint in (*self.PRODUCT_HINTS, *self.CONTENT_HINTS)
+                    )
                     or ("/catalog/" in link.casefold() and link.casefold().endswith(".html"))
                 )
             ]

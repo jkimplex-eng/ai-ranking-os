@@ -61,6 +61,29 @@ class GeoVisibilityFetcher:
         )
 
 
+class PublicDocumentationFetcher:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def fetch(self, url: str) -> tuple[str, str]:
+        self.calls.append(url)
+        if url.endswith("methodology.html"):
+            return (
+                url,
+                "<html><head><title>Методика</title></head>"
+                "<body><h1>Методика</h1></body></html>",
+            )
+        if url.endswith("faq.html"):
+            return url, "<html><head><title>FAQ</title></head><body><h1>Вопросы</h1></body></html>"
+        return (
+            url,
+            """<html><head><title>AI Visibility</title>
+            <meta name='description' content='GEO-платформа для анализа ответов ИИ'></head>
+            <body><h1>AI Visibility</h1><a href='/methodology.html'>Методика</a>
+            <a href='/faq.html'>FAQ</a></body></html>""",
+        )
+
+
 def test_brand_intelligence_extracts_product_price_and_attributes() -> None:
     profile = BrandIntelligenceEngine(FakeFetcher(), max_pages=1).analyze(
         brand="Skinjestique", website_url="https://skinjestique.example"
@@ -106,6 +129,17 @@ def test_brand_intelligence_detects_geo_visibility_vertical() -> None:
     )
 
     assert "GEO и AI-видимость" in profile["categories"]
+
+
+def test_brand_intelligence_crawls_public_documentation_pages() -> None:
+    fetcher = PublicDocumentationFetcher()
+    profile = BrandIntelligenceEngine(fetcher, max_pages=12).analyze(
+        brand="AI Ranking OS", website_url="https://example.test"
+    )
+
+    assert profile["pages_analyzed"] == 3
+    assert "https://example.test/methodology.html" in profile["evidence_urls"]
+    assert "https://example.test/faq.html" in profile["evidence_urls"]
 
 
 def test_geo_visibility_queries_are_natural_and_not_generic_retail_prompts() -> None:
