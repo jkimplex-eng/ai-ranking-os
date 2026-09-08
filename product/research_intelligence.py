@@ -127,6 +127,12 @@ class QueryMapBuilder:
                 if item.get("brand") or item.get("name")
             )
         )
+        if not is_english and self._is_geo_visibility_category(fallback_category):
+            return self._geo_visibility_queries(
+                brand=brand,
+                region=region,
+                competitors=competitors,
+            )
         if is_english:
             needs = list(
                 dict.fromkeys([*attributes, *self._default_needs(profile, True, fallback_category)])
@@ -318,6 +324,192 @@ class QueryMapBuilder:
                 rationale=self._rationale(cluster, english=is_english),
             )
             for cluster, intent, text, buyer_stage, brand_mode in templates
+        ]
+
+    @staticmethod
+    def _is_geo_visibility_category(category: str) -> bool:
+        normalized = category.casefold()
+        return any(
+            marker in normalized
+            for marker in (
+                "geo",
+                "гео",
+                "ai-видим",
+                "ии-видим",
+                "видимость бренда в ответах",
+                "нейропоиск",
+            )
+        )
+
+    def _geo_visibility_queries(
+        self,
+        *,
+        brand: str,
+        region: str,
+        competitors: list[str],
+    ) -> list[QueryScenario]:
+        """Use B2B discovery language instead of generic retail question templates."""
+
+        rival = competitors[0] if competitors else "конкуренты"
+        templates: list[tuple[str, str, str, str, str]] = [
+            (
+                "category_discovery",
+                "recommendation",
+                "Как проверить, рекомендует ли ИИ мою компанию?",
+                "discovery",
+                "unbranded",
+            ),
+            (
+                "category_discovery",
+                "recommendation",
+                "Какие сервисы помогают измерить видимость бренда в ответах ИИ?",
+                "discovery",
+                "unbranded",
+            ),
+            (
+                "category_discovery",
+                "recommendation",
+                "Как понять, почему компанию не рекомендуют в нейропоиске?",
+                "discovery",
+                "unbranded",
+            ),
+            (
+                "category_discovery",
+                "recommendation",
+                "Как улучшить GEO-видимость сайта в ответах ИИ?",
+                "discovery",
+                "unbranded",
+            ),
+            (
+                "problem_solution",
+                "solution",
+                "Как найти вопросы клиентов, по которым ИИ рекомендует конкурентов?",
+                "consideration",
+                "unbranded",
+            ),
+            (
+                "problem_solution",
+                "solution",
+                "Как отслеживать упоминания бренда в ЯндексGPT и других ИИ-ответах?",
+                "consideration",
+                "unbranded",
+            ),
+            (
+                "problem_solution",
+                "solution",
+                "Как понять, на какие сайты и публикации ссылается ИИ при рекомендации компании?",
+                "consideration",
+                "unbranded",
+            ),
+            (
+                "price_comparison",
+                "comparison",
+                "Как выбрать сервис для анализа GEO-видимости бренда?",
+                "consideration",
+                "unbranded",
+            ),
+            (
+                "price_comparison",
+                "comparison",
+                "Какие инструменты помогают улучшить присутствие компании в нейропоиске?",
+                "consideration",
+                "unbranded",
+            ),
+            (
+                "trust_evidence",
+                "validation",
+                "Какие данные доказывают, что публикация помогла бренду стать заметнее для ИИ?",
+                "validation",
+                "unbranded",
+            ),
+            (
+                "trust_evidence",
+                "validation",
+                "Как проверить, какие независимые источники повышают доверие к компании у ИИ?",
+                "validation",
+                "unbranded",
+            ),
+            (
+                "trust_evidence",
+                "validation",
+                "Как отслеживать новые публикации о конкурентах в интернете и Telegram?",
+                "validation",
+                "unbranded",
+            ),
+            (
+                "trust_evidence",
+                "validation",
+                "Где публиковать экспертизу, чтобы бренд встречался в рекомендациях ИИ?",
+                "validation",
+                "unbranded",
+            ),
+            (
+                "trust_evidence",
+                "validation",
+                "Как оценить сайт на готовность к цитированию в ответах ИИ?",
+                "validation",
+                "unbranded",
+            ),
+            (
+                "competitor_alternative",
+                "comparison",
+                f"Какие сервисы похожи на {rival} для анализа видимости бренда в ИИ?",
+                "consideration",
+                "comparative",
+            ),
+            (
+                "competitor_alternative",
+                "comparison",
+                "Какой сервис выбрать для мониторинга конкурентов и источников в ответах ИИ?",
+                "consideration",
+                "comparative",
+            ),
+            (
+                "competitor_comparison",
+                "comparison",
+                f"Чем {brand} отличается от {rival} для работы с GEO-видимостью?",
+                "validation",
+                "comparative",
+            ),
+            (
+                "competitor_comparison",
+                "comparison",
+                f"Какие критерии важны при сравнении {brand} с сервисами анализа AI-видимости?",
+                "validation",
+                "comparative",
+            ),
+            (
+                "brand_control",
+                "brand",
+                f"Что делает {brand} и кому подходит этот сервис?",
+                "validation",
+                "branded",
+            ),
+            (
+                "brand_control",
+                "comparison",
+                f"Стоит ли рассматривать {brand} для улучшения GEO-видимости компании?",
+                "consideration",
+                "branded",
+            ),
+        ]
+        location = query_context(region, english=False)
+        if location:
+            templates = [
+                (cluster, intent, self._with_location(text, location), stage, mode)
+                for cluster, intent, text, stage, mode in templates
+            ]
+        return [
+            QueryScenario(
+                id=str(uuid5(NAMESPACE_URL, f"ai-ranking-query:{brand}:{region}:{cluster}:{text}")),
+                cluster=cluster,
+                intent=intent,
+                text=text,
+                buyer_stage=stage,
+                brand_mode=mode,
+                rationale=self._rationale(cluster, english=False),
+            )
+            for cluster, intent, text, stage, mode in templates
         ]
 
     @staticmethod

@@ -50,6 +50,17 @@ class EducationWithCourseTopicsFetcher:
         )
 
 
+class GeoVisibilityFetcher:
+    def fetch(self, url: str) -> tuple[str, str]:
+        return (
+            url,
+            """<html><head><title>AI Ranking OS — GEO-видимость бренда</title>
+            <meta name='description'
+            content='Сервис измеряет видимость бренда в ответах ИИ и нейропоиске'>
+            </head><body><h1>Аналитика GEO-видимости и рекомендаций ИИ</h1></body></html>""",
+        )
+
+
 def test_brand_intelligence_extracts_product_price_and_attributes() -> None:
     profile = BrandIntelligenceEngine(FakeFetcher(), max_pages=1).analyze(
         brand="Skinjestique", website_url="https://skinjestique.example"
@@ -87,6 +98,33 @@ def test_brand_category_is_business_vertical_not_individual_course_topics() -> N
     )
 
     assert profile["categories"] == ["Онлайн-образование"]
+
+
+def test_brand_intelligence_detects_geo_visibility_vertical() -> None:
+    profile = BrandIntelligenceEngine(GeoVisibilityFetcher(), max_pages=1).analyze(
+        brand="AI Ranking OS", website_url="https://example.test"
+    )
+
+    assert "GEO и AI-видимость" in profile["categories"]
+
+
+def test_geo_visibility_queries_are_natural_and_not_generic_retail_prompts() -> None:
+    catalog = QueryMapBuilder().build(
+        brand="AI Ranking OS",
+        language="ru",
+        region="RU",
+        profile="GEO",
+        variables={},
+        brand_profile={"categories": ["GEO и AI-видимость"]},
+    )
+
+    combined = " ".join(item.text.casefold() for item in catalog)
+    assert len(catalog) == 20
+    assert "как улучшить geo-видимость сайта" in combined
+    assert "продукты и услуги" not in combined
+    assert sum(item.brand_mode == "unbranded" for item in catalog) == 14
+    assert sum(item.brand_mode == "comparative" for item in catalog) == 4
+    assert sum(item.brand_mode == "branded" for item in catalog) == 2
 
 
 def test_universal_education_queries_never_use_beauty_vocabulary() -> None:

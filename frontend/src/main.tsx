@@ -1940,7 +1940,9 @@ function Wizard({
       try {
         const detected = await api.brandProfile(brand, websiteUrl);
         setBrandProfile(detected);
-        setCategory(detected.categories[0] ?? detected.description ?? brand);
+        // A page title or marketing description is not a demand category. Leaving
+        // this blank is safer than generating generic, misleading buyer questions.
+        setCategory(detected.categories[0] ?? "");
         setStep(2);
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Не удалось изучить сайт бренда");
@@ -2058,7 +2060,9 @@ function Wizard({
           {step === 1
             ? "Укажите официальный сайт — сначала мы изучим категории, товары и характеристики бренда."
             : step === 2
-              ? "Мы определили категорию по сайту. Проверьте её, географию и частоту мониторинга."
+              ? brandProfile?.categories.length
+                ? "Мы определили категорию по сайту. Проверьте её, географию и частоту мониторинга."
+                : "Категорию по сайту определить не удалось. Укажите её своими словами — так вопросы будут естественными и полезными."
               : "Удалите лишнее или добавьте свои вопросы — именно их система задаст Алисе."}
         </p>
         {step === 1 && (

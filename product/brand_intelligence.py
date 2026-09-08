@@ -316,6 +316,17 @@ class BrandIntelligenceEngine:
             if any(marker in product_text for marker in markers)
         )
         vertical_taxonomy = {
+            "GEO и AI-видимость": (
+                "geo-видим",
+                "гео-видим",
+                "ai-видим",
+                "видимость бренда в ответах",
+                "видимость в ответах ии",
+                "нейропоиск",
+                "ai ranking",
+                "yandexgpt",
+                "яндексgpt",
+            ),
             "Онлайн-образование": (
                 "онлайн-образован",
                 "онлайн обучение",
