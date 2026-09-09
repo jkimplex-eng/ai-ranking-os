@@ -1937,8 +1937,7 @@ function Wizard({
         setRuntimeProviders(runtime.providers);
         if (!saved.selectedModels?.length) {
           const available = registry.items.filter((model) => runtime.providers.some((item) => (item.model_id === model.id || item.provider === model.provider) && item.interface.available === true));
-          const preferred = available.find((model) => ["yandex", "yandexgpt"].includes(model.provider.toLowerCase())) ?? available[0];
-          if (preferred) setSelectedModels([preferred.id]);
+          setSelectedModels(available.map((model) => model.id));
         }
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось проверить подключение моделей"));
@@ -2242,13 +2241,15 @@ function Wizard({
               <span>Режим</span>
               <b>{routingProfiles.find(([value]) => value === profile)?.[1]}</b>
             </div>
-            <div><span>Охват</span><b>{scope}</b></div>
+            <div><span>Охват моделей</span><b>{scope === "SELECTED" ? "Выбранные вручную" : scope === "ALL" ? "Все подключённые" : scope === "RUSSIAN" ? "Российские" : scope === "FREE" ? "Бесплатные" : "Коммерческие"}</b></div>
             <div><span>Профиль исследования</span><b>{researchProfile}</b></div>
-            <p>{review?.prompt}</p>
-            <div><span>Выбранные модели</span><b>{review?.selected_models?.join(", ") || review?.provider_models?.join(", ") || "Router не вернул план"}</b></div>
+            <details><summary>Техническое задание для моделей</summary><p>{review?.prompt}</p></details>
+            <div><span>Ответы LLM</span><b>{review?.selected_models?.join(", ") || review?.provider_models?.join(", ") || "Нет подключённых моделей"}</b><small>Проверяются только перечисленные API-модели. Если здесь один YandexGPT Pro, значит в запуске выбрана только эта модель.</small></div>
             <div><span>Покупательских запросов</span><b>{customQueries.length}</b></div>
-            <div><span>Источник спроса</span><b>Wordstat · частотность Яндекс Поиска</b></div>
-            <div><span>Проверяемая система</span><b>API выбранных моделей (не пользовательская Алиса)</b></div>
+            <div><span>Спрос</span><b>Wordstat · подключён</b><small>Частотность запросов пользователей Яндекс Поиска.</small></div>
+            <div><span>Площадки и конкуренты</span><b>Yandex Search API · после исследования</b><small>Фактические результаты поиска, отдельно от ответов LLM.</small></div>
+            <div><span>Алиса</span><b>Не измеряется этим запуском</b><small>YandexGPT API не является пользовательской Алисой. Данные Алисы нельзя приписывать этому ответу.</small></div>
+            <div><span>Нейропоиск</span><b>Не измеряется этим запуском</b><small>Будет показан отдельно только при наличии сохранённого ответа или официального источника данных.</small></div>
             <div><span>Мониторинг</span><b>{cadence === "DAILY" ? "Ежедневно" : "Еженедельно"}</b></div>
             <div><span>Всего проверок</span><b>{customQueries.length * Math.max(scopedModels().length, 1)}</b></div>
             <div><span>Оценка времени</span><b>{review?.estimated_time_ms ? `${review.estimated_time_ms} ms` : "Не рассчитана"}</b></div>
