@@ -53,6 +53,13 @@ class YandexGenerativeEvidenceService:
                 )
                 response.raise_for_status()
                 payload = response.json()
+                if isinstance(payload, list):
+                    payload = next(
+                        (item for item in reversed(payload) if isinstance(item, dict)),
+                        {},
+                    )
+                if not isinstance(payload, dict):
+                    raise ValueError("Unexpected Yandex GenSearch response")
                 content = str((payload.get("message") or {}).get("content") or "")
                 sources = [
                     {

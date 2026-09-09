@@ -68,3 +68,30 @@ def test_generative_evidence_does_not_infer_a_missing_brand() -> None:
     assert result["recommendation_count"] == 0
     assert result["target_citation_count"] == 0
     assert result["visibility_score"] == 0.0
+
+
+def test_generative_evidence_accepts_a_list_response() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=[
+                {"message": {"content": "Промежуточный ответ"}},
+                {
+                    "message": {"content": "Разум рынка упомянут в итоговом ответе."},
+                    "sources": [],
+                },
+            ],
+        )
+
+    service = YandexGenerativeEvidenceService(
+        httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    result = service.measure(
+        credential="secret",
+        auth_type="API_KEY",
+        folder_id="folder",
+        queries=["какой сервис GEO выбрать"],
+        brand="Разум рынка",
+    )
+
+    assert result["mention_count"] == 1
