@@ -110,7 +110,7 @@ class WordstatService:
         }
         request_payload: dict[str, object] = {
             "phrase": payload.category.strip(),
-            "numPhrases": min(payload.limit * 3, 150),
+            "numPhrases": min(payload.limit * 3, 300),
             "devices": [device_names[payload.device]],
             "folderId": connection.folder_id,
         }

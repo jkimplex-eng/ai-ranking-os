@@ -4,6 +4,7 @@ import httpx
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+import authentication.models  # noqa: F401
 import decision_center.models  # noqa: F401
 import execution_engine.models  # noqa: F401
 import workspace.models  # noqa: F401
@@ -98,3 +99,13 @@ def test_wordstat_endpoints_are_documented_in_openapi() -> None:
     assert "/integrations/yandex-wordstat/connection" in paths
     assert "/integrations/yandex-wordstat/discover" in paths
     assert "/integrations/yandex-wordstat/analytics" in paths
+
+
+def test_wordstat_accepts_all_query_sizes_offered_by_the_ui() -> None:
+    for limit in (30, 50, 100):
+        payload = WordstatDiscoveryRequest(
+            brand="AI Ranking OS",
+            category="GEO продвижение",
+            limit=limit,
+        )
+        assert payload.limit == limit

@@ -24,7 +24,7 @@ class WordstatDiscoveryRequest(BaseModel):
     category: str = Field(min_length=2, max_length=500)
     region_ids: list[int] = Field(default_factory=list, max_length=50)
     device: str = Field(default="all", pattern=r"^(all|desktop|phone|tablet)$")
-    limit: int = Field(default=20, ge=5, le=50)
+    limit: int = Field(default=30, ge=5, le=100)
 
     @field_validator("region_ids")
     @classmethod
