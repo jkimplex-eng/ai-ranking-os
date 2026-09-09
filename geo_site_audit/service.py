@@ -119,6 +119,19 @@ class _AuditParser(HTMLParser):
 class GeoSiteAuditService:
     VERSION = "1.1"
     MAX_CRAWLED_PAGES = 40
+    NON_HTML_SUFFIXES = (
+        ".xml",
+        ".json",
+        ".pdf",
+        ".zip",
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".webp",
+        ".svg",
+        ".css",
+        ".js",
+    )
     LIMITATION = (
         "Оценка измеряет публичные GEO-сигналы сайта. Она не доказывает индексацию "
         "или причинное влияние на закрытые алгоритмы AI-платформ."
@@ -172,7 +185,9 @@ class GeoSiteAuditService:
                     "strategy": "главная страница, sitemap и внутренние ссылки того же хоста",
                     "max_pages": self.MAX_CRAWLED_PAGES,
                     "pages_discovered": len(pages),
-                    "pages_scanned": sum(item["status"] == 200 for item in pages),
+                    "pages_scanned": sum(
+                        item["status"] == 200 and not item.get("error") for item in pages
+                    ),
                     "pages": pages,
                 },
                 "knowledge_graph": graph,
@@ -219,6 +234,7 @@ class GeoSiteAuditService:
             if (
                 parsed.scheme not in {"http", "https"}
                 or parsed.hostname != root.hostname
+                or parsed.path.casefold().endswith(self.NON_HTML_SUFFIXES)
                 or normalized in seen
             ):
                 continue

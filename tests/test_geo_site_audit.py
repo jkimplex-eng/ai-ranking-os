@@ -67,6 +67,7 @@ class _SiteFetcher:
             {"@type":"FAQPage"}]}</script></head><body>
             <h1>Brand — косметика для здоровья кожи</h1>
             <a href="/about">О компании</a>
+            <a href="/sitemap.xml">Карта сайта</a>
             <a href="https://pubmed.ncbi.nlm.nih.gov">Исследование</a>
             <a href="https://who.int">Стандарт</a><time>2026-08-20</time>
             <span>Автор: эксперт</span></body></html>"""
