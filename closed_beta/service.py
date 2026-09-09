@@ -3,7 +3,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 
 from audit.ports import AuditWriter
-from closed_beta.models import BetaAccessStatus, BetaInvitation, BetaUserProfile
+from closed_beta.models import BetaAccessStatus, BetaInvitation, BetaUserProfile, SubscriptionStatus
 from closed_beta.ports import IdentityPort, RolePort, UsagePort
 from closed_beta.repository import BetaRepository
 from closed_beta.schemas import (
@@ -15,6 +15,9 @@ from closed_beta.schemas import (
     InvitationCreate,
     InvitationCreated,
     InvitationRead,
+    SubscriptionRead,
+    SubscriptionUpdate,
+    TariffRead,
 )
 
 
@@ -27,6 +30,57 @@ class BetaNotFoundError(LookupError):
 
 
 class ClosedBetaService:
+    TARIFFS = {
+        "trial": (
+            "Пробный",
+            0,
+            "Проверка платформы перед оплатой",
+            BetaLimits(
+                daily_research_limit=2,
+                monthly_research_limit=10,
+                max_projects=1,
+                max_domains=1,
+                max_organization_users=2,
+            ),
+        ),
+        "start": (
+            "Старт",
+            19900,
+            "Для одной компании и регулярного GEO-мониторинга",
+            BetaLimits(
+                daily_research_limit=5,
+                monthly_research_limit=100,
+                max_projects=3,
+                max_domains=5,
+                max_organization_users=5,
+            ),
+        ),
+        "growth": (
+            "Рост",
+            49900,
+            "Для команды и нескольких брендов",
+            BetaLimits(
+                daily_research_limit=20,
+                monthly_research_limit=500,
+                max_projects=15,
+                max_domains=30,
+                max_organization_users=15,
+            ),
+        ),
+        "business": (
+            "Бизнес",
+            99900,
+            "Для агентств и портфеля клиентов",
+            BetaLimits(
+                daily_research_limit=100,
+                monthly_research_limit=2500,
+                max_projects=100,
+                max_domains=250,
+                max_organization_users=50,
+            ),
+        ),
+    }
+
     def __init__(
         self,
         repository: BetaRepository,
@@ -63,6 +117,38 @@ class ClosedBetaService:
             max_organization_users=profile.max_organization_users,
         )
 
+    @classmethod
+    def tariffs(cls) -> list[TariffRead]:
+        return [
+            TariffRead(
+                code=code,
+                name=value[0],
+                monthly_price_rub=value[1],
+                description=value[2],
+                limits=value[3],
+            )
+            for code, value in cls.TARIFFS.items()
+        ]
+
+    @classmethod
+    def _subscription(cls, profile: BetaUserProfile) -> SubscriptionRead:
+        tariff = cls.TARIFFS.get(profile.plan_code, cls.TARIFFS["trial"])
+        return SubscriptionRead(
+            plan_code=profile.plan_code,
+            plan_name=tariff[0],
+            status=SubscriptionStatus(profile.subscription_status),
+            starts_at=profile.subscription_started_at,
+            ends_at=profile.subscription_ends_at,
+            payment_provider=profile.payment_provider,
+            external_customer_id=profile.external_customer_id,
+            external_subscription_id=profile.external_subscription_id,
+            checkout_available=False,
+            checkout_message=(
+                "Онлайн-оплата ещё не подключена. Администратор может активировать "
+                "подписку вручную после подтверждения оплаты."
+            ),
+        )
+
     def users(
         self,
         search: str | None = None,
@@ -75,9 +161,7 @@ class ClosedBetaService:
         result = []
         for fact in facts:
             profile = profiles.get(fact.user_id) or self._ensure_profile(fact.user_id)
-            if search and search.casefold() not in (
-                f"{fact.email} {fact.display_name}".casefold()
-            ):
+            if search and search.casefold() not in (f"{fact.email} {fact.display_name}".casefold()):
                 continue
             if status and profile.status != status.value:
                 continue
@@ -89,6 +173,7 @@ class ClosedBetaService:
                     status=BetaAccessStatus(profile.status),
                     research_count=counts.get(fact.user_id, 0),
                     limits=self._limits(profile),
+                    subscription=self._subscription(profile),
                 )
             )
         return result
@@ -121,6 +206,39 @@ class ClosedBetaService:
             correlation_id=correlation_id,
             old_state=old,
             new_state={"status": profile.status, "limits": self._limits(profile).model_dump()},
+        )
+        return next(item for item in self.users() if item.user_id == user_id)
+
+    def update_subscription(
+        self, user_id: int, payload: SubscriptionUpdate, actor_id: str, correlation_id: str
+    ) -> BetaUserRead:
+        if payload.plan_code not in self.TARIFFS:
+            raise BetaAdminError("Unknown tariff")
+        if not any(item.user_id == user_id for item in self.identities.users()):
+            raise BetaNotFoundError("User not found")
+        profile = self._ensure_profile(user_id)
+        old = self._subscription(profile).model_dump(mode="json")
+        profile.plan_code = payload.plan_code
+        profile.subscription_status = payload.status.value
+        profile.subscription_started_at = payload.starts_at
+        profile.subscription_ends_at = payload.ends_at
+        profile.payment_provider = payload.payment_provider
+        profile.external_customer_id = payload.external_customer_id
+        profile.external_subscription_id = payload.external_subscription_id
+        if payload.apply_plan_limits:
+            for field, value in self.TARIFFS[payload.plan_code][3].model_dump().items():
+                setattr(profile, field, value)
+        self.repository.save_profile(profile)
+        self.audit.record(
+            actor_id=actor_id,
+            actor_type="user",
+            action="subscription.updated",
+            category="billing",
+            resource="beta_user",
+            resource_id=str(user_id),
+            correlation_id=correlation_id,
+            old_state=old,
+            new_state=self._subscription(profile).model_dump(mode="json"),
         )
         return next(item for item in self.users() if item.user_id == user_id)
 

@@ -251,7 +251,9 @@ export type OrganizationMember = {
 export type WorkspaceSettings = { id: number; name: string; settings: Record<string, unknown> };
 export type ApiKeyItem = { id: number; name: string; prefix: string; scopes: string[]; revoked_at?: string };
 export type ClientLimits = { daily_research_limit: number; monthly_research_limit: number; max_projects: number; max_domains: number; max_organization_users: number };
-export type AdminUser = { user_id: number; email: string; display_name: string; status: string; is_active: boolean; research_count: number; last_seen_at?: string; limits?: ClientLimits };
+export type Tariff = { code: string; name: string; monthly_price_rub: number; description: string; limits: ClientLimits; selectable: boolean };
+export type ClientSubscription = { plan_code: string; plan_name: string; status: string; starts_at?: string; ends_at?: string; payment_provider?: string; external_customer_id?: string; external_subscription_id?: string; checkout_available: boolean; checkout_message: string };
+export type AdminUser = { user_id: number; email: string; display_name: string; status: string; is_active: boolean; research_count: number; last_seen_at?: string; limits?: ClientLimits; subscription: ClientSubscription };
 export type AdminFeedback = { id: number; title: string; feedback_type: string; priority: string; status: string; user_id: number; created_at: string };
 export type AdminAudit = { id: number; actor_id: string; action: string; category: string; resource: string; created_at: string };
 
@@ -343,6 +345,10 @@ export class ApiClient {
   adminUsers(search = "") { return this.request<AdminUser[]>(`/admin/beta/users${search ? `?search=${encodeURIComponent(search)}` : ""}`); }
   updateClientLimits(userId: number, limits: ClientLimits) {
     return this.request<AdminUser>(`/admin/beta/users/${userId}`, {method: "PATCH", body: JSON.stringify({limits})});
+  }
+  adminTariffs() { return this.request<Tariff[]>("/admin/billing/tariffs"); }
+  updateClientSubscription(userId: number, payload: {plan_code: string; status: string; starts_at?: string | null; ends_at?: string | null; apply_plan_limits: boolean}) {
+    return this.request<AdminUser>(`/admin/billing/subscriptions/${userId}`, {method: "PATCH", body: JSON.stringify(payload)});
   }
   createClientInvitation(email: string) {
     return this.request<{token: string; expires_at: string}>("/admin/beta/invitations", {method: "POST", body: JSON.stringify({email})});

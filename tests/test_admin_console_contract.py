@@ -7,6 +7,8 @@ def test_admin_console_public_contracts_are_available() -> None:
     paths = app.openapi()["paths"]
     required = {
         "/admin/beta/users",
+        "/admin/billing/tariffs",
+        "/admin/billing/subscriptions/{user_id}",
         "/organizations",
         "/research",
         "/reports",
