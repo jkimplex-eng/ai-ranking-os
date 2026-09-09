@@ -147,7 +147,8 @@ class WordstatService:
         ordered = [
             item
             for item in ordered
-            if item[2] == "TOP" or self._association_relevant(item[0], payload.category)
+            if self._query_well_formed(item[0])
+            and (item[2] == "TOP" or self._association_relevant(item[0], payload.category))
         ]
         brand_key = payload.brand.casefold().strip()
         unbranded = [item for item in ordered if brand_key not in item[0].casefold()]
@@ -210,7 +211,10 @@ class WordstatService:
             return False
 
         def same_lexeme(left: str, right: str) -> bool:
-            prefix_length = min(5, len(left), len(right))
+            # Seven characters separate «продвижение» from «продвинутый», while
+            # five are enough for shorter inflections such as дизайн/дизайну.
+            desired_length = 7 if min(len(left), len(right)) >= 8 else 5
+            prefix_length = min(desired_length, len(left), len(right))
             return prefix_length >= 3 and left[:prefix_length] == right[:prefix_length]
 
         return any(
@@ -218,6 +222,12 @@ class WordstatService:
             for category_token in category_tokens
             for query_token in query_tokens
         )
+
+    @staticmethod
+    def _query_well_formed(query: str) -> bool:
+        # Wordstat occasionally tokenizes an IDN hostname into an unusable search
+        # phrase (for example ``xn d1...``). It is not a buyer question.
+        return re.search(r"\bxn\s+[a-z0-9]{6,}\b", query.casefold()) is None
 
     def latest(self, organization_id: int, brand: str | None = None) -> WordstatSnapshotRead:
         snapshot = self.repository.latest(organization_id, brand)

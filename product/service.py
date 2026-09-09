@@ -245,6 +245,10 @@ class ProductPipeline:
                     "source_rank": str(index + 1),
                 }
             )
+        if not payload.custom_queries:
+            query_catalog = self._prioritize_observed_queries(
+                query_catalog, limit=payload.query_limit
+            )
         estimated_cost *= len(query_catalog)
         estimated_time *= len(query_catalog)
         return WizardReview(
@@ -263,6 +267,30 @@ class ProductPipeline:
             brand_profile=brand_profile,
             competitor_profiles=competitor_profiles,
         )
+
+    @staticmethod
+    def _prioritize_observed_queries(
+        query_catalog: list[dict[str, str]], *, limit: int
+    ) -> list[dict[str, str]]:
+        priorities = {
+            "yandex_wordstat_observed": 0,
+            "yandex_webmaster_observed": 1,
+        }
+        ordered = sorted(
+            enumerate(query_catalog),
+            key=lambda row: (priorities.get(row[1].get("cluster", ""), 2), row[0]),
+        )
+        result: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for _, item in ordered:
+            key = item["text"].casefold().strip()
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(item)
+            if len(result) >= limit:
+                break
+        return result
 
     def run(self, payload: WizardRequest) -> Research:
         review = self.review(payload)
@@ -305,6 +333,16 @@ class ProductPipeline:
                             int(item["source_snapshot_id"])
                             for item in review.query_catalog
                             if item.get("source_snapshot_id")
+                            and item.get("cluster") == "yandex_webmaster_observed"
+                        ),
+                        None,
+                    ),
+                    "yandex_wordstat_snapshot_id": next(
+                        (
+                            int(item["source_snapshot_id"])
+                            for item in review.query_catalog
+                            if item.get("source_snapshot_id")
+                            and item.get("cluster") == "yandex_wordstat_observed"
                         ),
                         None,
                     ),

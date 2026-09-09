@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 import authentication.models  # noqa: F401
 import decision_center.models  # noqa: F401
 import execution_engine.models  # noqa: F401
+import recommendation.simulation.models  # noqa: F401
 import workspace.models  # noqa: F401
 from backend.app.database import Base
 from organization_workspace.models import Organization
@@ -103,6 +104,7 @@ def test_wordstat_filters_ambiguous_association_noise() -> None:
                 "associations": [
                     {"phrase": "гео история", "count": "1912"},
                     {"phrase": "реклама и связи с общественностью", "count": "2594"},
+                    {"phrase": "туториал продвинутого игрока", "count": "361"},
                     {"phrase": "услуги продвижения", "count": "120"},
                 ],
             },
@@ -130,6 +132,11 @@ def test_wordstat_filters_ambiguous_association_noise() -> None:
         "услуги продвижения",
     ]
     assert snapshot.algorithm_version == "1.1"
+
+
+def test_wordstat_rejects_tokenized_punycode_query() -> None:
+    assert WordstatService._query_well_formed("geo продвижение xn d1abiikjcedki") is False
+    assert WordstatService._query_well_formed("geo продвижение сайта") is True
 
 
 def test_wordstat_endpoints_are_documented_in_openapi() -> None:

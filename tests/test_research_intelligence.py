@@ -542,3 +542,28 @@ def test_plan_does_not_pad_actions_or_claim_unobserved_site_defects() -> None:
     assert len(actions) == 1
     assert actions[0]["channel"] == "DIAGNOSTIC"
     assert actions[0]["evidence_status"] == "NEEDS_DATA"
+
+
+def test_observed_demand_is_prioritized_and_query_limit_is_respected() -> None:
+    catalog = [
+        {"cluster": "category_discovery", "text": "Синтетический вопрос"},
+        {
+            "cluster": "yandex_webmaster_observed",
+            "text": "Запрос из Вебмастера",
+        },
+        {
+            "cluster": "yandex_wordstat_observed",
+            "text": "Частотный запрос Wordstat",
+        },
+        {
+            "cluster": "yandex_wordstat_observed",
+            "text": "частотный запрос wordstat",
+        },
+    ]
+
+    result = ProductPipeline._prioritize_observed_queries(catalog, limit=2)
+
+    assert [item["text"] for item in result] == [
+        "Частотный запрос Wordstat",
+        "Запрос из Вебмастера",
+    ]
