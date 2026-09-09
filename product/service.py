@@ -46,6 +46,7 @@ from product.research_intelligence import (
     ResearchPatternAnalyzer,
 )
 from product.schemas import WizardRequest, WizardReview
+from provider_connections.crypto import SecretCipher
 from provider_connections.dependencies import default_organization
 from provider_recommendation.research_adapter import SqlAlchemyResearchUsageSource
 from provider_recommendation.service import SmartProviderRecommendationService
@@ -60,6 +61,8 @@ from research.scoring import SCORING_VERSION, SCORING_WEIGHTS
 from research.service import run_research
 from trend.research_adapter import build_trend_engine
 from yandex_intelligence.service import YandexIntelligenceQuerySource
+from yandex_wordstat.repository import WordstatRepository
+from yandex_wordstat.search_evidence import YandexSearchEvidenceService
 from yandex_wordstat.service import WordstatQuerySource
 
 
@@ -394,7 +397,9 @@ class ProductPipeline:
             )
 
     def _complete_product_pipeline(self, research: Research) -> None:
-        artifacts: dict[str, Any] = {}
+        artifacts: dict[str, Any] = dict(
+            research.metadata_payload.get("product_artifacts", {})
+        )
         recommendations = RecommendationEngine(
             self.db, SqlAlchemyResearchScoreAdapter(self.db)
         ).generate(research.id)
@@ -442,6 +447,17 @@ class ProductPipeline:
         artifacts["provider_recommendations"] = [
             item.model_dump(mode="json") for item in provider_advice
         ]
+        search_queries = [
+            item["text"]
+            for item in research.metadata_payload.get("query_catalog", [])
+            if item.get("cluster") == "yandex_wordstat_observed" and item.get("text")
+        ]
+        previous_search = artifacts.get("yandex_search_evidence", {})
+        selected_search_queries = YandexSearchEvidenceService.select_queries(search_queries)
+        if previous_search.get("queries_requested") != selected_search_queries:
+            artifacts["yandex_search_evidence"] = self._yandex_search_evidence(
+                research, search_queries
+            )
         research.metadata_payload = {**research.metadata_payload, "product_artifacts": artifacts}
         self.db.commit()
         PublicationLearningService(self.db).evaluate_followup(research.id)
@@ -455,6 +471,47 @@ class ProductPipeline:
                 resource_type="research",
                 resource_id=str(research.id),
             )
+
+    def _yandex_search_evidence(
+        self, research: Research, queries: list[str]
+    ) -> dict[str, Any]:
+        organization_id = research.metadata_payload.get("organization_id")
+        if not isinstance(organization_id, int) or not queries:
+            return {
+                "version": YandexSearchEvidenceService.VERSION,
+                "status": "NOT_MEASURED",
+                "resources": [],
+                "limitations": [
+                    "Нет организации или сохранённых запросов Wordstat для поискового замера."
+                ],
+            }
+        connection = WordstatRepository(self.db).connection(organization_id)
+        if connection is None:
+            return {
+                "version": YandexSearchEvidenceService.VERSION,
+                "status": "NOT_MEASURED",
+                "resources": [],
+                "limitations": ["Yandex Search API не подключён."],
+            }
+        settings = get_settings()
+        try:
+            credential = SecretCipher(
+                settings.provider_secret_key or settings.auth_jwt_secret
+            ).decrypt(connection.credential_ciphertext)
+        except ValueError:
+            return {
+                "version": YandexSearchEvidenceService.VERSION,
+                "status": "NOT_MEASURED",
+                "resources": [],
+                "limitations": ["Сохранённый ключ Yandex Search API не удалось расшифровать."],
+            }
+        return YandexSearchEvidenceService().discover(
+            credential=credential,
+            auth_type=connection.auth_type,
+            folder_id=connection.folder_id,
+            queries=queries,
+            region_id=225,
+        )
 
     @staticmethod
     def _values(payload: WizardRequest) -> dict[str, str]:
@@ -601,6 +658,10 @@ class FinalReportService:
             "source_analysis": source_analysis,
             "competitive_influence": competitive_influence,
             "publication_learning": publication_learning,
+            "yandex_search_evidence": artifacts.get("yandex_search_evidence"),
+            "publication_opportunities": (
+                artifacts.get("yandex_search_evidence", {}).get("resources", [])[:10]
+            ),
         }
 
     @staticmethod

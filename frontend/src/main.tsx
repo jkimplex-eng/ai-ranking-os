@@ -191,6 +191,26 @@ type ReportShape = {
     source_patterns: Array<{ resource: string; response_count: number }>;
   };
   geo_opportunities?: EvidenceAction[];
+  yandex_search_evidence?: {
+    version: string;
+    status: string;
+    queries_requested?: string[];
+    queries_measured?: number;
+    observations?: number;
+    formula?: string;
+    limitations?: string[];
+  };
+  publication_opportunities?: Array<{
+    domain: string;
+    query_count: number;
+    query_coverage_percent: number;
+    best_position: number;
+    search_presence_score: number;
+    evidence_status: string;
+    confidence: "HIGH" | "MEDIUM" | "LOW";
+    action: string;
+    evidence: Array<{ query: string; position: number; url: string; title: string }>;
+  }>;
   source_analysis?: SourceAnalysis;
   competitive_influence?: { version: string; causality_status: string; verification: string; competitors: Array<{ competitor: string; website_url: string; response_count: number; profile_confidence: number; evidence_urls: string[]; matched_products: Array<{ target_product: string; competitor_product: string; feature_similarity: number; target_price?: string | number; competitor_price?: string | number; currency?: string; target_evidence_url?: string; competitor_evidence_url?: string }> }>; source_influence: Array<{ resource: string; response_count: number; relationship: string; explanation: string }> };
   publication_learning?: { status: string; explanation: string; experiments: Array<{ id: number; publication_id: number; baseline_research_id: number; followup_research_id: number; evidence_grade: string; evidence_level: string; causality_status: string; metric_deltas: Record<string, number>; adjusted_metric_deltas: Record<string, number>; design_type: string; treatment_pairs: number; control_pairs: number; effect_method: string; sample_size: number }>; influence_estimates: Array<{ id: number; resource_domain: string; channel: string; content_type: string; metric: string; provider: string; model: string; sample_size: number; expected_delta: number; confidence_min: number; confidence_max: number; confidence_score: number; evidence_grade: string; evidence_level: string; controlled_experiments: number; effect_method: string }> };
@@ -2429,6 +2449,19 @@ function Report({
             <h2>Где и что публиковать</h2>
           </div>
         </div>
+        {report.publication_opportunities?.length ? <section className="panel research-lab-section">
+          <span className="section-label">НАБЛЮДЕНИЯ ЯНДЕКС ПОИСКА</span>
+          <h2>Площадки, уже видимые по спросу Wordstat</h2>
+          <p>Это не догадка и не обещание попадания в Алису. Список построен по фактической выдаче Яндекс Поиска для {report.yandex_search_evidence?.queries_measured ?? 0} запросов. Балл отражает только повторяемость и позиции площадки в этой выборке.</p>
+          {report.publication_opportunities.map((item) => <details className="evidence-details" key={item.domain}>
+            <summary>{item.domain} · {item.query_count} запросов · лучшая позиция {item.best_position}</summary>
+            <p><b>Что сделать:</b> {item.action}</p>
+            <p><b>Поисковое присутствие:</b> {item.search_presence_score.toFixed(1)} из 100 по формуле текущей выборки; это не вероятность результата.</p>
+            <p><b>Покрытие:</b> {item.query_coverage_percent.toFixed(1)}% · <b>уверенность наблюдения:</b> {item.confidence}</p>
+            <ul>{item.evidence.map((evidence) => <li key={`${evidence.query}:${evidence.position}:${evidence.url}`}><b>#{evidence.position}</b> по запросу «{evidence.query}» — <a href={evidence.url} target="_blank" rel="noreferrer">{evidence.title || item.domain}</a></li>)}</ul>
+          </details>)}
+          <details className="evidence-details"><summary>Как рассчитано и чего вывод не доказывает</summary><p>{report.yandex_search_evidence?.formula}</p><ul>{report.yandex_search_evidence?.limitations?.map((limitation) => <li key={limitation}>{limitation}</li>)}</ul></details>
+        </section> : <div className="empty-state">Площадки по Яндекс Поиску пока не измерены. Для этого нужны запросы Wordstat и подключённый Yandex Search API.</div>}
         {report.geo_opportunities?.length ? <EvidencePlan actions={report.geo_opportunities} sources={report.source_analysis} /> : report.recommendations?.length ? report.recommendations.map((recommendation, index) => <RecommendationCard recommendation={recommendation} plan={planFor(recommendation)} simulation={simulationFor(recommendation)} key={`${recommendation.explanation}-${index}`} />) : <div className="empty-state">Недостаточно данных для доказательного плана публикаций.</div>}
       </section>
       <section className="panel research-lab-section"><span className="section-label">СИМУЛЯТОР ДЕЙСТВИЙ</span><h2>Прогноз при выполнении выбранных рекомендаций</h2><p>Детерминированный прогноз версии {result.simulation?.model_version ?? "не рассчитан"}. Это ожидаемый эффект, а не обещание результата.</p>{result.simulation?.simulations.length ? <><div className="simulator-list">{result.simulation.simulations.map((item) => { const recommendation = report.recommendations?.find((candidate) => candidate.id === item.recommendation_id); return <label key={item.recommendation_id}><input type="checkbox" checked={selectedActions.includes(item.recommendation_id)} onChange={() => setSelectedActions((current) => current.includes(item.recommendation_id) ? current.filter((id) => id !== item.recommendation_id) : [...current, item.recommendation_id])} /><span>{recommendation?.explanation ?? `Рекомендация #${item.recommendation_id}`}</span><b>прогноз +{item.predicted_delta.toFixed(1)}</b></label>; })}</div><div className="simulation-total"><span>AI-видимость</span><strong>{visibility.toFixed(1)} → {simulatedVisibility.toFixed(1)}</strong><small>Выбрано действий: {selectedActions.length}</small></div></> : <p className="empty-state">Прогнозы не рассчитаны. Сначала сформируйте рекомендации и симуляцию.</p>}</section>
