@@ -40,6 +40,16 @@ class WordstatRepository:
             ).limit(1)
         )
 
+    def snapshot(
+        self, organization_id: int, snapshot_id: int
+    ) -> WordstatDemandSnapshot | None:
+        return self.db.scalar(
+            select(WordstatDemandSnapshot).where(
+                WordstatDemandSnapshot.id == snapshot_id,
+                WordstatDemandSnapshot.organization_id == organization_id,
+            )
+        )
+
     def save(self, item):
         self.db.add(item)
         self.db.commit()

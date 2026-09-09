@@ -453,6 +453,17 @@ class ProductPipeline:
             for item in research.metadata_payload.get("query_catalog", [])
             if item.get("cluster") == "yandex_wordstat_observed" and item.get("text")
         ]
+        if not search_queries and research.metadata_payload.get("automated"):
+            organization_id = research.metadata_payload.get("organization_id")
+            snapshot_id = research.metadata_payload.get("yandex_wordstat_snapshot_id")
+            if isinstance(organization_id, int) and isinstance(snapshot_id, int):
+                snapshot = WordstatRepository(self.db).snapshot(organization_id, snapshot_id)
+                if snapshot is not None:
+                    search_queries = [
+                        str(item.get("query", "")).strip()
+                        for item in snapshot.queries
+                        if item.get("selected_for_alice") and item.get("query")
+                    ]
         previous_search = artifacts.get("yandex_search_evidence", {})
         selected_search_queries = YandexSearchEvidenceService.select_queries(search_queries)
         if previous_search.get("queries_requested") != selected_search_queries:

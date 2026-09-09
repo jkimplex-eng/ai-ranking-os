@@ -185,3 +185,5 @@ def test_platform_wordstat_connection_is_available_to_isolated_client() -> None:
     assert status.folder_id is None
     assert snapshot.organization_id == 1
     assert json.loads(requests[-1].content)["folderId"] == "platform-folder"
+    assert WordstatRepository(db).snapshot(1, snapshot.id) is not None
+    assert WordstatRepository(db).snapshot(2, snapshot.id) is None
