@@ -463,7 +463,11 @@ class ProductPipeline:
         selected_generative_queries = YandexGenerativeEvidenceService.prepare_queries(
             search_queries
         )
-        if previous_generative.get("queries_requested") != selected_generative_queries:
+        if (
+            previous_generative.get("version") != YandexGenerativeEvidenceService.VERSION
+            or previous_generative.get("queries_requested") != selected_generative_queries
+            or "source_patterns" not in previous_generative
+        ):
             artifacts["yandex_generative_evidence"] = self._yandex_generative_evidence(
                 research, search_queries
             )

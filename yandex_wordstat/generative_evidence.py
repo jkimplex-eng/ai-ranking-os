@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlparse
@@ -114,6 +115,46 @@ class YandexGenerativeEvidenceService:
             ),
             1,
         )
+        grouped_sources: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+        for observation in observations:
+            for source in observation["sources"]:
+                if not source["used"]:
+                    continue
+                domain = cls._domain(source["url"])
+                if domain:
+                    grouped_sources[domain].append(
+                        {
+                            "query": observation["query"],
+                            "url": source["url"],
+                            "title": source["title"],
+                        }
+                    )
+        source_patterns = [
+            {
+                "domain": domain,
+                "used_in_answers": len({item["query"] for item in evidence}),
+                "coverage_percent": round(
+                    len({item["query"] for item in evidence}) / denominator * 100, 1
+                ),
+                "confidence": (
+                    "HIGH"
+                    if len({item["query"] for item in evidence}) >= 3
+                    else "MEDIUM"
+                    if len({item["query"] for item in evidence}) >= 2
+                    else "LOW"
+                ),
+                "evidence": evidence,
+                "interpretation": (
+                    "Яндекс использовал этот домен при формировании генеративного ответа. "
+                    "Это основание изучить формат материалов, но не доказательство, что "
+                    "на площадке можно свободно опубликоваться."
+                ),
+            }
+            for domain, evidence in grouped_sources.items()
+        ]
+        source_patterns.sort(
+            key=lambda item: (-item["used_in_answers"], item["domain"])
+        )
         return {
             "version": cls.VERSION,
             "status": "MEASURED" if measured else "NOT_MEASURED",
@@ -128,6 +169,7 @@ class YandexGenerativeEvidenceService:
                 "0.15 × доля ответов со ссылкой на сайт бренда)"
             ),
             "observations": observations,
+            "source_patterns": source_patterns,
             "failures": failures,
             "captured_at": datetime.now(UTC).isoformat(),
             "evidence_status": "OBSERVED_YANDEX_GENERATIVE_SEARCH",

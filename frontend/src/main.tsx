@@ -220,6 +220,14 @@ type ReportShape = {
       target_cited: boolean;
       sources: Array<{ url: string; title: string; used: boolean }>;
     }>;
+    source_patterns?: Array<{
+      domain: string;
+      used_in_answers: number;
+      coverage_percent: number;
+      confidence: "HIGH" | "MEDIUM" | "LOW";
+      interpretation: string;
+      evidence: Array<{ query: string; url: string; title: string }>;
+    }>;
   };
   publication_opportunities?: Array<{
     domain: string;
@@ -2478,6 +2486,9 @@ function Report({
           <span className="section-label">ГЕНЕРАТИВНЫЙ ПОИСК ЯНДЕКСА</span>
           <h2>Что получает пользователь по запросам Wordstat</h2>
           <p><b>{primaryVisibility.toFixed(1)} из 100</b> · упоминаний {yandexGenerative?.mention_count ?? 0} · рекомендаций {yandexGenerative?.recommendation_count ?? 0} · ссылок на сайт {yandexGenerative?.target_citation_count ?? 0}.</p>
+          <h3>Источники, реально использованные Яндексом</h3>
+          {yandexGenerative?.source_patterns?.length ? yandexGenerative.source_patterns.slice(0, 12).map((source) => <details className="evidence-details" key={source.domain}><summary>{source.domain} · использован в {source.used_in_answers} ответах · уверенность {source.confidence}</summary><p>{source.interpretation}</p><p><b>Покрытие выборки:</b> {source.coverage_percent.toFixed(1)}%</p><ul>{source.evidence.map((item) => <li key={`${item.query}:${item.url}`}><a href={item.url} target="_blank" rel="noreferrer">{item.title || source.domain}</a> · запрос «{item.query}»</li>)}</ul></details>) : <p>Использованные источники не возвращены.</p>}
+          <h3>Исходные ответы</h3>
           {yandexGenerative?.observations?.map((item) => <details className="evidence-details" key={item.query}><summary>{item.brand_recommended ? "Рекомендует" : item.brand_mentioned ? "Упоминает" : "Не упоминает"} · {item.query}</summary><p>{item.answer}</p>{item.sources.length ? <ul>{item.sources.map((source) => <li key={source.url}><a href={source.url} target="_blank" rel="noreferrer">{source.title || source.url}</a>{source.used ? " · использован в ответе" : ""}</li>)}</ul> : <p>Источники не возвращены.</p>}</details>)}
           <details className="evidence-details"><summary>Формула и ограничения</summary><p>{yandexGenerative?.formula}</p><ul>{yandexGenerative?.limitations?.map((item) => <li key={item}>{item}</li>)}</ul></details>
         </section> : <div className="empty-state">Генеративный поиск Яндекса пока не измерен; оценка API-модели не заменяет пользовательскую выдачу.</div>}

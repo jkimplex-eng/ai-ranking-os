@@ -41,6 +41,8 @@ def test_generative_evidence_measures_brand_and_target_citation() -> None:
     assert result["target_citation_count"] == 1
     assert result["visibility_score"] == 100.0
     assert result["evidence_status"] == "OBSERVED_YANDEX_GENERATIVE_SEARCH"
+    assert result["source_patterns"][0]["domain"] == "app.разуммаркета.рф"
+    assert result["source_patterns"][0]["used_in_answers"] == 1
 
 
 def test_generative_evidence_does_not_infer_a_missing_brand() -> None:
