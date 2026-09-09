@@ -45,11 +45,13 @@ class WordstatService:
         repository: WordstatRepository,
         cipher: SecretCipher,
         client: httpx.Client | None = None,
+        platform_organization_id: int | None = None,
     ) -> None:
         self.db = db
         self.repository = repository
         self.cipher = cipher
         self.client = client or httpx.Client(timeout=30)
+        self.platform_organization_id = platform_organization_id
 
     def connect(
         self,
@@ -92,7 +94,10 @@ class WordstatService:
         return self.read(self.repository.save(connection))
 
     def status(self, organization_id: int) -> WordstatConnectionRead:
-        return self.read(self.repository.connection(organization_id))
+        connection, managed = self.repository.effective_connection(
+            organization_id, self.platform_organization_id
+        )
+        return self.read(connection, managed_by_platform=managed)
 
     def disconnect(self, organization_id: int) -> None:
         connection = self.repository.connection(organization_id)
@@ -363,21 +368,26 @@ class WordstatService:
         )
 
     @staticmethod
-    def read(connection: WordstatConnection | None) -> WordstatConnectionRead:
+    def read(
+        connection: WordstatConnection | None, *, managed_by_platform: bool = False
+    ) -> WordstatConnectionRead:
         if connection is None:
             return WordstatConnectionRead(connected=False, status="NOT_CONFIGURED")
         return WordstatConnectionRead(
             connected=connection.status == "CONNECTED",
             status=connection.status,
-            folder_id=connection.folder_id,
-            auth_type=connection.auth_type,
+            folder_id=None if managed_by_platform else connection.folder_id,
+            auth_type=None if managed_by_platform else connection.auth_type,
             last_checked_at=connection.last_checked_at,
             last_success_at=connection.last_success_at,
             last_error=connection.last_error,
+            managed_by_platform=managed_by_platform,
         )
 
     def _connection(self, organization_id: int) -> tuple[WordstatConnection, str]:
-        connection = self.repository.connection(organization_id)
+        connection, _ = self.repository.effective_connection(
+            organization_id, self.platform_organization_id
+        )
         if connection is None:
             raise WordstatError("Сначала подключите API Яндекс Wordstat в настройках")
         try:

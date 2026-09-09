@@ -104,6 +104,7 @@ services:
       YANDEX_WEBMASTER_CLIENT_ID: ${YANDEX_WEBMASTER_CLIENT_ID:-}
       YANDEX_WEBMASTER_CLIENT_SECRET: ${YANDEX_WEBMASTER_CLIENT_SECRET:-}
       YANDEX_WEBMASTER_REDIRECT_URI: ${YANDEX_WEBMASTER_REDIRECT_URI:-https://app.разуммаркета.рф/api/integrations/yandex-webmaster/callback}
+      WORDSTAT_PLATFORM_ORGANIZATION_ID: ${WORDSTAT_PLATFORM_ORGANIZATION_ID:-2}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

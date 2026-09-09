@@ -38,6 +38,7 @@ def _service(db: Session) -> WordstatService:
         db,
         WordstatRepository(db),
         SecretCipher(settings.provider_secret_key or settings.auth_jwt_secret),
+        platform_organization_id=settings.wordstat_platform_organization_id,
     )
 
 

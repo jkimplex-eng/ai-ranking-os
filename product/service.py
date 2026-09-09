@@ -498,7 +498,10 @@ class ProductPipeline:
                     "Нет организации или сохранённых запросов Wordstat для поискового замера."
                 ],
             }
-        connection = WordstatRepository(self.db).connection(organization_id)
+        settings = get_settings()
+        connection, _ = WordstatRepository(self.db).effective_connection(
+            organization_id, settings.wordstat_platform_organization_id
+        )
         if connection is None:
             return {
                 "version": YandexSearchEvidenceService.VERSION,
@@ -506,7 +509,6 @@ class ProductPipeline:
                 "resources": [],
                 "limitations": ["Yandex Search API не подключён."],
             }
-        settings = get_settings()
         try:
             credential = SecretCipher(
                 settings.provider_secret_key or settings.auth_jwt_secret
@@ -538,10 +540,12 @@ class ProductPipeline:
         organization_id = research.metadata_payload.get("organization_id")
         if not isinstance(organization_id, int) or not queries:
             return {**unavailable, "limitations": ["Нет запросов Wordstat для замера."]}
-        connection = WordstatRepository(self.db).connection(organization_id)
+        settings = get_settings()
+        connection, _ = WordstatRepository(self.db).effective_connection(
+            organization_id, settings.wordstat_platform_organization_id
+        )
         if connection is None:
             return {**unavailable, "limitations": ["Yandex Search API не подключён."]}
-        settings = get_settings()
         try:
             credential = SecretCipher(
                 settings.provider_secret_key or settings.auth_jwt_secret

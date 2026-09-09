@@ -1206,6 +1206,7 @@ function GeoOpportunitiesScreen() {
   const [wordstatSnapshot, setWordstatSnapshot] = useState<WordstatSnapshot>();
   const [wordstatAnalytics, setWordstatAnalytics] = useState<WordstatAnalytics>();
   const [wordstatConnection, setWordstatConnection] = useState<WordstatConnection>();
+  const [researchEvidence, setResearchEvidence] = useState<ReportShape>();
   const [wordstatForm, setWordstatForm] = useState({ brand: "", category: "онлайн-образование", region: "213", device: "all" as "all" | "desktop" | "phone" | "tablet", limit: 30 as 30 | 50 | 100 });
   const [aliceLearning, setAliceLearning] = useState<AliceLearningDashboard>();
   const [aliceAutomation, setAliceAutomation] = useState<AliceAutomationDashboard>();
@@ -1281,12 +1282,17 @@ function GeoOpportunitiesScreen() {
     api.aliceLearningDashboard(selectedBrand).then(setAliceLearning).catch(() => undefined);
     api.latestWordstat(selectedBrand).then((snapshot) => { setWordstatSnapshot(snapshot); setWordstatForm((current) => ({ ...current, brand: selectedBrand, category: snapshot.category })); }).catch(() => { setWordstatSnapshot(undefined); setWordstatAnalytics(undefined); });
     api.wordstatAnalytics(selectedBrand).then(setWordstatAnalytics).catch(() => setWordstatAnalytics(undefined));
+    api.finalReport(selectedResearchId).then((report) => setResearchEvidence(report as ReportShape)).catch(() => setResearchEvidence(undefined));
   }, [selectedBrand, selectedResearchId]);
+  const openIntegrations = () => {
+    window.history.pushState({ screen: "settings" }, "", "/settings?tab=integrations");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  };
   const discoverWordstat = async () => {
     const brand = wordstatForm.brand.trim() || selectedBrand;
     if (!brand) { setError("Введите название бренда, для которого нужно собрать спрос"); return; }
     if (!wordstatForm.category.trim()) { setError("Укажите категорию, например «онлайн-образование»"); return; }
-    if (wordstatConnection?.connected === false) { setError("Wordstat не подключён. Откройте «Настройки → Интеграции» и подключите доступ Search API"); return; }
+    if (wordstatConnection?.connected === false) { openIntegrations(); return; }
     setBusy(true); setError(""); setOperationResult("");
     try {
       const snapshot = await api.discoverWordstat({ brand, category: wordstatForm.category.trim(), region_ids: wordstatForm.region ? [Number(wordstatForm.region)] : [], device: wordstatForm.device, limit: wordstatForm.limit });
@@ -1337,7 +1343,7 @@ function GeoOpportunitiesScreen() {
     try {
       const status = await api.yandexWebmasterStatus();
       if (!status.connected || !status.selected_host_id) {
-        window.location.assign("/settings?tab=integrations");
+        openIntegrations();
         return;
       }
       const result = await api.syncYandexIntelligence();
@@ -1424,6 +1430,7 @@ function GeoOpportunitiesScreen() {
     : aliceLearning?.status === "INSUFFICIENT_SAMPLE"
       ? "НЕДОСТАТОЧНО РАЗНООБРАЗИЯ"
       : "НЕТ ОБУЧЕННОЙ МОДЕЛИ";
+  const observedYandexSources = researchEvidence?.yandex_generative_evidence?.source_patterns ?? [];
   return (
     <main className="analytics-page geo-page">
       <header className="analytics-hero">
@@ -1436,6 +1443,10 @@ function GeoOpportunitiesScreen() {
         <article className="analytics-card metric"><span>Площадки</span><strong>{platforms.length}</strong><small>реальные записи реестра</small></article>
         <article className="analytics-card metric"><span>Активные наборы запросов</span><strong>{activeSets.length}</strong><small>frozen prompt set</small></article>
         <article className="analytics-card metric"><span>Обученные наблюдения</span><strong>{learnedInfluence.filter((item) => item.metric === "visibility_score" && item.provider === "ALL").reduce((total, item) => total + item.sample_size, 0)}</strong><small>подтверждены обнаружением публикации</small></article>
+      </section>
+      <section className="analytics-card geo-site-audit">
+        <div className="geo-audit-intro"><span className="eyebrow">РЕАЛЬНЫЕ ИСТОЧНИКИ ЯНДЕКСА</span><h2>Где стоит добиваться публикации или упоминания</h2><p>Это домены, которые генеративный поиск Яндекса действительно использовал в ответах выбранного исследования. Мы не присваиваем площадкам выдуманные звёзды: показываем частоту, ссылки на наблюдения и уверенность.</p></div>
+        {observedYandexSources.length ? <div className="geo-audit-result"><header><div><strong>{observedYandexSources.length}</strong><span>доменов использовано в ответах</span></div><Badge tone="success">ИЗМЕРЕНО</Badge></header>{observedYandexSources.slice(0, 12).map((source) => <article className="geo-audit-action" key={source.domain}><Badge tone={source.confidence === "HIGH" ? "success" : "warning"}>{source.confidence}</Badge><div><b>{source.domain}</b><p>Использован в {source.used_in_answers} ответах · покрытие {source.coverage_percent.toFixed(1)}%</p><small>{source.interpretation}</small><details><summary>Почему площадка в списке</summary>{source.evidence.map((item) => <p key={`${item.query}:${item.url}`}><a href={item.url} target="_blank" rel="noreferrer">{item.title || item.url}</a><br />Запрос: «{item.query}»</p>)}</details></div></article>)}<p className="method-note">Наличие домена в ответе доказывает использование источника в этой выборке, но не доказывает, что публикация на нём автоматически приведёт к рекомендации. Сначала проверьте правила размещения и тематическое соответствие.</p></div> : <div className="geo-empty"><strong>Площадки ещё не измерены</strong><p>Завершите исследование с генеративным поиском Яндекса. После этого здесь появятся Дзен, VC, отраслевые СМИ или другие домены — только если Яндекс реально использовал их в ответах.</p></div>}
       </section>
       <section className="analytics-card geo-site-audit">
         <div className="geo-audit-intro"><span className="eyebrow">GEO-АУДИТ САЙТА</span><h2>Готов ли сайт стать источником для ИИ</h2><p>100-балльная проверка доступности для краулеров, сущности бренда, контента, доказательности и технических сигналов. Каждый балл подтверждается наблюдаемым признаком.</p><form onSubmit={auditSite}><input aria-label="Бренд для GEO-аудита" placeholder="Название бренда" value={auditForm.brand} onChange={(event) => setAuditForm({ ...auditForm, brand: event.target.value })} required /><input aria-label="Сайт для GEO-аудита" type="url" placeholder="https://example.ru" value={auditForm.website} onChange={(event) => setAuditForm({ ...auditForm, website: event.target.value })} required /><Button type="submit" disabled={busy}>{busy ? "Проверяем сайт…" : "Провести GEO-аудит"}</Button></form></div>

@@ -17,6 +17,7 @@ class WordstatConnectionRead(BaseModel):
     last_checked_at: datetime | None = None
     last_success_at: datetime | None = None
     last_error: str | None = None
+    managed_by_platform: bool = False
 
 
 class WordstatDiscoveryRequest(BaseModel):

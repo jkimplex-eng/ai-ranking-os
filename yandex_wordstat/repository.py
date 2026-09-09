@@ -13,6 +13,19 @@ class WordstatRepository:
             select(WordstatConnection).where(WordstatConnection.organization_id == organization_id)
         )
 
+    def effective_connection(
+        self, organization_id: int, platform_organization_id: int | None = None
+    ) -> tuple[WordstatConnection | None, bool]:
+        own = self.connection(organization_id)
+        if own is not None:
+            return own, False
+        if platform_organization_id is None or platform_organization_id == organization_id:
+            return None, False
+        platform = self.connection(platform_organization_id)
+        if platform is None or platform.status != "CONNECTED":
+            return None, False
+        return platform, True
+
     def latest(
         self, organization_id: int, brand: str | None = None
     ) -> WordstatDemandSnapshot | None:

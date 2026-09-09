@@ -8,6 +8,7 @@ import authentication.models  # noqa: F401
 import decision_center.models  # noqa: F401
 import execution_engine.models  # noqa: F401
 import recommendation.simulation.models  # noqa: F401
+import recommendation.templates.models  # noqa: F401
 import workspace.models  # noqa: F401
 from backend.app.database import Base
 from organization_workspace.models import Organization
@@ -156,3 +157,31 @@ def test_wordstat_accepts_all_query_sizes_offered_by_the_ui() -> None:
             limit=limit,
         )
         assert payload.limit == limit
+
+
+def test_platform_wordstat_connection_is_available_to_isolated_client() -> None:
+    db = database()
+    db.add(Organization(id=2, name="Platform", slug="platform"))
+    db.commit()
+    requests: list[httpx.Request] = []
+    service = WordstatService(
+        db,
+        WordstatRepository(db),
+        SecretCipher("x" * 32),
+        client(requests),
+        platform_organization_id=2,
+    )
+    service.connect(2, 7, "platform-folder", "API_KEY", "platform-secret-key")
+
+    status = service.status(1)
+    snapshot = service.discover(
+        1,
+        8,
+        WordstatDiscoveryRequest(brand="Клиент", category="дизайн", limit=5),
+    )
+
+    assert status.connected is True
+    assert status.managed_by_platform is True
+    assert status.folder_id is None
+    assert snapshot.organization_id == 1
+    assert json.loads(requests[-1].content)["folderId"] == "platform-folder"
