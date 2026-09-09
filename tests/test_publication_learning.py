@@ -234,6 +234,42 @@ def test_learning_rejects_changed_query_matrix() -> None:
         assert PublicationLearningService(db).evaluate_followup(followup.id) == []
 
 
+def test_matrix_fingerprint_ignores_measurement_repetitions() -> None:
+    """Repeating the same prompt must not turn a follow-up into a new matrix."""
+    engine = _engine()
+    Base.metadata.create_all(engine)
+    entity_id = uuid4()
+    with Session(engine) as db:
+        baseline = _research(
+            db,
+            entity_id=entity_id,
+            created_at=datetime(2026, 3, 1, tzinfo=UTC),
+            visibility=30,
+        )
+        followup = _research(
+            db,
+            entity_id=entity_id,
+            created_at=datetime(2026, 3, 2, tzinfo=UTC),
+            visibility=30,
+        )
+        query = baseline.tasks[0].query
+        followup.metadata_payload["query_catalog"] = [
+            {"text": query},
+            {"text": query},
+            {"text": query},
+        ]
+        followup.tasks.extend(
+            [
+                ResearchTask(query=query, provider="yandex", model="yandexgpt-pro"),
+                ResearchTask(query=query, provider="yandex", model="yandexgpt-pro"),
+            ]
+        )
+
+        assert PublicationLearningService._matrix_fingerprint(
+            baseline
+        ) == PublicationLearningService._matrix_fingerprint(followup)
+
+
 def test_learning_subtracts_control_query_drift() -> None:
     engine = _engine()
     Base.metadata.create_all(engine)

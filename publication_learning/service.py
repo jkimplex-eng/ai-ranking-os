@@ -658,16 +658,16 @@ class PublicationLearningService:
     @staticmethod
     def _matrix_fingerprint(research: Research) -> str:
         catalog = research.metadata_payload.get("query_catalog", [])
-        queries = sorted(
+        queries = sorted({
             str(item.get("text", "")).strip().casefold()
             for item in catalog
             if isinstance(item, dict) and item.get("text")
-        )
+        })
         if not queries:
-            queries = sorted(task.query.strip().casefold() for task in research.tasks)
-        models = sorted(
+            queries = sorted({task.query.strip().casefold() for task in research.tasks})
+        models = sorted({
             f"{task.provider or ''}/{task.model or ''}".casefold() for task in research.tasks
-        )
+        })
         payload = {
             "queries": queries,
             "models": models,
