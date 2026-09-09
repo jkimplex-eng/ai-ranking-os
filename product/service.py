@@ -61,6 +61,7 @@ from research.scoring import SCORING_VERSION, SCORING_WEIGHTS
 from research.service import run_research
 from trend.research_adapter import build_trend_engine
 from yandex_intelligence.service import YandexIntelligenceQuerySource
+from yandex_wordstat.generative_evidence import YandexGenerativeEvidenceService
 from yandex_wordstat.repository import WordstatRepository
 from yandex_wordstat.search_evidence import YandexSearchEvidenceService
 from yandex_wordstat.service import WordstatQuerySource
@@ -458,6 +459,11 @@ class ProductPipeline:
             artifacts["yandex_search_evidence"] = self._yandex_search_evidence(
                 research, search_queries
             )
+        previous_generative = artifacts.get("yandex_generative_evidence", {})
+        if previous_generative.get("queries_requested") != selected_search_queries:
+            artifacts["yandex_generative_evidence"] = self._yandex_generative_evidence(
+                research, search_queries
+            )
         research.metadata_payload = {**research.metadata_payload, "product_artifacts": artifacts}
         self.db.commit()
         PublicationLearningService(self.db).evaluate_followup(research.id)
@@ -511,6 +517,40 @@ class ProductPipeline:
             folder_id=connection.folder_id,
             queries=queries,
             region_id=225,
+        )
+
+    def _yandex_generative_evidence(
+        self, research: Research, queries: list[str]
+    ) -> dict[str, Any]:
+        unavailable = {
+            "version": YandexGenerativeEvidenceService.VERSION,
+            "status": "NOT_MEASURED",
+            "visibility_score": None,
+            "observations": [],
+        }
+        organization_id = research.metadata_payload.get("organization_id")
+        if not isinstance(organization_id, int) or not queries:
+            return {**unavailable, "limitations": ["Нет запросов Wordstat для замера."]}
+        connection = WordstatRepository(self.db).connection(organization_id)
+        if connection is None:
+            return {**unavailable, "limitations": ["Yandex Search API не подключён."]}
+        settings = get_settings()
+        try:
+            credential = SecretCipher(
+                settings.provider_secret_key or settings.auth_jwt_secret
+            ).decrypt(connection.credential_ciphertext)
+        except ValueError:
+            return {
+                **unavailable,
+                "limitations": ["Ключ Yandex Search API не удалось расшифровать."],
+            }
+        return YandexGenerativeEvidenceService().measure(
+            credential=credential,
+            auth_type=connection.auth_type,
+            folder_id=connection.folder_id,
+            queries=queries,
+            brand=str(research.metadata_payload.get("brand") or research.entity_id),
+            website_url=research.metadata_payload.get("website_url"),
         )
 
     @staticmethod
@@ -659,6 +699,7 @@ class FinalReportService:
             "competitive_influence": competitive_influence,
             "publication_learning": publication_learning,
             "yandex_search_evidence": artifacts.get("yandex_search_evidence"),
+            "yandex_generative_evidence": artifacts.get("yandex_generative_evidence"),
             "publication_opportunities": (
                 artifacts.get("yandex_search_evidence", {}).get("resources", [])[:10]
             ),

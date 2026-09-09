@@ -200,6 +200,27 @@ type ReportShape = {
     formula?: string;
     limitations?: string[];
   };
+  yandex_generative_evidence?: {
+    version: string;
+    status: string;
+    queries_requested?: string[];
+    queries_measured?: number;
+    mention_count?: number;
+    recommendation_count?: number;
+    target_citation_count?: number;
+    visibility_score?: number | null;
+    formula?: string;
+    evidence_status?: string;
+    limitations?: string[];
+    observations?: Array<{
+      query: string;
+      answer: string;
+      brand_mentioned: boolean;
+      brand_recommended: boolean;
+      target_cited: boolean;
+      sources: Array<{ url: string; title: string; used: boolean }>;
+    }>;
+  };
   publication_opportunities?: Array<{
     domain: string;
     query_count: number;
@@ -2321,6 +2342,9 @@ function Report({
   const score = report.score ?? {};
   const brand = cleanBrand(result.research.title);
   const visibility = valueOf(score, "visibility_score");
+  const yandexGenerative = report.yandex_generative_evidence;
+  const hasYandexGenerative = yandexGenerative?.status === "MEASURED" && yandexGenerative.visibility_score != null;
+  const primaryVisibility = hasYandexGenerative ? Number(yandexGenerative?.visibility_score) : visibility;
   const weakest = metricMeta.map(([label, key]) => ({ label, value: valueOf(score, key) })).sort((a, b) => a.value - b.value)[0];
   const visibilityMetric = report.trend?.metrics?.find((item) => item.metric === "visibility");
   const latestDelta = visibilityMetric?.points.at(-1)?.percentage_change;
@@ -2358,12 +2382,12 @@ function Report({
             АНАЛИТИЧЕСКИЙ ОТЧЁТ · #{result.research.id}
           </span>
           <h1>{brand}</h1>
-          <p>AI-видимость бренда составляет {visibility.toFixed(1)} из 100 в исследованной выборке. Главная точка роста — «{weakest.label}» ({weakest.value.toFixed(1)}). Это не оценка видимости во всех ИИ.</p>
+          <p>{hasYandexGenerative ? `GEO-видимость в генеративном поиске Яндекса составляет ${primaryVisibility.toFixed(1)} из 100: бренд упомянут в ${yandexGenerative?.mention_count ?? 0} из ${yandexGenerative?.queries_measured ?? 0} ответов.` : `AI-видимость по API подключённых моделей составляет ${visibility.toFixed(1)} из 100. Генеративный поиск Яндекса пока не измерен.`}</p>
         </div>
         <div className="report-score">
-          <span>AI-видимость</span>
-          <strong>{visibility.toFixed(1)}</strong>
-          <em className={latestDelta == null ? "" : latestDelta >= 0 ? "good" : "critical"}>{latestDelta == null ? "Нет сравнения" : `${latestDelta >= 0 ? "↑" : "↓"} ${Math.abs(latestDelta).toFixed(1)}%`}</em>
+          <span>{hasYandexGenerative ? "Генеративный поиск Яндекса" : "API-модели"}</span>
+          <strong>{primaryVisibility.toFixed(1)}</strong>
+          <em>{hasYandexGenerative ? "Реальный API-поиск с генеративным ответом" : "Вспомогательный замер"}</em>
         </div>
       </section>
       <section className="report-plain-summary" aria-label="Краткий вывод"><article><span>Что означает {visibility.toFixed(1)}</span><h2>{visibility >= 75 ? "Бренд заметен в этой выборке, но результат не универсален" : visibility >= 50 ? "Бренд упоминается, но не всегда становится рекомендацией" : "Бренд редко появляется в исследованных ответах"}</h2><p>Проверено {successfulResponses} успешных ответов по {report.explainability?.sample_scope?.query_count ?? report.query_catalog?.length ?? 0} запросам и {models.length} моделям. Оценка относится только к этой матрице.</p></article><article><span>Главное ограничение</span><h2>{weakest.label}: {weakest.value.toFixed(1)} из 100</h2><p>{weakest.label === "Цитирование" ? `Ссылки найдены в ${citedResponses} из ${successfulResponses} ответов. Без внешних источников ИИ не подтверждает выводы о бренде.` : weakest.label === "Рекомендации" ? `Бренд рекомендован в ${recommendedResponses} из ${successfulResponses} ответов. Простого упоминания недостаточно.` : "Подробное основание и ответы перечислены ниже."}</p></article><article><span>Что делать сначала</span><h2>Открыть раздел «Где публиковаться»</h2><p>Там показаны найденные источники, дефицитные запросы, конкретный материал и способ повторной проверки результата.</p><a href="#actions">Перейти к плану действий ↓</a></article></section>
@@ -2450,6 +2474,13 @@ function Report({
             <h2>Где и что публиковать</h2>
           </div>
         </div>
+        {hasYandexGenerative ? <section className="panel research-lab-section">
+          <span className="section-label">ГЕНЕРАТИВНЫЙ ПОИСК ЯНДЕКСА</span>
+          <h2>Что получает пользователь по запросам Wordstat</h2>
+          <p><b>{primaryVisibility.toFixed(1)} из 100</b> · упоминаний {yandexGenerative?.mention_count ?? 0} · рекомендаций {yandexGenerative?.recommendation_count ?? 0} · ссылок на сайт {yandexGenerative?.target_citation_count ?? 0}.</p>
+          {yandexGenerative?.observations?.map((item) => <details className="evidence-details" key={item.query}><summary>{item.brand_recommended ? "Рекомендует" : item.brand_mentioned ? "Упоминает" : "Не упоминает"} · {item.query}</summary><p>{item.answer}</p>{item.sources.length ? <ul>{item.sources.map((source) => <li key={source.url}><a href={source.url} target="_blank" rel="noreferrer">{source.title || source.url}</a>{source.used ? " · использован в ответе" : ""}</li>)}</ul> : <p>Источники не возвращены.</p>}</details>)}
+          <details className="evidence-details"><summary>Формула и ограничения</summary><p>{yandexGenerative?.formula}</p><ul>{yandexGenerative?.limitations?.map((item) => <li key={item}>{item}</li>)}</ul></details>
+        </section> : <div className="empty-state">Генеративный поиск Яндекса пока не измерен; оценка API-модели не заменяет пользовательскую выдачу.</div>}
         {report.publication_opportunities?.length ? <section className="panel research-lab-section">
           <span className="section-label">НАБЛЮДЕНИЯ ЯНДЕКС ПОИСКА</span>
           <h2>Площадки, уже видимые по спросу Wordstat</h2>
