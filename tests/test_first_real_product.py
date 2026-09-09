@@ -137,7 +137,7 @@ def test_skinjestique_end_to_end_wizard(client: TestClient) -> None:
     assert report["provider_statistics"]["openai"]["responses"] == 20
     assert report["token_usage"] > 0
     explanation = report["explainability"]
-    assert explanation["methodology_version"] == "1.3"
+    assert explanation["methodology_version"] == "2.0"
     assert explanation["metrics"]["visibility_score"]["formula"]
     assert (
         explanation["metrics"]["visibility_score"]["inputs"]["research_id"]

@@ -13,13 +13,13 @@ from research.models import (
 )
 from research.repositories import EntityNotFoundError
 
-SCORING_VERSION = "1.3"
+SCORING_VERSION = "2.0"
 SCORING_WEIGHTS = {
-    "mention": 0.35,
-    "recommendation": 0.20,
-    "citation": 0.15,
-    "coverage": 0.20,
-    "confidence": 0.10,
+    "mention": 0.45,
+    "recommendation": 0.35,
+    "citation": 0.20,
+    "coverage": 0.0,
+    "confidence": 0.0,
 }
 
 

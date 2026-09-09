@@ -709,8 +709,8 @@ class FinalReportService:
             },
             "visibility_score": {
                 "formula": (
-                    "mention*0.35 + recommendation*0.20 + citation*0.15 + "
-                    "coverage*0.20 + confidence*0.10"
+                    "mention*0.45 + recommendation*0.35 + citation*0.20; "
+                    "coverage and confidence describe measurement quality and do not add visibility"
                 ),
                 "inputs": {
                     "research_id": research.id,
@@ -729,7 +729,7 @@ class FinalReportService:
                         else {}
                     ),
                 },
-                "normalization": "weighted sum bounded 0..100",
+                "normalization": "presence-only weighted sum bounded 0..100",
                 "weight": 1.0,
             },
             "benchmark": {
