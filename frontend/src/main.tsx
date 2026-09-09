@@ -845,8 +845,19 @@ function CompetitorsScreen() {
       </section>
       {loading ? <DashboardSkeleton /> : dashboard?.competitors.length ? <section className="competitor-stack">{dashboard.competitors.map((competitor) => {
         const latest = competitor.snapshots.at(-1);
+        const observationTimeline = [
+          ...competitor.snapshots.map((snapshot) => ({
+            at: `${snapshot.snapshot_date}T12:00:00Z`,
+            label: `Сохранён срез: ${snapshot.mention_count} упоминаний, ${snapshot.recommendation_count} рекомендаций из ${snapshot.response_count} ответов`,
+          })),
+          ...competitor.publications.map((publication) => ({
+            at: publication.first_seen_at,
+            label: `Источник впервые замечен рядом с конкурентом: ${publication.title || publication.domain}`,
+          })),
+        ].sort((left, right) => right.at.localeCompare(left.at)).slice(0, 12);
         return <article className="analytics-card competitor-analysis" key={competitor.competitor_id}><header><div><small>{competitor.domains.join(", ") || "Сайт не указан"}</small><h2>{competitor.name}</h2></div><div className="competitor-score"><strong>{competitor.latest_visibility_score?.toFixed(1) ?? "—"}</strong><span>наблюдаемая видимость</span>{competitor.visibility_delta != null && <b className={competitor.visibility_delta >= 0 ? "up" : "down"}>{competitor.visibility_delta >= 0 ? "+" : ""}{competitor.visibility_delta.toFixed(1)}</b>}</div><button className="danger-link" onClick={() => removeCompetitor(competitor)}>Удалить</button></header>
           <div className="competitor-metrics"><div><span>Ответы</span><b>{latest?.response_count ?? 0}</b></div><div><span>Упоминания</span><b>{latest?.mention_count ?? 0}</b></div><div><span>Рекомендации</span><b>{latest?.recommendation_count ?? 0}</b></div><div><span>Источники</span><b>{latest?.source_count ?? 0}</b></div></div>
+          <div className="competitor-trend"><h3>Timeline наблюдений</h3>{observationTimeline.length ? <ol className="lab-timeline">{observationTimeline.map((event) => <li key={`${event.at}:${event.label}`}><time>{new Date(event.at).toLocaleString("ru-RU")}</time><b>НАБЛЮДЕНИЕ</b><span>{event.label}</span></li>)}</ol> : <p className="empty-state">История появится после первого завершённого исследования. Система не будет называть публикацию причиной роста, пока это не подтверждено отдельным экспериментом.</p>}</div>
           <div className="competitor-trend"><h3>Динамика по дням</h3>{competitor.snapshots.length ? <div className="trend-bars">{competitor.snapshots.slice(-14).map((snapshot) => <div key={snapshot.snapshot_date} title={`${snapshot.snapshot_date}: ${snapshot.observed_visibility_score}`}><i style={{ height: `${Math.max(snapshot.observed_visibility_score, 3)}%` }} /><span>{new Date(snapshot.snapshot_date).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}</span></div>)}</div> : <p className="empty-state">Снимки появятся после завершённого исследования проекта.</p>}</div>
           <div className="publication-list"><h3>Публикации и площадки</h3>{competitor.publications.length ? competitor.publications.map((publication) => <div className="publication-row" key={publication.url}><div><a href={publication.url} target="_blank" rel="noreferrer">{publication.title || publication.domain}</a><small>{publication.domain} · {publication.explanation}</small></div><div><strong>{publication.significance_score.toFixed(0)}</strong><span>{publication.significance_label} связь</span></div></div>) : <p className="empty-state">В ответах моделей пока не найдено источников, связанных с этим конкурентом. Это честное отсутствие данных, а не нулевая оценка влияния.</p>}</div>
           <CompetitorSocialPanel projectId={dashboard.project_id} competitorId={competitor.competitor_id} competitorName={competitor.name} />
