@@ -135,7 +135,7 @@ def test_score_is_calculated_automatically_after_all_responses(
     assert score["coverage_score"] == 100.0
     assert score["confidence_score"] == 79.0
     assert score["visibility_score"] == 62.9
-    assert score["version"] == "1.2"
+    assert score["version"] == "1.3"
 
 
 def test_score_api_recalculates_same_version_without_duplicates(
@@ -163,7 +163,7 @@ def test_score_api_recalculates_same_version_without_duplicates(
     assert first.status_code == 200
     assert second.status_code == 200
     assert first.json()["id"] == second.json()["id"]
-    assert first.json()["version"] == "1.2"
+    assert first.json()["version"] == "1.3"
     with TestingSession() as db:
         scores = list(
             db.scalars(select(ResearchScore).where(ResearchScore.research_id == research_id))
@@ -215,3 +215,43 @@ def test_generic_product_recommendation_does_not_count_as_brand_recommendation(
     assert created.status_code == 201
     score = client.get(f"/research/{research_id}/score").json()
     assert score["recommendation_score"] == 0.0
+
+
+def test_target_entity_request_metadata_does_not_create_a_brand_mention(
+    client: TestClient,
+) -> None:
+    research_id = client.post(
+        "/research",
+        json={"title": "Acme", "metadata": {"target_entity": "Acme"}},
+    ).json()["id"]
+    task_id = _create_task(client, research_id, "model-a")
+    with TestingSession() as db:
+        research = db.get(Research, research_id)
+        assert research is not None
+        research.total_tasks = 1
+        db.commit()
+
+    created = client.post(
+        "/responses",
+        json={
+            "research_task_id": task_id,
+            "provider": "test",
+            "model": "model-a",
+            "content": "Другой сервис решает эту задачу.",
+            "normalized_response": _normalized(
+                "Другой сервис решает эту задачу.",
+                metadata={
+                    "entities": [
+                        {"name": "Acme", "type": "BRAND", "confidence": 0.98}
+                    ]
+                },
+            ),
+        },
+    )
+
+    assert created.status_code == 201
+    assert created.json()["processing_status"] == "PROCESSED"
+    extraction = client.get(f"/responses/{created.json()['id']}/extraction").json()
+    assert extraction["brands"] == []
+    score = client.get(f"/research/{research_id}/score").json()
+    assert score["mention_score"] == 0.0

@@ -13,7 +13,7 @@ from research.models import (
 )
 from research.repositories import EntityNotFoundError
 
-SCORING_VERSION = "1.2"
+SCORING_VERSION = "1.3"
 SCORING_WEIGHTS = {
     "mention": 0.35,
     "recommendation": 0.20,
@@ -158,17 +158,10 @@ class ScoringService:
 
     @staticmethod
     def _mentions(response: Response, target: str) -> bool:
-        if target in response.content.casefold():
-            return True
-        return any(
-            target
-            in {
-                entity.name.casefold(),
-                entity.canonical_name.casefold(),
-                *(alias.casefold() for alias in entity.aliases),
-            }
-            for entity in response.extracted_entities
-        )
+        # The answer text is the measurement surface. Extracted entities can be
+        # enriched from request metadata and therefore cannot independently prove
+        # that the model mentioned the target.
+        return target in response.content.casefold()
 
     @staticmethod
     def _recommends_target(response: Response, target: str) -> bool:

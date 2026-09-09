@@ -143,7 +143,7 @@ class ConfiguredProvider(Provider):
                             "confidence": 0.98,
                         }
                     ]
-                    if request.metadata.get("target_entity")
+                    if self.mock_mode and request.metadata.get("target_entity")
                     else [],
                     "recommendations": [
                         {

@@ -111,7 +111,7 @@ class ExtractionService:
         response.extracted_citations.clear()
         response.extracted_recommendations.clear()
         raw_input: dict[str, Any] = {"content": normalized.content}
-        structured_entities = _structured_entities(normalized.metadata)
+        structured_entities = _structured_entities(normalized.metadata, normalized.content)
         if structured_entities:
             raw_input["entities"] = structured_entities
         pipeline_result = run_pipeline(
@@ -211,7 +211,7 @@ def _optional_text(value: Any) -> str | None:
     return str(value)
 
 
-def _structured_entities(metadata: dict[str, Any]) -> list[dict[str, Any]]:
+def _structured_entities(metadata: dict[str, Any], content: str) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     typed_keys = {
         "brands": EntityType.BRAND,
@@ -235,4 +235,14 @@ def _structured_entities(metadata: dict[str, Any]) -> list[dict[str, Any]]:
                 results.append({"name": item, "type": entity_type})
             elif isinstance(item, dict):
                 results.append({"type": entity_type, **item})
-    return results
+    # Provider metadata is supporting evidence, not ground truth.  An entity may
+    # only enter the measured response graph when its name actually occurs in the
+    # returned answer. This prevents request context such as `target_entity` from
+    # being miscounted as a model mention.
+    plain = re.sub(r"[*_`]", "", content).casefold()
+    return [
+        item
+        for item in results
+        if str(item.get("name", "")).strip()
+        and str(item["name"]).strip().casefold() in plain
+    ]
