@@ -36,7 +36,8 @@ class WordstatError(ValueError):
 
 class WordstatService:
     BASE_URL = "https://searchapi.api.cloud.yandex.net"
-    VERSION = "1.0"
+    VERSION = "1.1"
+    _AMBIGUOUS_CATEGORY_TOKENS = {"ai", "geo", "ии", "гео", "seo", "сео"}
 
     def __init__(
         self,
@@ -138,6 +139,16 @@ class WordstatService:
             if previous is None or count > previous[1]:
                 deduplicated[normalized] = (query, count, source_type)
         ordered = sorted(deduplicated.values(), key=lambda item: (-item[1], item[0]))
+        # Wordstat's `associations` are exploratory suggestions.  For short or
+        # ambiguous seeds (notably GEO) they can be popular yet completely outside
+        # the customer's market.  TOP rows already contain the requested phrase;
+        # SIMILAR rows are admitted only when they retain a meaningful category
+        # token.  This prevents frequency from outranking semantic relevance.
+        ordered = [
+            item
+            for item in ordered
+            if item[2] == "TOP" or self._association_relevant(item[0], payload.category)
+        ]
         brand_key = payload.brand.casefold().strip()
         unbranded = [item for item in ordered if brand_key not in item[0].casefold()]
         branded = [item for item in ordered if brand_key in item[0].casefold()]
@@ -170,6 +181,9 @@ class WordstatService:
                     "публичный интерфейс Алисы может отличаться.",
                     "Совпадение частотности и рекомендации является наблюдением, "
                     "а не доказательством причинного влияния.",
+                    "Связанные фразы Wordstat автоматически отбрасываются, если в них "
+                    "нет смыслового токена категории; короткие GEO/AI/SEO сами по себе "
+                    "не считаются подтверждением релевантности.",
                 ],
                 algorithm_version=self.VERSION,
                 created_by=user_id,
@@ -180,6 +194,30 @@ class WordstatService:
         connection.last_error = None
         self.repository.save(connection)
         return self._snapshot(snapshot)
+
+    @classmethod
+    def _association_relevant(cls, query: str, category: str) -> bool:
+        def tokens(value: str) -> list[str]:
+            return re.findall(r"[a-zа-яё0-9]+", value.casefold())
+
+        query_tokens = tokens(query)
+        category_tokens = [
+            token
+            for token in tokens(category)
+            if len(token) >= 3 and token not in cls._AMBIGUOUS_CATEGORY_TOKENS
+        ]
+        if not category_tokens:
+            return False
+
+        def same_lexeme(left: str, right: str) -> bool:
+            prefix_length = min(5, len(left), len(right))
+            return prefix_length >= 3 and left[:prefix_length] == right[:prefix_length]
+
+        return any(
+            same_lexeme(category_token, query_token)
+            for category_token in category_tokens
+            for query_token in query_tokens
+        )
 
     def latest(self, organization_id: int, brand: str | None = None) -> WordstatSnapshotRead:
         snapshot = self.repository.latest(organization_id, brand)

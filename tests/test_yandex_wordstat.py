@@ -92,6 +92,46 @@ def test_connect_and_discover_use_official_search_api_contract() -> None:
     assert queries == ["курсы дизайна", "обучение дизайну"]
 
 
+def test_wordstat_filters_ambiguous_association_noise() -> None:
+    db = database()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "results": [{"phrase": "geo продвижение сайта", "count": "253"}],
+                "associations": [
+                    {"phrase": "гео история", "count": "1912"},
+                    {"phrase": "реклама и связи с общественностью", "count": "2594"},
+                    {"phrase": "услуги продвижения", "count": "120"},
+                ],
+            },
+        )
+
+    service = WordstatService(
+        db,
+        WordstatRepository(db),
+        SecretCipher("x" * 32),
+        httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    service.connect(1, 7, "folder-1", "API_KEY", "secret-api-key")
+    snapshot = service.discover(
+        1,
+        7,
+        WordstatDiscoveryRequest(
+            brand="AI Ranking OS",
+            category="GEO-продвижение",
+            limit=30,
+        ),
+    )
+
+    assert [item.query for item in snapshot.queries] == [
+        "geo продвижение сайта",
+        "услуги продвижения",
+    ]
+    assert snapshot.algorithm_version == "1.1"
+
+
 def test_wordstat_endpoints_are_documented_in_openapi() -> None:
     from backend.app.main import app
 
