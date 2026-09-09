@@ -28,7 +28,7 @@ class YandexGenerativeEvidenceService:
         brand: str,
         website_url: str | None = None,
     ) -> dict[str, Any]:
-        selected = YandexSearchEvidenceService.select_queries(queries)
+        selected = self.prepare_queries(queries)
         observations: list[dict[str, Any]] = []
         failures: list[dict[str, str]] = []
         target_domain = self._domain(website_url)
@@ -147,6 +147,24 @@ class YandexGenerativeEvidenceService:
             return ""
         value = url if "://" in url else f"https://{url}"
         return (urlparse(value).hostname or "").casefold().removeprefix("www.")
+
+    @staticmethod
+    def prepare_queries(queries: list[str], limit: int = 5) -> list[str]:
+        """Disambiguate GEO while preserving Wordstat demand as the source."""
+        selected = YandexSearchEvidenceService.select_queries(queries, limit=limit)
+        context_markers = ("нейросет", " ии", " ai", "yandexgpt", "алис", "generative")
+        prepared = []
+        for query in selected:
+            normalized = query.casefold()
+            if ("geo" in normalized or "гео" in normalized) and not any(
+                marker in normalized for marker in context_markers
+            ):
+                prepared.append(
+                    f"{query} в нейросетях (Generative Engine Optimization)"
+                )
+            else:
+                prepared.append(query)
+        return prepared
 
     @staticmethod
     def _safe_error(error: Exception) -> str:

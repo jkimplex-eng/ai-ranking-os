@@ -70,6 +70,17 @@ def test_generative_evidence_does_not_infer_a_missing_brand() -> None:
     assert result["visibility_score"] == 0.0
 
 
+def test_prepare_queries_disambiguates_geo_for_consumer_measurement() -> None:
+    prepared = YandexGenerativeEvidenceService.prepare_queries(
+        ["geo продвижение заказать", "geo продвижение в нейросетях заказать"]
+    )
+
+    assert prepared == [
+        "geo продвижение заказать в нейросетях (Generative Engine Optimization)",
+        "geo продвижение в нейросетях заказать",
+    ]
+
+
 def test_generative_evidence_accepts_a_list_response() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
