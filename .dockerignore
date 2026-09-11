@@ -1,6 +1,17 @@
 .git
 .github
 .env
+**/.env
+**/.env.*
+**/backups
+**/node_modules
+**/.venv
+**/__pycache__
+**/*.db
+**/*.dump
+**/*.sqlite*
+test-results
+docs/screenshots
 .venv
 __pycache__
 .pytest_cache

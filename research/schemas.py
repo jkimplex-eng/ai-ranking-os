@@ -278,6 +278,7 @@ class ResearchRunRequest(BaseModel):
     models: list[ResearchModelSelection] = Field(default_factory=list, max_length=20)
     routing_profile: RoutingProfile = RoutingProfile.BALANCED
     query: str | None = Field(default=None, min_length=1, max_length=100_000)
+    queries: list[dict[str, str]] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="before")
     @classmethod

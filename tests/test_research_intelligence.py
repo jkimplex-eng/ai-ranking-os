@@ -1,0 +1,570 @@
+import pytest
+
+from product.brand_intelligence import BrandIntelligenceEngine
+from product.research_intelligence import (
+    CompetitiveInfluenceEngine,
+    GeoOpportunityPlanner,
+    QueryMapBuilder,
+    ResearchPatternAnalyzer,
+)
+from product.schemas import WizardRequest
+from product.service import ProductPipeline
+
+
+class FakeFetcher:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def fetch(self, url: str) -> tuple[str, str]:
+        self.calls.append(url)
+        return (
+            url,
+            """<html><head><meta name='description' content='Уход для чувствительной кожи'></head>
+        <body><h1>Сыворотки и кремы</h1><script type='application/ld+json'>
+        {"@type":"Product","name":"Hydra Serum","category":"Сыворотки",
+        "description":"Увлажняющий уход с гиалуроновой кислотой",
+        "offers":{"price":"1900","priceCurrency":"RUB"}}
+        </script></body></html>""",
+        )
+
+
+class EducationFetcher:
+    def fetch(self, url: str) -> tuple[str, str]:
+        return (
+            url,
+            """<html><head><title>Онлайн-курсы и профессии</title>
+            <meta name='description' content='Образовательная платформа: обучение с нуля,
+            практические проекты, портфолио и помощь с трудоустройством'></head>
+            <body><h1>Освойте новую профессию онлайн</h1></body></html>""",
+        )
+
+
+class EducationWithCourseTopicsFetcher:
+    def fetch(self, url: str) -> tuple[str, str]:
+        return (
+            url,
+            """<html><head><title>Онлайн-курсы и профессии</title>
+            <meta name='description' content='Образовательная платформа и обучение с нуля'>
+            </head><body><h1>Освойте новую профессию онлайн</h1>
+            <p>Курсы маркетинга, финансов, туризма и рекламы</p></body></html>""",
+        )
+
+
+class GeoVisibilityFetcher:
+    def fetch(self, url: str) -> tuple[str, str]:
+        return (
+            url,
+            """<html><head><title>AI Ranking OS — GEO-видимость бренда</title>
+            <meta name='description'
+            content='Сервис измеряет видимость бренда в ответах ИИ и нейропоиске'>
+            </head><body><h1>Аналитика GEO-видимости и рекомендаций ИИ</h1></body></html>""",
+        )
+
+
+class PublicDocumentationFetcher:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def fetch(self, url: str) -> tuple[str, str]:
+        self.calls.append(url)
+        if url.endswith("methodology.html"):
+            return (
+                url,
+                "<html><head><title>Методика</title></head>"
+                "<body><h1>Методика</h1></body></html>",
+            )
+        if url.endswith("faq.html"):
+            return url, "<html><head><title>FAQ</title></head><body><h1>Вопросы</h1></body></html>"
+        return (
+            url,
+            """<html><head><title>AI Visibility</title>
+            <meta name='description' content='GEO-платформа для анализа ответов ИИ'></head>
+            <body><h1>AI Visibility</h1><a href='/methodology.html'>Методика</a>
+            <a href='/faq.html'>FAQ</a></body></html>""",
+        )
+
+
+def test_brand_intelligence_extracts_product_price_and_attributes() -> None:
+    profile = BrandIntelligenceEngine(FakeFetcher(), max_pages=1).analyze(
+        brand="Skinjestique", website_url="https://skinjestique.example"
+    )
+    assert profile["products"][0]["name"] == "Hydra Serum"
+    assert profile["products"][0]["price"] == "1900"
+    assert "Сыворотки" in profile["categories"]
+    assert "гиалуроновая кислота" in profile["attributes"]
+
+
+def test_brand_intelligence_reuses_verified_server_profile() -> None:
+    fetcher = FakeFetcher()
+    engine = BrandIntelligenceEngine(fetcher, max_pages=1, cache_ttl_seconds=60)
+
+    first = engine.analyze(brand="Skinjestique", website_url="https://skinjestique.example")
+    second = engine.analyze(brand="Skinjestique", website_url="https://skinjestique.example")
+
+    assert first == second
+    assert fetcher.calls == ["https://skinjestique.example"]
+
+
+def test_brand_intelligence_detects_education_without_beauty_fallback() -> None:
+    profile = BrandIntelligenceEngine(EducationFetcher(), max_pages=1).analyze(
+        brand="Education Brand", website_url="https://education.example"
+    )
+
+    assert "Онлайн-образование" in profile["categories"]
+    assert "обучение с нуля" in profile["attributes"]
+    assert not any("космет" in item.casefold() for item in profile["categories"])
+
+
+def test_brand_category_is_business_vertical_not_individual_course_topics() -> None:
+    profile = BrandIntelligenceEngine(EducationWithCourseTopicsFetcher(), max_pages=1).analyze(
+        brand="Education Brand", website_url="https://education.example"
+    )
+
+    assert profile["categories"] == ["Онлайн-образование"]
+
+
+def test_brand_intelligence_detects_geo_visibility_vertical() -> None:
+    profile = BrandIntelligenceEngine(GeoVisibilityFetcher(), max_pages=1).analyze(
+        brand="AI Ranking OS", website_url="https://example.test"
+    )
+
+    assert "GEO и AI-видимость" in profile["categories"]
+
+
+def test_brand_intelligence_crawls_public_documentation_pages() -> None:
+    fetcher = PublicDocumentationFetcher()
+    profile = BrandIntelligenceEngine(fetcher, max_pages=12).analyze(
+        brand="AI Ranking OS", website_url="https://example.test"
+    )
+
+    assert profile["pages_analyzed"] == 3
+    assert "https://example.test/methodology.html" in profile["evidence_urls"]
+    assert "https://example.test/faq.html" in profile["evidence_urls"]
+
+
+def test_geo_visibility_queries_are_natural_and_not_generic_retail_prompts() -> None:
+    catalog = QueryMapBuilder().build(
+        brand="AI Ranking OS",
+        language="ru",
+        region="RU",
+        profile="GEO",
+        variables={},
+        brand_profile={"categories": ["GEO и AI-видимость"]},
+    )
+
+    combined = " ".join(item.text.casefold() for item in catalog)
+    assert len(catalog) == 20
+    assert "как улучшить geo-видимость сайта" in combined
+    assert "продукты и услуги" not in combined
+    assert sum(item.brand_mode == "unbranded" for item in catalog) == 14
+    assert sum(item.brand_mode == "comparative" for item in catalog) == 4
+    assert sum(item.brand_mode == "branded" for item in catalog) == 2
+
+
+def test_universal_education_queries_never_use_beauty_vocabulary() -> None:
+    catalog = QueryMapBuilder().build(
+        brand="Education Brand",
+        language="ru",
+        region="RU-MOW",
+        profile="UNIVERSAL",
+        variables={},
+        brand_profile={
+            "categories": ["Онлайн-образование"],
+            "products": [],
+            "attributes": ["обучение с нуля", "помощь с трудоустройством"],
+        },
+    )
+
+    combined = " ".join(item.text.casefold() for item in catalog)
+    assert "онлайн-образование" in combined
+    assert "трудоустрой" in combined
+    assert all(word not in combined for word in ("космет", "сыворот", "кож", "skincare"))
+
+
+def test_skillbox_uses_curated_buyer_query_set() -> None:
+    catalog = QueryMapBuilder().build(
+        brand="skillbox",
+        language="ru",
+        region="RU-MOW",
+        profile="UNIVERSAL",
+        variables={},
+        brand_profile={"categories": ["Онлайн-образование"]},
+    )
+
+    assert len(catalog) == 20
+    assert {item.cluster for item in catalog} == {
+        "design",
+        "generative_ai",
+        "programming",
+        "marketing",
+    }
+    assert catalog[0].text == "Где учиться дизайну с нуля онлайн?"
+    assert catalog[-1].text == ("Где учиться маркетингу для работы с российскими компаниями?")
+    assert all(item.brand_mode == "unbranded" for item in catalog)
+
+
+def test_query_map_uses_brand_context_for_narrow_buyer_queries() -> None:
+    catalog = QueryMapBuilder().build(
+        brand="Skinjestique",
+        language="ru",
+        region="RU",
+        profile="BEAUTY",
+        variables={},
+        brand_profile={
+            "categories": ["Сыворотки"],
+            "products": [{"name": "Hydra Serum"}],
+            "attributes": ["увлажняющий"],
+        },
+    )
+    assert len(catalog) == 20
+    assert any("увлажнен" in item.text for item in catalog)
+    assert any("цене" in item.text and "доказательствам" in item.text for item in catalog)
+    assert sum(item.brand_mode == "branded" for item in catalog) == 2
+    assert all("Hydra Serum" not in item.text for item in catalog)
+
+
+@pytest.mark.parametrize(
+    ("profile", "category", "product", "attribute"),
+    [
+        ("BEAUTY", "Сыворотки", "Hydra Serum", "увлажняющий"),
+        ("BEAUTY", "Кремы", "Barrier Cream", "чувствительная кожа"),
+        ("BEAUTY", "Тонеры", "Balance Toner", "ниацинамид"),
+        ("BEAUTY", "Маски", "Recovery Mask", "покраснение"),
+        ("BEAUTY", "SPF-защита", "Daily SPF", "пигментация"),
+        ("ECOMMERCE", "Смартфоны", "Phone X", "надёжность"),
+        ("ECOMMERCE", "Ноутбуки", "Notebook Pro", "автономность"),
+        ("MEDICAL", "Диагностика", "Checkup", "точность"),
+        ("GEO", "Маркетинг", "GEO Audit", "рост видимости"),
+        ("ENTERPRISE", "CRM", "Enterprise CRM", "интеграции"),
+    ],
+)
+def test_adaptive_query_eval_set_keeps_buyer_mix_and_context(
+    profile: str,
+    category: str,
+    product: str,
+    attribute: str,
+) -> None:
+    catalog = QueryMapBuilder().build(
+        brand="Acme",
+        language="ru",
+        region="RU",
+        profile=profile,
+        variables={},
+        brand_profile={
+            "categories": [category],
+            "products": [{"name": product, "price": 2400, "currency": "RUB"}],
+            "attributes": [attribute],
+        },
+        competitor_profiles=[{"brand": "Rival One"}, {"brand": "Rival Two"}],
+    )
+
+    assert len(catalog) == 20
+    assert sum(item.brand_mode == "unbranded" for item in catalog) == 14
+    assert sum(item.brand_mode == "comparative" for item in catalog) == 4
+    assert sum(item.brand_mode == "branded" for item in catalog) == 2
+    assert all(item.rationale for item in catalog)
+    assert len({item.text.casefold() for item in catalog}) == 20
+    assert any("2800" in item.text for item in catalog)
+    assert any("Rival One" in item.text for item in catalog)
+    expected_need = QueryMapBuilder._need_context(attribute).casefold()
+    assert any(expected_need in item.text.casefold() for item in catalog)
+
+
+def test_competitive_influence_matches_price_features_and_marks_correlation() -> None:
+    result = CompetitiveInfluenceEngine().compare(
+        target_profile={
+            "products": [
+                {
+                    "name": "Hydra Serum",
+                    "category": "serum",
+                    "description": "hydrating hyaluronic",
+                    "price": 1900,
+                    "currency": "RUB",
+                    "evidence_url": "https://target/p",
+                }
+            ]
+        },
+        competitor_profiles=[
+            {
+                "brand": "Rival",
+                "website_url": "https://rival",
+                "products": [
+                    {
+                        "name": "Aqua Serum",
+                        "category": "serum",
+                        "description": "hydrating hyaluronic",
+                        "price": 2200,
+                        "currency": "RUB",
+                        "evidence_url": "https://rival/p",
+                    }
+                ],
+                "evidence_urls": ["https://rival/p"],
+                "confidence": 0.8,
+            }
+        ],
+        patterns={
+            "competitors": [{"name": "Rival", "response_count": 3}],
+            "source_patterns": [{"resource": "media.example", "response_count": 2}],
+        },
+    )
+    match = result["competitors"][0]["matched_products"][0]
+    assert match["target_price"] == 1900
+    assert match["competitor_price"] == 2200
+    assert result["source_influence"][0]["relationship"] == "OBSERVED_ASSOCIATION"
+    assert result["causality_status"] == "NOT_ESTABLISHED"
+
+
+def test_query_map_covers_demand_intents() -> None:
+    catalog = QueryMapBuilder().build(
+        brand="Skinjestique",
+        language="ru",
+        region="RU",
+        profile="BEAUTY",
+        variables={"category": "уход за проблемной кожей"},
+    )
+    assert len(catalog) == 20
+    assert {item.cluster for item in catalog} == {
+        "category_discovery",
+        "problem_solution",
+        "price_comparison",
+        "trust_evidence",
+        "competitor_alternative",
+        "competitor_comparison",
+        "brand_control",
+    }
+    assert sum(item.brand_mode == "unbranded" for item in catalog) == 14
+    assert sum(item.brand_mode == "comparative" for item in catalog) == 4
+    assert sum(item.brand_mode == "branded" for item in catalog) == 2
+    assert len({item.id for item in catalog}) == len(catalog)
+
+
+def test_query_map_localizes_default_context_to_english() -> None:
+    catalog = QueryMapBuilder().build(
+        brand="Skinjestique",
+        language="en",
+        region="GLOBAL",
+        profile="GEO",
+        variables={},
+    )
+
+    assert all("продукт" not in item.text and "покупател" not in item.text for item in catalog)
+    assert any("products and services" in item.text for item in catalog)
+
+
+def test_wizard_accepts_user_edited_buyer_queries() -> None:
+    payload = WizardRequest(
+        brand="Skinjestique",
+        website_url="https://skinjestique.example",
+        languages=["ru"],
+        regions=["RU"],
+        custom_queries=[
+            "Какую сыворотку выбрать для чувствительной кожи?",
+            "Какие средства помогают уменьшить пигментацию?",
+        ],
+    )
+
+    catalog = ProductPipeline._query_catalog(payload)
+
+    assert [item["text"] for item in catalog] == payload.custom_queries
+    assert all(item["cluster"] == "custom_buyer_query" for item in catalog)
+    assert all(item["brand_mode"] == "unbranded" for item in catalog)
+
+
+def test_query_map_applies_city_to_every_generated_buyer_query() -> None:
+    payload = WizardRequest(
+        brand="Skinjestique",
+        website_url="https://skinjestique.example",
+        languages=["ru"],
+        regions=["RU-MOW"],
+        research_profile="BEAUTY",
+    )
+
+    catalog = ProductPipeline._query_catalog(
+        payload,
+        {"categories": ["Сыворотки"], "products": [], "attributes": ["увлажнение"]},
+    )
+
+    assert catalog
+    assert all(not item["text"].startswith("В Москве, ") for item in catalog)
+    assert all(item["text"] == item["text"].strip() for item in catalog)
+    assert len({item["id"] for item in catalog}) == len(catalog)
+
+
+def test_prompt_values_use_human_readable_geography() -> None:
+    payload = WizardRequest(
+        brand="Skinjestique",
+        website_url="https://skinjestique.example",
+        languages=["ru"],
+        regions=["RU-SPE"],
+    )
+
+    assert ProductPipeline._values(payload)["region"] == "Санкт-Петербург"
+
+
+def test_query_map_uses_manual_competitor_without_website() -> None:
+    payload = WizardRequest(
+        brand="Skinjestique",
+        website_url="https://skinjestique.example",
+        languages=["ru"],
+        regions=["RU"],
+        research_profile="BEAUTY",
+        competitors=[{"name": "Librederm"}],
+    )
+
+    catalog = ProductPipeline._query_catalog(
+        payload,
+        {"categories": ["Сыворотки"], "products": [], "attributes": []},
+        payload.competitors,
+    )
+
+    assert sum(item["brand_mode"] == "comparative" for item in catalog) == 4
+    assert any("Librederm" in item["text"] for item in catalog)
+
+
+def test_patterns_and_opportunities_are_evidence_backed() -> None:
+    query = {
+        "id": "q1",
+        "cluster": "recommendation",
+        "intent": "recommendation",
+        "text": "Что рекомендуете?",
+    }
+    patterns = ResearchPatternAnalyzer().analyze(
+        brand="Skinjestique",
+        query_catalog=[query],
+        responses=[
+            {
+                "id": 1,
+                "provider": "ollama",
+                "model": "qwen2.5:3b",
+                "prompt": query["text"],
+                "content": "Рекомендуется Competitor A",
+                "error_type": None,
+            }
+        ],
+        entities=[
+            {
+                "response_id": 1,
+                "name": "Competitor A",
+                "canonical_name": "Competitor A",
+                "entity_type": "BRAND",
+            }
+        ],
+        citations=[
+            {
+                "response_id": 1,
+                "url": "https://industry.example/review",
+                "source": "Industry",
+                "title": "Review",
+            }
+        ],
+    )
+    assert len(patterns["deficit_queries"]) == 1
+    assert patterns["competitors"][0]["name"] == "Competitor A"
+    assert patterns["source_patterns"][0]["resource"] == "industry.example"
+    opportunities = GeoOpportunityPlanner().build(patterns)
+    assert opportunities[0]["resource"] == "industry.example"
+    assert all("causality_notice" in item for item in opportunities)
+
+
+def test_empty_sources_produce_honest_resource_categories() -> None:
+    patterns = {
+        "sample": {"responses": 1},
+        "deficit_queries": [],
+        "source_patterns": [],
+        "competitors": [],
+    }
+    opportunities = GeoOpportunityPlanner().build(patterns)
+    assert opportunities[0]["resource"].startswith("Официальный сайт")
+    assert all("конкретные домены" not in item["resource"] for item in opportunities)
+
+
+def test_failed_answers_are_not_brand_deficits_and_sources_keep_evidence() -> None:
+    patterns = ResearchPatternAnalyzer().analyze(
+        brand="Skillbox",
+        query_catalog=[],
+        entities=[],
+        responses=[
+            {
+                "id": 1,
+                "provider": "yandex",
+                "model": "api",
+                "prompt": "Где учиться?",
+                "content": "Skillbox",
+                "error_type": None,
+            },
+            {
+                "id": 2,
+                "provider": "yandex",
+                "model": "api",
+                "prompt": "Где учиться?",
+                "content": "timeout",
+                "error_type": "TIMEOUT",
+            },
+            {
+                "id": 3,
+                "provider": "yandex",
+                "model": "api",
+                "prompt": "Где учиться?",
+                "content": "",
+                "error_type": None,
+            },
+        ],
+        citations=[
+            {"response_id": 1, "url": "https://example.org/article"},
+            {"response_id": 1, "url": "javascript:alert(1)", "title": "Fake source"},
+            {"response_id": 2, "url": "https://failed.example/article"},
+        ],
+    )
+    assert patterns["sample"]["successful_responses"] == 1
+    assert patterns["sample"]["excluded_responses"] == 2
+    assert patterns["deficit_queries"] == []
+    assert patterns["source_patterns"] == [{"resource": "example.org", "response_count": 1}]
+    action = GeoOpportunityPlanner().build(patterns)[0]
+    assert action["source_urls"] == ["https://example.org/article"]
+    assert action["evidence"][0]["response_id"] == 1
+    assert action["expected_effect_range"] == []
+    assert "не подтверждены" in action["prerequisites"]
+    assert action["evidence"][0]["answer"] == "Skillbox"
+    own_action = GeoOpportunityPlanner().build(patterns, target_website="https://example.org")[0]
+    assert own_action["channel"] == "OWNED_MEDIA"
+    assert "собственный источник" in own_action["deliverable"]
+
+
+def test_plan_does_not_pad_actions_or_claim_unobserved_site_defects() -> None:
+    actions = GeoOpportunityPlanner().build(
+        {
+            "sample": {"responses": 0},
+            "deficit_queries": [],
+            "source_patterns": [],
+            "competitors": [],
+            "query_matrix": [],
+        }
+    )
+    assert len(actions) == 1
+    assert actions[0]["channel"] == "DIAGNOSTIC"
+    assert actions[0]["evidence_status"] == "NEEDS_DATA"
+
+
+def test_observed_demand_is_prioritized_and_query_limit_is_respected() -> None:
+    catalog = [
+        {"cluster": "category_discovery", "text": "Синтетический вопрос"},
+        {
+            "cluster": "yandex_webmaster_observed",
+            "text": "Запрос из Вебмастера",
+        },
+        {
+            "cluster": "yandex_wordstat_observed",
+            "text": "Частотный запрос Wordstat",
+        },
+        {
+            "cluster": "yandex_wordstat_observed",
+            "text": "частотный запрос wordstat",
+        },
+    ]
+
+    result = ProductPipeline._prioritize_observed_queries(catalog, limit=2)
+
+    assert [item["text"] for item in result] == [
+        "Частотный запрос Wordstat",
+        "Запрос из Вебмастера",
+    ]

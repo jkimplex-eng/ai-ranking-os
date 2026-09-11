@@ -10,10 +10,8 @@ class RbacBetaRoles(RolePort):
     ADMIN_CODES = {
         "superadmin",
         "admin",
-        "organization_admin",
         "SUPERADMIN",
         "ADMIN",
-        "ORGANIZATION_ADMIN",
     }
 
     def __init__(self, db: Session) -> None:

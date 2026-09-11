@@ -41,10 +41,14 @@ def _update_progress(
     research.completed_tasks = completed
     research.failed_tasks = failed
     processed = completed + failed
-    research.progress_percent = round(
-        processed / research.total_tasks * 100,
-        2,
-    ) if research.total_tasks else 100.0
+    research.progress_percent = (
+        round(
+            processed / research.total_tasks * 100,
+            2,
+        )
+        if research.total_tasks
+        else 100.0
+    )
     db.commit()
 
 
@@ -53,6 +57,7 @@ def _provider_worker(
     router_context: tuple[Session, LLMRouterPort],
 ) -> WorkerManager:
     db, llm_router = router_context
+
     def execute(task: Task) -> dict:
         research_task = tasks_by_decision_id[task.id]
         return llm_router.generate(
@@ -159,49 +164,61 @@ def run_research(
         ResearchStatus.COMPLETED,
         ResearchStatus.ARCHIVED,
     }:
-        raise ResearchRunConflictError(
-            f"Research {research_id} in {research.status} cannot be run"
-        )
+        raise ResearchRunConflictError(f"Research {research_id} in {research.status} cannot be run")
 
     research.status = ResearchStatus.ACTIVE
     selections = payload.models or [None]
-    research.total_tasks = len(selections)
+    query_items = payload.queries or [
+        {
+            "id": "custom",
+            "cluster": "custom",
+            "intent": "custom",
+            "text": payload.query or research.objective or research.title,
+        }
+    ]
+    research.total_tasks = len(selections) * len(query_items)
     research.completed_tasks = 0
     research.failed_tasks = 0
     research.progress_percent = 0
     db.commit()
 
-    query = payload.query or research.objective or research.title
     research_tasks = []
     task_repository = ResearchTaskRepository(db)
-    for selection in selections:
-        selected_provider = selection.provider if selection else None
-        selected_model = selection.model if selection else None
-        research_task = task_repository.create(
-            ResearchTaskCreate(
-                research_id=research.id,
-                query=query,
-                provider=selected_provider,
-                model=selected_model,
-                metadata={
-                    "source": "research-run",
-                    "routing_profile": payload.routing_profile,
-                    "allowed_models": [selected_model] if selected_model else [],
-                },
+    for query_item in query_items:
+        query = query_item["text"]
+        for selection in selections:
+            selected_provider = selection.provider if selection else None
+            selected_model = selection.model if selection else None
+            research_task = task_repository.create(
+                ResearchTaskCreate(
+                    research_id=research.id,
+                    query=query,
+                    provider=selected_provider,
+                    model=selected_model,
+                    metadata={
+                        "source": "research-run",
+                        "routing_profile": payload.routing_profile,
+                        "allowed_models": [selected_model] if selected_model else [],
+                        "query_id": query_item.get("id"),
+                        "query_cluster": query_item.get("cluster"),
+                        "query_intent": query_item.get("intent"),
+                    },
+                )
             )
-        )
-        decision_task = decision_service.create_task(
-            db,
-            TaskCreate(
-                title=f"Research {research.id}: {selected_model or payload.routing_profile}",
-                description=query,
-                status=TaskStatus.READY,
-                priority=TaskPriority.MEDIUM,
-            ),
-        )
-        research_task.decision_task_id = decision_task.id
-        db.commit()
-        research_tasks.append(research_task)
+            task_model = selected_model or payload.routing_profile
+            task_cluster = query_item.get("cluster", "query")
+            decision_task = decision_service.create_task(
+                db,
+                TaskCreate(
+                    title=f"Research {research.id}: {task_cluster} / {task_model}",
+                    description=query,
+                    status=TaskStatus.READY,
+                    priority=TaskPriority.MEDIUM,
+                ),
+            )
+            research_task.decision_task_id = decision_task.id
+            db.commit()
+            research_tasks.append(research_task)
 
     tasks_by_decision_id = {
         int(item.decision_task_id): item
@@ -288,9 +305,7 @@ def run_research(
             failed=failed,
         )
 
-    research.status = (
-        ResearchStatus.COMPLETED if failed == 0 else ResearchStatus.FAILED
-    )
+    research.status = ResearchStatus.COMPLETED if failed == 0 else ResearchStatus.FAILED
     research.progress_percent = 100.0
     db.commit()
     db.refresh(research)

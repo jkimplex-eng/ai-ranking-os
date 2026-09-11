@@ -39,7 +39,7 @@ def test_registry_seeds_all_required_providers(client: TestClient) -> None:
     response = client.get("/providers")
     assert response.status_code == 200
     assert {item["id"] for item in response.json()} == {
-        "openai", "anthropic", "gemini", "groq", "github", "ollama",
+        "openai", "anthropic", "gemini", "groq", "github", "ollama", "openrouter",
         "deepseek", "mistral", "grok", "perplexity", "yandex", "gigachat",
     }
     detail = client.get("/providers/ollama")

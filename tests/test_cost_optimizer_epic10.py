@@ -23,24 +23,39 @@ def client() -> Generator[TestClient]:
     with SessionFactory() as db:
         db.add(
             PromptDefinition(
-                code="ai-visibility", version=1, title="AI Visibility",
-                description="Prompt", category="Visibility", language="en",
+                code="ai-visibility",
+                version=1,
+                title="AI Visibility",
+                description="Prompt",
+                category="Visibility",
+                language="en",
                 variables=["brand", "language", "region"],
                 template="Analyze {brand} in {language} for {region}.",
-                expected_output={}, tags=[], status="ACTIVE", active=True,
+                expected_output={},
+                tags=[],
+                status="ACTIVE",
+                active=True,
             )
         )
         db.add(
             ResearchTemplateDefinition(
-                code="ai-visibility", version=1, title="AI Visibility",
-                description="Pipeline", prompt_code="ai-visibility", pipeline=PIPELINE,
-                default_languages=["en"], default_regions=["GLOBAL"], active=True,
+                code="ai-visibility",
+                version=1,
+                title="AI Visibility",
+                description="Pipeline",
+                prompt_code="ai-visibility",
+                pipeline=PIPELINE,
+                default_languages=["en"],
+                default_regions=["GLOBAL"],
+                active=True,
             )
         )
         db.commit()
+
     def override() -> Generator[Session]:
         with SessionFactory() as db:
             yield db
+
     app.dependency_overrides[get_db] = override
     with TestClient(app) as value:
         yield value
@@ -66,8 +81,23 @@ def test_wizard_review_shows_estimate(client: TestClient) -> None:
         "/research/wizard/review",
         json={
             "brand": "Skinjestique",
+            "website_url": "https://skinjestique.example",
+            "brand_profile": {
+                "version": "1.0",
+                "brand": "Skinjestique",
+                "website_url": "https://skinjestique.example",
+                "pages_analyzed": 1,
+                "evidence_urls": [],
+                "description": "",
+                "categories": [],
+                "products": [],
+                "attributes": [],
+                "confidence": 0.4,
+                "limitations": [],
+            },
             "models": [{"provider": "openai", "model": "gpt-4o-mini"}],
-            "languages": ["en"], "regions": ["GLOBAL"],
+            "languages": ["en"],
+            "regions": ["GLOBAL"],
         },
     )
     assert response.status_code == 200, response.text

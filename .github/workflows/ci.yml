@@ -25,12 +25,16 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
+      # GitHub-hosted Ubuntu already provides the browser runtime libraries.
+      # Installing OS packages here can block indefinitely when the apt mirror is degraded.
+      - run: npx playwright install chromium
       - run: npm run test:e2e
 
   quality:
     name: Ruff and Pytest
     runs-on: ubuntu-latest
+    env:
+      PROVIDER_SECRET_KEY: ci-provider-secret-key-12345678901234567890
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -97,9 +101,22 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Runtime smoke and container healthcheck
         run: |
+          docker network create ai-ranking-ci
+          docker run -d --name ai-ranking-postgres --network ai-ranking-ci \
+            -e POSTGRES_DB=ai_ranking \
+            -e POSTGRES_USER=ai_ranking \
+            -e POSTGRES_PASSWORD=ai_ranking \
+            postgres:16-alpine
+          for attempt in $(seq 1 30); do
+            if docker exec ai-ranking-postgres pg_isready -U ai_ranking -d ai_ranking; then break; fi
+            sleep 1
+          done
           docker run -d --name ai-ranking-api -p 8000:8000 \
+            --network ai-ranking-ci \
             -e WEB_CONCURRENCY=1 \
-            -e RUN_MIGRATIONS=false \
+            -e RUN_MIGRATIONS=true \
+            -e DATABASE_URL=postgresql+psycopg://ai_ranking:ai_ranking@ai-ranking-postgres:5432/ai_ranking \
+            -e PROVIDER_SECRET_KEY=ci-provider-secret-key-12345678901234567890 \
             ai-ranking-os:ci
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:8000/health; then
@@ -141,7 +158,7 @@ jobs:
             if [ "$attempt" = 3 ]; then exit 1; fi
             sleep $((attempt * 10))
           done
-          docker compose --env-file .env up -d postgres redis
+          docker compose --env-file .env up -d --wait postgres redis
           docker compose --env-file .env run --rm --no-deps backend alembic -c backend/alembic.ini upgrade head
           docker compose --env-file .env up -d
           docker compose --env-file .env ps

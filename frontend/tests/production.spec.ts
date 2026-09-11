@@ -26,22 +26,25 @@ test("all production navigation routes use the real backend", async ({ page }) =
   });
 
   await login(page);
+  await page.getByText("Для экспертов", { exact: true }).click();
+  await page.getByText("Рабочее пространство", { exact: true }).click();
   const routes = [
-    ["Getting Started", "/getting-started", "Начните с первого результата"],
-    ["Research", "/research", "Исследования"],
-    ["Reports", "/reports", "Отчёты"],
-    ["Recommendations", "/recommendations", "Рекомендации"],
-    ["Knowledge Graph", "/knowledge-graph", "Knowledge Graph"],
-    ["Competitors", "/competitors", "Конкуренты"],
-    ["History", "/history", "История"],
-    ["AI Providers", "/providers", "AI Providers"],
-    ["Product Analytics", "/product-analytics", "Product Analytics"],
-    ["Notifications", "/notifications", "Уведомления"],
-    ["Organizations", "/organizations", "Организация"],
-    ["Feedback", "/feedback", "Feedback"],
-    ["User Profile", "/profile", "Профиль"],
-    ["Settings", "/settings", "Настройки"],
-    ["Admin Console", "/admin", "Admin Console"],
+    ["Как пользоваться", "/expert-guide", "Инструменты для глубокого анализа"],
+    ["Как начать", "/getting-started", "Начните с первого результата"],
+    ["Все исследования", "/research", "Исследования"],
+    ["Результаты", "/reports", "Отчёты"],
+    ["План действий", "/recommendations", "Рекомендации"],
+    ["Связи и источники", "/knowledge-graph", "Граф знаний"],
+    ["Конкуренты", "/competitors", "Конкуренты"],
+    ["История изменений", "/history", "История"],
+    ["Подключения ИИ", "/providers", "Провайдеры ИИ"],
+    ["Аналитика продукта", "/product-analytics", "Product Analytics"],
+    ["Уведомления", "/notifications", "Уведомления"],
+    ["Организация", "/organizations", "Организация"],
+    ["Обратная связь", "/feedback", "Обратная связь"],
+    ["Профиль", "/profile", "Профиль"],
+    ["Настройки", "/settings", "Настройки"],
+    ["Администрирование", "/admin", "Admin Console"],
   ] as const;
   for (const [link, path, heading] of routes) {
     await page.getByRole("navigation").getByRole("button").filter({ hasText: link }).click();

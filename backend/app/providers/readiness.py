@@ -6,6 +6,7 @@ from typing import ClassVar
 from sqlalchemy.orm import Session
 
 from backend.app.llm_router.ports import ProviderReadinessPort, ProviderState
+from backend.app.providers.cache import provider_cache
 from backend.app.providers.credentials import credentials
 from backend.app.providers.registry import registry
 
@@ -73,3 +74,12 @@ class RuntimeProviderReadiness(ProviderReadinessPort):
         with cls._health_lock:
             cls._health_cache[provider_id] = (now, available)
         return available
+
+    @classmethod
+    def invalidate(cls, provider_id: str) -> None:
+        """Discard stale readiness after credentials are connected or revoked."""
+        normalized = provider_id.casefold()
+        with cls._health_lock:
+            cls._health_cache.pop(normalized, None)
+        provider_cache.delete(provider_cache.key("health", normalized, "True"))
+        provider_cache.delete(provider_cache.key("health", normalized, "False"))
