@@ -1,14 +1,14 @@
 """add T-Bank payments
 
-Revision ID: 0089
-Revises: 0088
+Revision ID: 0090_tbank_payments
+Revises: 0089_client_subscriptions
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0089"
-down_revision = "0088"
+revision = "0090_tbank_payments"
+down_revision = "0089_client_subscriptions"
 branch_labels = None
 depends_on = None
 

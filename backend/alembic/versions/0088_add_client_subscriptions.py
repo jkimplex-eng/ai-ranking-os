@@ -1,14 +1,14 @@
 """add client subscription administration
 
-Revision ID: 0088
-Revises: 0087
+Revision ID: 0089_client_subscriptions
+Revises: 0088
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0088"
-down_revision = "0087"
+revision = "0089_client_subscriptions"
+down_revision = "0088"
 branch_labels = None
 depends_on = None
 
