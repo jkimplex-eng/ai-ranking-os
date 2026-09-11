@@ -1528,7 +1528,7 @@ function GeoOpportunitiesScreen() {
       </section>
       <section className="geo-ranking-head">
         <div><span className="eyebrow">EIS — ВЛИЯНИЕ ИСТОЧНИКА</span><h2>Приоритет площадок</h2><p>Чем выше EIS, тем сильнее совокупные сигналы площадки для выбранной AI-системы.</p></div>
-        <div className="geo-calculate"><label>ИИ для оценки<select value={engine} onChange={(event) => setEngine(event.target.value)}><option>YandexGPT</option><option>ChatGPT</option><option>Gemini</option><option>GigaChat</option><option>Perplexity</option><option>Claude</option></select></label><Button onClick={() => void calculate()} disabled={busy}>{busy ? "Считаем…" : "Рассчитать приоритет"}</Button>{!platforms.length ? <small>Сначала добавьте площадку или получите реальные источники через Яндекс.</small> : null}</div>
+        <div className="geo-calculate"><label>ИИ для оценки<select value={engine} onChange={(event) => setEngine(event.target.value)}><option>YandexGPT</option></select></label><Button onClick={() => void calculate()} disabled={busy}>{busy ? "Считаем…" : "Рассчитать приоритет"}</Button>{!platforms.length ? <small>Сначала добавьте площадку или получите реальные источники через Яндекс.</small> : null}</div>
       </section>
       {!platforms.length ? <section className="analytics-card geo-empty"><strong>Площадки ещё не добавлены</strong><p>Добавьте реальный ресурс выше. Система не подставляет демонстрационные сайты и не выдумывает показатели.</p></section> : priorities ? <section className="geo-ranking">
         {priorities.items.map(({ score, cost_efficiency }, index) => { const platform = platformById.get(score.platform_id); const measured = score.eis_value !== undefined && score.eis_value !== null; return <article className="analytics-card geo-rank-card" key={score.id}><div className="geo-rank-number">#{index + 1}</div><div className="geo-rank-main"><div><h3>{platform?.name ?? score.platform_id}</h3><a href={`https://${platform?.domain}`} target="_blank" rel="noreferrer">{platform?.domain}</a></div><Badge tone={score.priority === "P0" ? "danger" : score.priority === "P1" ? "warning" : "neutral"}>{score.priority ?? "НЕТ ПРИОРИТЕТА"}</Badge></div><div className="geo-score"><strong>{measured ? score.eis_value?.toFixed(1) : "—"}</strong><span>из 100</span></div><div className="geo-components">{Object.entries(score.components).map(([name, component]) => <div key={name}><span>{name === "authority" ? "Авторитет" : name === "match" ? "Соответствие запросу" : name === "content" ? "Качество контента" : name}</span><b>{component.value === null || component.value === undefined ? "Нет данных" : component.value.toFixed(1)}</b><div className="track"><i style={{ width: `${component.value ?? 0}%` }} /></div>{component.exclusions.length > 0 && <small>Не учтено: {component.exclusions.join(", ")}</small>}</div>)}</div><footer><span>Доказательства: <b>{score.evidence_status === "MEASURED" ? "измерено" : score.evidence_status === "PARTIAL" ? "частичные данные" : "не измерено"}</b></span><span>Эффективность затрат: <b>{cost_efficiency === undefined || cost_efficiency === null ? "нет данных" : cost_efficiency.toFixed(4)}</b></span><button className="secondary" onClick={() => void remove(platform!)} disabled={busy}>Удалить</button></footer></article>; })}
@@ -2224,7 +2224,7 @@ function Wizard({
               <label>Сколько запросов<select value={queryLimit} onChange={(event) => setQueryLimit(Number(event.target.value) as 30 | 50 | 100)}><option value={30}>30 — рекомендуется</option><option value={50}>50</option><option value={100}>100</option></select></label>
               <label>Повторять проверку<select value={cadence} onChange={(event) => setCadence(event.target.value as "DAILY" | "WEEKLY")}><option value="DAILY">Ежедневно</option><option value="WEEKLY">Еженедельно</option></select></label>
             </div>
-            <details><summary>Дополнительные настройки</summary><p className="muted">По умолчанию проверяется подключённая Яндекс-модель. Здесь можно оставить известных конкурентов; остальных система найдёт в ответах автоматически.</p></details>
+            <details><summary>Дополнительные настройки</summary><p className="muted">Основной сценарий работает только с экосистемой Яндекса: Wordstat, Поиск, Вебмастер, YandexGPT и доступные данные Алисы. Известных конкурентов можно оставить; остальных система найдёт в ответах Яндекса автоматически.</p></details>
           </div>
         )}
         {false && step === 3 && (
@@ -2755,4 +2755,5 @@ createRoot(document.getElementById("root")!).render(
     <App />
   </StrictMode>,
 );
+
 
