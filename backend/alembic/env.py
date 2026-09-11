@@ -16,6 +16,7 @@ from backend.app.database import Base
 from backend.app.llm_router import models as llm_router_models  # noqa: F401
 from backend.app.providers import models as provider_models  # noqa: F401
 from baseline import models as baseline_models  # noqa: F401
+from billing import models as billing_models  # noqa: F401
 from benchmark import models as benchmark_models  # noqa: F401
 from cache import models as cache_models  # noqa: F401
 from change_detection import models as change_detection_models  # noqa: F401

@@ -105,6 +105,12 @@ services:
       YANDEX_WEBMASTER_CLIENT_SECRET: ${YANDEX_WEBMASTER_CLIENT_SECRET:-}
       YANDEX_WEBMASTER_REDIRECT_URI: ${YANDEX_WEBMASTER_REDIRECT_URI:-https://app.разуммаркета.рф/api/integrations/yandex-webmaster/callback}
       WORDSTAT_PLATFORM_ORGANIZATION_ID: ${WORDSTAT_PLATFORM_ORGANIZATION_ID:-2}
+      TBANK_MODE: ${TBANK_MODE:-test}
+      TBANK_TERMINAL_KEY: ${TBANK_TERMINAL_KEY:-}
+      TBANK_PASSWORD: ${TBANK_PASSWORD:-}
+      TBANK_NOTIFICATION_URL: ${TBANK_NOTIFICATION_URL:-https://app.разуммаркета.рф/api/billing/tbank/notification}
+      TBANK_SUCCESS_URL: ${TBANK_SUCCESS_URL:-https://app.разуммаркета.рф/billing/success}
+      TBANK_FAIL_URL: ${TBANK_FAIL_URL:-https://app.разуммаркета.рф/billing/fail}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

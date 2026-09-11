@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     yandex_webmaster_redirect_uri: str = (
         "https://app.разуммаркета.рф/api/integrations/yandex-webmaster/callback"
     )
+    tbank_mode: str = "test"
+    tbank_terminal_key: str | None = None
+    tbank_password: str | None = None
+    tbank_notification_url: str = "https://app.разуммаркета.рф/api/billing/tbank/notification"
+    tbank_success_url: str = "https://app.разуммаркета.рф/billing/success"
+    tbank_fail_url: str = "https://app.разуммаркета.рф/billing/fail"
 
 
 @lru_cache

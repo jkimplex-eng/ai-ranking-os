@@ -26,6 +26,7 @@ from backend.app.providers.api import router as providers_router
 from backend.app.schemas import HealthResponse, VersionResponse
 from baseline.router import router as baseline_router
 from benchmark.router import router as benchmark_router
+from billing.router import router as billing_router
 from cache.router import router as cache_router
 from change_detection.router import router as change_detection_router
 from closed_beta.router import router as closed_beta_router
@@ -137,6 +138,7 @@ app.include_router(organization_workspace_router)
 app.include_router(cache_router)
 app.include_router(change_detection_router)
 app.include_router(closed_beta_router)
+app.include_router(billing_router)
 app.include_router(competitor_intelligence_router)
 app.include_router(rate_limit_router)
 app.include_router(hardening_router)
