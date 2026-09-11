@@ -1,5 +1,6 @@
 export type TokenPair = { access_token: string; refresh_token: string };
 export type AuthProfile = { id: number; display_name: string; email: string; roles: string[] };
+export type BillingSubscription = { plan_code: string; plan_name: string; status: string; starts_at?: string | null; ends_at?: string | null; payment_provider?: string | null; checkout_available: boolean; checkout_message: string };
 export type ModelSelection = { provider: string; model: string };
 export type WizardPayload = {
   brand: string;
@@ -347,6 +348,9 @@ export class ApiClient {
     return this.request<AdminUser>(`/admin/beta/users/${userId}`, {method: "PATCH", body: JSON.stringify({limits})});
   }
   adminTariffs() { return this.request<Tariff[]>("/admin/billing/tariffs"); }
+  billingTariffs() { return this.request<Tariff[]>("/billing/tariffs"); }
+  billingSubscription() { return this.request<BillingSubscription>("/billing/subscription"); }
+  tbankCheckout(planCode: string) { return this.request<{ payment_id: string; payment_url: string; amount: number }>("/billing/tbank/checkout", {method: "POST", body: JSON.stringify({plan_code: planCode})}); }
   updateClientSubscription(userId: number, payload: {plan_code: string; status: string; starts_at?: string | null; ends_at?: string | null; apply_plan_limits: boolean}) {
     return this.request<AdminUser>(`/admin/billing/subscriptions/${userId}`, {method: "PATCH", body: JSON.stringify(payload)});
   }

@@ -10,6 +10,7 @@ import {
   type AliceAutomationDashboard,
   type AliceLearningDashboard,
   type AuthProfile,
+  type BillingSubscription,
   type AdminAudit,
   type AdminFeedback,
   type AdminUser,
@@ -88,6 +89,7 @@ const screenPaths: Record<Screen, string> = {
   notifications: "/notifications",
   organization: "/organizations",
   settings: "/settings",
+  billing: "/billing",
   feedback: "/feedback",
   profile: "/profile",
   admin: "/admin",
@@ -111,7 +113,7 @@ const metricMeta = [
   ["Достоверность", "confidence_score"],
 ] as const;
 
-type Screen = "home" | "expert" | "research" | "wizard" | "reports" | "report" | "recommendations" | "graph" | "geo" | "competitors" | "history" | "providers" | "analytics" | "notifications" | "organization" | "settings" | "feedback" | "profile" | "admin" | "onboarding";
+type Screen = "home" | "expert" | "research" | "wizard" | "reports" | "report" | "recommendations" | "graph" | "geo" | "competitors" | "history" | "providers" | "analytics" | "notifications" | "organization" | "settings" | "billing" | "feedback" | "profile" | "admin" | "onboarding";
 
 class ScreenErrorBoundary extends Component<
   { children: ReactNode },
@@ -373,7 +375,7 @@ function Shell({
   ] as const;
   const workspaceNavSource = [
     ["♢", "Уведомления", "notifications"], ["◎", "Организация", "organization"],
-    ["♙", "Профиль", "profile"], ["⚙", "Настройки", "settings"], ["◌", "Обратная связь", "feedback"],
+    ["♙", "Профиль", "profile"], ["₽", "Подписка", "billing"], ["⚙", "Настройки", "settings"], ["◌", "Обратная связь", "feedback"],
     ["→", "Как начать", "onboarding"], ["▦", "Администрирование", "admin"],
   ] as const;
   const visible = (items: readonly (readonly [string, string, Screen])[]) =>
@@ -2549,6 +2551,51 @@ function Report({
   );
 }
 
+function BillingScreen() {
+  const [tariffs, setTariffs] = useState<Array<import("./api").Tariff>>([]);
+  const [subscription, setSubscription] = useState<BillingSubscription | null>(null);
+  const [busyPlan, setBusyPlan] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    Promise.all([api.billingTariffs(), api.billingSubscription()])
+      .then(([items, current]) => { setTariffs(items); setSubscription(current); })
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить подписку"));
+  }, []);
+
+  const checkout = async (planCode: string) => {
+    setBusyPlan(planCode); setError("");
+    try {
+      const payment = await api.tbankCheckout(planCode);
+      window.location.assign(payment.payment_url);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Не удалось открыть оплату");
+      setBusyPlan("");
+    }
+  };
+
+  return <main className="analytics-page">
+    <header className="analytics-hero"><div><span className="eyebrow">ПОДПИСКА</span><h1>Выберите тариф</h1><p>После выбора вы перейдёте на защищённую платёжную страницу Т‑Банка. Данные карты не проходят через AI Ranking OS.</p></div></header>
+    {error ? <div className="error" role="alert">{error}</div> : null}
+    <section className="panel research-lab-section">
+      <span className="section-label">ТЕКУЩИЙ ДОСТУП</span>
+      <h2>{subscription?.plan_name ?? "Загрузка…"} · {subscription?.status ?? ""}</h2>
+      <p>{subscription?.ends_at ? `Доступ действует до ${new Date(subscription.ends_at).toLocaleDateString("ru-RU")}.` : "Платный тариф ещё не подключён."}</p>
+      <p className="method-note">{subscription?.checkout_message}</p>
+    </section>
+    <section className="expert-tool-grid">
+      {tariffs.filter((tariff) => tariff.monthly_price_rub > 0).map((tariff) => <article className="analytics-card expert-tool" key={tariff.code}>
+        <span className="section-label">{tariff.name.toUpperCase()}</span>
+        <h2>{tariff.monthly_price_rub.toLocaleString("ru-RU")} ₽ <small>/ месяц</small></h2>
+        <p>{tariff.description}</p>
+        <p>До {tariff.limits.monthly_research_limit} исследований в месяц · {tariff.limits.max_projects} проектов</p>
+        <button className="primary-action" disabled={!subscription?.checkout_available || Boolean(busyPlan)} onClick={() => checkout(tariff.code)}>{busyPlan === tariff.code ? "Создаём платёж…" : `Выбрать «${tariff.name}»`}</button>
+      </article>)}
+    </section>
+    <p className="method-note">Тестовый режим: деньги не списываются. После подтверждения платежа Т‑Банк уведомит платформу, и тариф активируется автоматически на 30 дней.</p>
+  </main>;
+}
+
 function App() {
   const [user, setUser] = useState("");
   const [roles, setRoles] = useState<string[]>([]);
@@ -2635,6 +2682,8 @@ function App() {
         <OrganizationScreen />
       ) : screen === "settings" ? (
         <SettingsScreen user={user} />
+      ) : screen === "billing" ? (
+        <BillingScreen />
       ) : screen === "admin" && isAdmin ? (
         <AdminConsoleScreen />
       ) : screen === "admin" || screen === "analytics" ? (
