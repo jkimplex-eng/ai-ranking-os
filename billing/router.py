@@ -127,7 +127,17 @@ def checkout(
         )
         with urlopen(request, timeout=20) as response:
             result = json.loads(response.read())
-    except (HTTPError, URLError, TimeoutError) as error:
+    except HTTPError as error:
+        if settings.tbank_mode == "test" and error.code == 403:
+            raise HTTPException(
+                status_code=424,
+                detail=(
+                    "Тестовый API Т‑Банка пока не разрешил IP сервера. "
+                    "Добавьте IP 72.56.33.7 в allowlist тестовой среды через acq_help@tbank.ru."
+                ),
+            ) from error
+        raise HTTPException(status_code=502, detail="Т‑Банк отклонил создание платежа") from error
+    except (URLError, TimeoutError) as error:
         raise HTTPException(status_code=502, detail="Т-Банк временно недоступен") from error
     if not result.get("Success") or not result.get("PaymentURL"):
         raise HTTPException(status_code=502, detail="Т-Банк не создал платёж")
