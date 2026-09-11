@@ -385,7 +385,8 @@ def test_query_map_applies_city_to_every_generated_buyer_query() -> None:
     )
 
     assert catalog
-    assert all(item["text"].startswith("В Москве, ") for item in catalog)
+    assert all(not item["text"].startswith("В Москве, ") for item in catalog)
+    assert all(item["text"] == item["text"].strip() for item in catalog)
     assert len({item["id"] for item in catalog}) == len(catalog)
 
 

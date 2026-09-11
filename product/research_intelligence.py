@@ -514,14 +514,13 @@ class QueryMapBuilder:
 
     @staticmethod
     def _with_location(text: str, location: str) -> str:
-        """Add geography to a natural question without changing its intent."""
+        """Keep the buyer wording natural; geography is stored as structured context.
 
-        stripped = text.rstrip()
-        if not stripped:
-            return stripped
-        natural_text = f"{stripped[0].lower()}{stripped[1:]}"
-        natural_location = f"{location[0].upper()}{location[1:]}"
-        return f"{natural_location}, {natural_text}"
+        A visible prefix such as ``В Москве,`` makes generated questions sound
+        synthetic and can change the intent being measured.  Region filters are
+        still sent to the providers separately.
+        """
+        return text.rstrip()
 
     @staticmethod
     def _price_context(products: list[dict[str, Any]], *, english: bool) -> str:
