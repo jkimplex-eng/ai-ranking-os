@@ -94,6 +94,14 @@ def dashboard(project_id: int, user_id: CurrentUserId, db: DbSession) -> Competi
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
+@router.get("/projects/{project_id}/suggestions")
+def suggestions(project_id: int, user_id: CurrentUserId, db: DbSession):
+    try:
+        return CompetitorIntelligenceService(db).suggestions(user_id, project_id)
+    except ProjectNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
 @router.post("/projects/{project_id}/refresh", response_model=CompetitorDashboardRead)
 def refresh(project_id: int, user_id: CurrentUserId, db: DbSession) -> CompetitorDashboardRead:
     try:

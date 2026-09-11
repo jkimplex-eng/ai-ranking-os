@@ -1,3 +1,6 @@
+export class ApiError extends Error {
+  constructor(message: string, public status: number) { super(message); }
+}
 export type TokenPair = { access_token: string; refresh_token: string };
 export type AuthProfile = { id: number; display_name: string; email: string; roles: string[] };
 export type BillingSubscription = { plan_code: string; plan_name: string; status: string; starts_at?: string | null; ends_at?: string | null; payment_provider?: string | null; checkout_available: boolean; checkout_message: string };
@@ -320,7 +323,7 @@ export class ApiClient {
     }
     if (!response.ok) {
       const body = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail));
+      throw new ApiError(typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail), response.status);
     }
     return response.status === 204 ? (undefined as T) : response.json() as Promise<T>;
   }
@@ -409,6 +412,7 @@ export class ApiClient {
     return this.request<void>(`/workspace/projects/${projectId}/competitors/${competitorId}`, { method: "DELETE" });
   }
   competitorDashboard(projectId: number) { return this.request<CompetitorDashboard>(`/competitor-intelligence/projects/${projectId}`); }
+  competitorSuggestions(projectId: number) { return this.request<Array<{ name: string; limitation: string; evidence: Array<{ research_id: number; response_id: number; query: string; provider: string; model: string; urls: string[] }> }>>(`/competitor-intelligence/projects/${projectId}/suggestions`); }
   refreshCompetitorDashboard(projectId: number) { return this.request<CompetitorDashboard>(`/competitor-intelligence/projects/${projectId}/refresh`, { method: "POST" }); }
   setCompetitorDailyMonitoring(projectId: number, enabled: boolean) {
     return this.request<CompetitorDashboard>(`/competitor-intelligence/projects/${projectId}/daily-monitoring`, { method: "PUT", body: JSON.stringify({ enabled }) });

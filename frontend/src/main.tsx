@@ -4,8 +4,11 @@ import { EvidencePlan, type EvidenceAction, type SourceAnalysis } from "./Eviden
 import { SiteImprovementPanel } from "./SiteImprovementPanel";
 import { ClientManagement } from "./ClientManagement";
 import { ClientRegistration } from "./ClientRegistration";
+import { MeasuredSources } from "./MeasuredSources";
+import { CompetitorSuggestions } from "./CompetitorSuggestions";
 import {
   ApiClient,
+  ApiError,
   type ActionPlanItem,
   type AliceAutomationDashboard,
   type AliceLearningDashboard,
@@ -891,6 +894,7 @@ function CompetitorsScreen() {
     {projects.length > 0 && showNewProject ? <section className="analytics-card competitor-first-project compact-project"><div><span className="eyebrow">НОВЫЙ БРЕНД</span><h2>Создать отдельное наблюдение</h2><p>Конкуренты и результаты разных брендов не будут смешиваться.</p></div><form onSubmit={createProject}><label htmlFor="competitor-add-project-name">Название бренда</label><div><input id="competitor-add-project-name" value={projectName} onChange={(event) => setProjectName(event.target.value)} placeholder="Например, Skillbox" required autoFocus /><button className="primary-action" disabled={creatingProject}>{creatingProject ? "Создаём…" : "Создать бренд"}</button></div></form></section> : null}
     {!projects.length ? <section className="analytics-card competitor-first-project"><div><span className="eyebrow">ПЕРВЫЙ ШАГ</span><h2>Создайте проект для вашего бренда</h2><p>Проект объединяет ваш бренд, исследования и конкурентов. Например: «Skinjestique».</p></div><form onSubmit={createProject}><label htmlFor="competitor-project-name">Название проекта</label><div><input id="competitor-project-name" value={projectName} onChange={(event) => setProjectName(event.target.value)} placeholder="Название вашего бренда" required autoFocus /><button className="primary-action" disabled={creatingProject}>{creatingProject ? "Создаём…" : "Создать и продолжить"}</button></div></form></section> : <>
       <section className="competitor-controls">
+        {projectId && <CompetitorSuggestions api={api} projectId={projectId} onSelect={(candidate) => { setName(candidate); setDomain(""); setAliases(""); }} />}
         <form className="analytics-card competitor-form" onSubmit={addCompetitor}><div><span className="eyebrow">НОВЫЙ КОНКУРЕНТ</span><h2>Добавить в наблюдение</h2></div><label>Название<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Например, Librederm" required /></label><label>Сайт<input value={domain} onChange={(event) => setDomain(event.target.value)} placeholder="librederm.ru" /></label><label>Другие названия<input value={aliases} onChange={(event) => setAliases(event.target.value)} placeholder="Алиасы через запятую" /></label><button className="primary-action" disabled={saving}>{saving ? "Сохраняем…" : "Добавить конкурента"}</button></form>
         <article className="analytics-card monitoring-card"><span className="eyebrow">ЕЖЕДНЕВНЫЙ КОНТРОЛЬ</span><h2>{dashboard?.monitoring_enabled ? "Мониторинг включён" : "Мониторинг выключен"}</h2><p>{dashboard?.monitoring_enabled ? `Следующий запуск: ${dashboard.next_run_at ? new Date(dashboard.next_run_at).toLocaleString("ru-RU") : "рассчитывается"}` : "Используется последнее завершённое исследование проекта и те же подключённые модели."}</p><button className={dashboard?.monitoring_enabled ? "secondary" : "primary-action"} onClick={toggleMonitoring} disabled={saving || !dashboard}>{dashboard?.monitoring_enabled ? "Выключить" : "Включить ежедневно"}</button><button className="secondary" onClick={() => projectId && loadDashboard(projectId, true)} disabled={loading}>Пересчитать по реальным данным</button></article>
       </section>
@@ -1224,14 +1228,19 @@ function GeoOpportunitiesScreen() {
     const failedBlocks: string[] = [];
     const recover = async <T,>(label: string, request: Promise<T>, fallback: T): Promise<T> => {
       try { return await request; }
-      catch { failedBlocks.push(label); return fallback; }
+      catch (reason) {
+        if (!(label === "снимок Вебмастера" && reason instanceof ApiError && reason.status === 404)) {
+          failedBlocks.push(`${label}: ${reason instanceof Error ? reason.message : "ошибка запроса"}`);
+        }
+        return fallback;
+      }
     };
     const [items, sets, estimates, audits, intelligence, learning, automation, wordstatStatus, researchItems] = await Promise.all([
       recover("реестр площадок", api.geoPlatforms(), [] as GeoPlatform[]),
       recover("наборы запросов", api.frozenPromptSets(), [] as FrozenPromptSet[]),
       recover("история публикаций", api.publicationInfluence(), [] as PublicationInfluenceEstimate[]),
       recover("GEO-аудиты", api.geoSiteAudits(), [] as GeoSiteAudit[]),
-      recover<YandexIntelligence | undefined>("Яндекс Вебмастер", api.yandexIntelligence(), undefined),
+      recover<YandexIntelligence | undefined>("снимок Вебмастера", api.yandexIntelligence(), undefined),
       recover<AliceLearningDashboard | undefined>("закономерности Алисы", api.aliceLearningDashboard(), undefined),
       recover<AliceAutomationDashboard | undefined>("мониторинг Алисы", api.aliceAutomationDashboard(), undefined),
       recover<WordstatConnection | undefined>("Wordstat", api.wordstatStatus(), undefined),
@@ -1268,7 +1277,7 @@ function GeoOpportunitiesScreen() {
         : undefined,
     );
     setWordstatConnection(wordstatStatus);
-    if (failedBlocks.length) setError(`Часть данных временно недоступна: ${failedBlocks.join(", ")}. Остальные блоки продолжают работать.`);
+    setError(failedBlocks.length ? `Не удалось загрузить: ${failedBlocks.join("; ")}` : "");
   }, []);
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1433,13 +1442,6 @@ function GeoOpportunitiesScreen() {
       ? "НЕДОСТАТОЧНО РАЗНООБРАЗИЯ"
       : "НЕТ ОБУЧЕННОЙ МОДЕЛИ";
   const observedYandexSources = researchEvidence?.yandex_generative_evidence?.source_patterns ?? [];
-  const candidatePublicationResources = [
-    { name: "Дзен", domain: "dzen.ru", basis: "Кандидат для проверки тематических публикаций и поисковых ответов Яндекса." },
-    { name: "VC.ru", domain: "vc.ru", basis: "Кандидат для экспертных материалов и независимых упоминаний." },
-    { name: "Хабр", domain: "habr.com", basis: "Кандидат для технической экспертизы и авторских разборов." },
-    { name: "YouTube", domain: "youtube.com", basis: "Кандидат для видеоответов и демонстраций продукта." },
-    { name: "Wikipedia / Викиданные", domain: "wikipedia.org", basis: "Кандидат только при наличии независимых энциклопедических источников." },
-  ];
   return (
     <main className="analytics-page geo-page">
       <header className="analytics-hero">
@@ -1456,7 +1458,7 @@ function GeoOpportunitiesScreen() {
       <section className="analytics-card geo-site-audit">
         <div className="geo-audit-intro"><span className="eyebrow">РЕАЛЬНЫЕ ИСТОЧНИКИ ЯНДЕКСА</span><h2>Где стоит добиваться публикации или упоминания</h2><p>Это домены, которые генеративный поиск Яндекса действительно использовал в ответах выбранного исследования. Мы не присваиваем площадкам выдуманные звёзды: показываем частоту, ссылки на наблюдения и уверенность.</p></div>
         {observedYandexSources.length ? <div className="geo-audit-result"><header><div><strong>{observedYandexSources.length}</strong><span>доменов использовано в ответах</span></div><Badge tone="success">ИЗМЕРЕНО</Badge></header>{observedYandexSources.slice(0, 12).map((source) => <article className="geo-audit-action" key={source.domain}><Badge tone={source.confidence === "HIGH" ? "success" : "warning"}>{source.confidence}</Badge><div><b>{source.domain}</b><p>Использован в {source.used_in_answers} ответах · покрытие {source.coverage_percent.toFixed(1)}%</p><small>{source.interpretation}</small><details><summary>Почему площадка в списке</summary>{source.evidence.map((item) => <p key={`${item.query}:${item.url}`}><a href={item.url} target="_blank" rel="noreferrer">{item.title || item.url}</a><br />Запрос: «{item.query}»</p>)}</details></div></article>)}<p className="method-note">Наличие домена в ответе доказывает использование источника в этой выборке, но не доказывает, что публикация на нём автоматически приведёт к рекомендации. Сначала проверьте правила размещения и тематическое соответствие.</p></div> : <div className="geo-empty"><strong>Площадки ещё не измерены</strong><p>Завершите исследование с генеративным поиском Яндекса. После этого здесь появятся Дзен, VC, отраслевые СМИ или другие домены — только если Яндекс реально использовал их в ответах.</p></div>}
-        <div className="geo-empty" style={{ marginTop: 16 }}><strong>Кандидатные ресурсы для проверки</strong><p>Это не рейтинг и не обещание результата. Площадки ниже — рабочие гипотезы; они получат оценку только после появления в реальных ответах Яндекса или после добавления подтверждённого наблюдения.</p><div className="geo-audit-categories">{candidatePublicationResources.map((resource) => <div key={resource.domain}><span>{resource.name}</span><b>НЕ ИЗМЕРЕНО</b><small>{resource.domain}<br />{resource.basis}</small></div>)}</div><Button onClick={() => void syncYandex()} disabled={busy}>{busy ? "Проверяем источники…" : "Проверить реальные источники Яндекса"}</Button></div>
+        <MeasuredSources analysis={researchEvidence?.source_analysis} />
       </section>
       <section className="analytics-card geo-site-audit">
         <div className="geo-audit-intro"><span className="eyebrow">GEO-АУДИТ САЙТА</span><h2>Готов ли сайт стать источником для ИИ</h2><p>100-балльная проверка доступности для краулеров, сущности бренда, контента, доказательности и технических сигналов. Каждый балл подтверждается наблюдаемым признаком.</p><form onSubmit={auditSite}><input aria-label="Бренд для GEO-аудита" placeholder="Название бренда" value={auditForm.brand} onChange={(event) => setAuditForm({ ...auditForm, brand: event.target.value })} required /><input aria-label="Сайт для GEO-аудита" type="url" placeholder="https://example.ru" value={auditForm.website} onChange={(event) => setAuditForm({ ...auditForm, website: event.target.value })} required /><Button type="submit" disabled={busy}>{busy ? "Проверяем сайт…" : "Провести GEO-аудит"}</Button></form></div>

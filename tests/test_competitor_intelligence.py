@@ -398,6 +398,30 @@ def _completed_research(project_id: int) -> int:
         return research.id
 
 
+def test_suggestions_keep_evidence_and_do_not_assign_media_as_owned_domain(client: TestClient) -> None:
+    from workspace.models import ProjectCompetitor
+    project_id, competitor_id = _project_and_competitor(client)
+    research_id = _completed_research(project_id)
+    with TestingSession() as db:
+        competitor = db.get(ProjectCompetitor, competitor_id)
+        competitor.name = "Another company"
+        competitor.brands = []
+        db.commit()
+    result = client.get(f"/competitor-intelligence/projects/{project_id}/suggestions")
+    assert result.status_code == 200
+    assert result.json()[0]["name"] == "Librederm"
+    assert result.json()[0]["domains"] == []
+    assert result.json()[0]["evidence"][0]["research_id"] == research_id
+    assert result.json()[0]["evidence"][0]["urls"] == ["https://beauty.example/reviews/serums"]
+    assert client.get("/competitor-intelligence/projects/99999/suggestions").status_code == 404
+
+
+def test_suggestions_exclude_existing_competitors(client: TestClient) -> None:
+    project_id, _ = _project_and_competitor(client)
+    _completed_research(project_id)
+    assert client.get(f"/competitor-intelligence/projects/{project_id}/suggestions").json() == []
+
+
 def test_refresh_builds_visibility_and_publication_evidence(client: TestClient) -> None:
     project_id, competitor_id = _project_and_competitor(client)
     _completed_research(project_id)
