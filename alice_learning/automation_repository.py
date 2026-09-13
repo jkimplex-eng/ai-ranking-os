@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -41,11 +41,26 @@ class AliceAutomationRepository:
         )
 
     def active_run(self, plan_id: int) -> AliceAutomationRun | None:
-        return self.db.scalar(
+        run = self.db.scalar(
             select(AliceAutomationRun).where(
                 AliceAutomationRun.plan_id == plan_id, AliceAutomationRun.status == "RUNNING"
             )
         )
+        if run is None:
+            return None
+        started = run.started_at
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=UTC)
+        if datetime.now(UTC) - started <= timedelta(hours=2):
+            return run
+        # A worker restart can leave a RUNNING row behind. Release the
+        # unique running slot so the next scheduled check can recover.
+        run.status = "FAILED"
+        run.finished_at = datetime.now(UTC)
+        run.error = "Запуск прерван после тайм-аута восстановления worker"
+        self.db.add(run)
+        self.db.commit()
+        return None
 
     def latest_query_set(self, plan_id: int, kind: str) -> AliceQuerySet | None:
         return self.db.scalar(
