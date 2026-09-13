@@ -12,6 +12,14 @@ class SqlAlchemyReportSource:
 
     def list_reports(self, project_id: int | None = None) -> list[ReportSourceItem]:
         statement = select(Research).order_by(Research.created_at.desc())
+        # Report center is a second entry point to research data.  Reuse the
+        # request-scoped research predicate so a client cannot enumerate a
+        # different tenant's reports through /reports.
+        user_id = self.db.info.get("research_user_id")
+        if user_id is not None:
+            from research.access import research_scope
+
+            statement = statement.where(research_scope(self.db, int(user_id)))
         if project_id is not None:
             statement = statement.where(Research.project_id == project_id)
         research = list(self.db.scalars(statement))
@@ -38,4 +46,16 @@ class SqlAlchemyReportSource:
         return result
 
     def export_payload(self, research_id: int) -> dict:
+        user_id = self.db.info.get("research_user_id")
+        if user_id is not None:
+            from research.access import research_scope
+
+            allowed = self.db.scalar(
+                select(Research.id).where(
+                    Research.id == research_id,
+                    research_scope(self.db, int(user_id)),
+                )
+            )
+            if allowed is None:
+                raise LookupError(f"Research {research_id} not found")
         return ReportingService(self.db).get_report(research_id).model_dump(mode="json")

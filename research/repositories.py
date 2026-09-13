@@ -33,7 +33,29 @@ class Repository[ModelT: Base]:
         entity = self.db.get(self.model, entity_id)
         if entity is None:
             raise EntityNotFoundError(f"{self.entity_name} {entity_id} not found")
+        if self.db.info.get("research_user_id") is not None:
+            found = self.db.scalar(
+                self._scoped(select(self.model)).where(self.model.id == entity_id)
+            )
+            if found is None:
+                raise EntityNotFoundError(f"{self.entity_name} {entity_id} not found")
         return entity
+
+    def _scoped(self, statement):
+        user_id = self.db.info.get("research_user_id")
+        if user_id is None:
+            return statement
+        from research.access import research_scope
+
+        researches = select(Research.id).where(research_scope(self.db, user_id))
+        if self.model is Research:
+            return statement.where(Research.id.in_(researches))
+        if self.model is ResearchTask:
+            return statement.where(ResearchTask.research_id.in_(researches))
+        if self.model is Response:
+            tasks = select(ResearchTask.id).where(ResearchTask.research_id.in_(researches))
+            return statement.where(Response.research_task_id.in_(tasks))
+        return statement
 
     def list(
         self,
@@ -43,11 +65,8 @@ class Repository[ModelT: Base]:
         query: Select[tuple[ModelT]] | None = None,
     ) -> list[ModelT]:
         statement = select(self.model) if query is None else query
-        return list(
-            self.db.scalars(
-                statement.order_by(self.model.id).offset(offset).limit(limit)
-            )
-        )
+        statement = self._scoped(statement)
+        return list(self.db.scalars(statement.order_by(self.model.id).offset(offset).limit(limit)))
 
     def delete(self, entity_id: int) -> None:
         entity = self.get(entity_id)
@@ -82,6 +101,7 @@ class ResearchRepository(Repository[Research]):
         for field, value in self._changes(payload).items():
             setattr(research, field, value)
         return self._save(research)
+
 
 class ResearchTaskRepository(Repository[ResearchTask]):
     model = ResearchTask
@@ -170,7 +190,5 @@ class ResponseRepository(Repository[Response]):
         return self.list(
             offset=offset,
             limit=limit,
-            query=select(Response).where(
-                Response.research_task_id == research_task_id
-            ),
+            query=select(Response).where(Response.research_task_id == research_task_id),
         )

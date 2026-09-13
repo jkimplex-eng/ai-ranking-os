@@ -2,7 +2,40 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field
 
-from closed_beta.models import BetaAccessStatus
+from closed_beta.models import BetaAccessStatus, SubscriptionStatus
+
+
+class TariffRead(BaseModel):
+    code: str
+    name: str
+    monthly_price_rub: int
+    description: str
+    limits: "BetaLimits"
+    selectable: bool = True
+
+
+class SubscriptionUpdate(BaseModel):
+    plan_code: str = Field(min_length=1, max_length=40)
+    status: SubscriptionStatus
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    payment_provider: str | None = Field(default=None, max_length=40)
+    external_customer_id: str | None = Field(default=None, max_length=200)
+    external_subscription_id: str | None = Field(default=None, max_length=200)
+    apply_plan_limits: bool = True
+
+
+class SubscriptionRead(BaseModel):
+    plan_code: str
+    plan_name: str
+    status: SubscriptionStatus
+    starts_at: datetime | None
+    ends_at: datetime | None
+    payment_provider: str | None
+    external_customer_id: str | None
+    external_subscription_id: str | None
+    checkout_available: bool
+    checkout_message: str
 
 
 class BetaLimits(BaseModel):
@@ -28,6 +61,7 @@ class BetaUserRead(BaseModel):
     last_seen_at: datetime | None
     research_count: int
     limits: BetaLimits
+    subscription: SubscriptionRead
 
 
 class InvitationCreate(BaseModel):

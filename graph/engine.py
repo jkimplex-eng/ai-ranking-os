@@ -80,15 +80,29 @@ class GraphEngine:
         self.db.commit()
         return self.get(snapshot.id)
 
-    def latest(self) -> GraphSnapshotRead:
-        snapshot_id = self.db.scalar(
-            select(GraphSnapshot.id).order_by(
+    def latest(self, research_id: int | None = None) -> GraphSnapshotRead:
+        snapshots = self.db.scalars(
+            select(GraphSnapshot).order_by(
                 GraphSnapshot.created_at.desc(), GraphSnapshot.id.desc()
             )
         )
-        if snapshot_id is None:
-            raise GraphSnapshotNotFoundError("No graph snapshots exist")
-        return self.get(snapshot_id)
+        snapshot = next(
+            (
+                item
+                for item in snapshots
+                if research_id is None
+                or str(item.build_metadata.get("research_id")) == str(research_id)
+            ),
+            None,
+        )
+        if snapshot is None:
+            detail = (
+                f"No graph snapshot exists for research {research_id}"
+                if research_id is not None
+                else "No graph snapshots exist"
+            )
+            raise GraphSnapshotNotFoundError(detail)
+        return self.get(snapshot.id)
 
     def get(self, snapshot_id: int) -> GraphSnapshotRead:
         snapshot = self.db.scalar(

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backend.app.llm_router.schemas import RoutingProfile
 from research.schemas import ResearchModelSelection, ResearchRead
@@ -121,6 +121,7 @@ class ResearchTemplateUpdate(BaseModel):
 
 class WizardRequest(BaseModel):
     brand: str = Field(min_length=1, max_length=300)
+    website_url: str = Field(min_length=4, max_length=2000)
     entity_id: UUID | None = None
     models: list[ResearchModelSelection] = Field(default_factory=list, max_length=20)
     routing_profile: RoutingProfile = RoutingProfile.BALANCED
@@ -128,7 +129,46 @@ class WizardRequest(BaseModel):
     regions: list[str] = Field(default_factory=lambda: ["GLOBAL"], min_length=1)
     prompt_code: str = "ai-visibility"
     research_template_code: str = "ai-visibility"
+    research_scope: str = Field(
+        default="SELECTED",
+        pattern=r"^(ALL|SELECTED|RUSSIAN|COMMERCIAL|FREE|CONSENSUS|COMPARE)$",
+    )
+    research_profile: str = Field(
+        default="UNIVERSAL",
+        pattern=r"^(GEO|ECOMMERCE|MEDICAL|BEAUTY|ENTERPRISE|UNIVERSAL)$",
+    )
     variables: dict[str, str] = Field(default_factory=dict)
+    brand_profile: dict[str, Any] | None = None
+    competitors: list[dict[str, str]] = Field(default_factory=list, max_length=20)
+    custom_queries: list[str] = Field(default_factory=list, max_length=120)
+    query_limit: int = Field(default=30, ge=1, le=100)
+
+    @field_validator("custom_queries")
+    @classmethod
+    def validate_custom_queries(cls, values: list[str]) -> list[str]:
+        cleaned = list(dict.fromkeys(value.strip() for value in values if value.strip()))
+        if any(len(value) < 12 or len(value) > 500 for value in cleaned):
+            raise ValueError("Каждый пользовательский запрос должен содержать 12–500 символов")
+        return cleaned
+
+
+class BrandProfileRequest(BaseModel):
+    brand: str = Field(min_length=1, max_length=300)
+    website_url: str = Field(min_length=4, max_length=2000)
+
+
+class BrandProfileRead(BaseModel):
+    version: str
+    brand: str
+    website_url: str
+    pages_analyzed: int
+    evidence_urls: list[str]
+    description: str
+    categories: list[str]
+    products: list[dict[str, Any]]
+    attributes: list[str]
+    confidence: float
+    limitations: list[str]
 
 
 class WizardReview(BaseModel):
@@ -142,6 +182,10 @@ class WizardReview(BaseModel):
     estimated_cost_usd: float = 0
     estimated_time_ms: float = 0
     selected_models: list[str] = Field(default_factory=list)
+    query_catalog: list[dict[str, str]] = Field(default_factory=list)
+    task_count: int = 0
+    brand_profile: BrandProfileRead
+    competitor_profiles: list[BrandProfileRead] = Field(default_factory=list)
 
 
 class WizardRunResult(BaseModel):
