@@ -215,6 +215,55 @@ class AutomationNotifications:
         self.events.append((event_type, title, message, kwargs))
 
 
+def test_daily_control_survives_template_changes_while_weekly_queries_adapt() -> None:
+    class ChangingTemplate(AutomationTemplate):
+        changed = False
+        calls = 0
+
+        def context(self, organization_id, template_research_id, website_url):
+            self.calls += 1
+            if self.changed:
+                return AutomationTemplateContext(
+                    queries=({"id": "new", "text": "новый покупательский вопрос"},),
+                    metadata={"query_map_version": "3.0"},
+                )
+            return super().context(organization_id, template_research_id, website_url)
+
+    with database() as db:
+        repository = AliceAutomationRepository(db)
+        template = ChangingTemplate()
+        launcher = AutomationLauncher()
+        automation = AliceAutomationService(
+            repository, launcher, template, AutomationNotifications()
+        )
+        plan = automation.create(
+            1, 1, AutomationPlanCreate(
+                template_research_id=10,
+                brand="Skinjestique",
+                website_url="https://skinjestique.example",
+                models=[{"provider": "yandex", "model": "yandexgpt/latest"}],
+                daily_budget_usd=10,
+                monthly_budget_usd=100,
+            ),
+        )
+        first = automation.run(1, plan.id, "DAILY")
+        control_id = first.query_set_id
+        fingerprint = repository.latest_query_set(plan.id, "CONTROL").fingerprint
+        template.changed = True
+        second = automation.run(1, plan.id, "DAILY")
+        assert first.status == second.status == "COMPLETED"
+        assert second.query_set_id == control_id
+        assert launcher.requests[0].queries == launcher.requests[1].queries
+        assert template.calls == 1
+        assert repository.latest_query_set(plan.id, "CONTROL").fingerprint == fingerprint
+
+        weekly = automation.run(1, plan.id, "WEEKLY")
+        assert weekly.status == "COMPLETED"
+        assert launcher.requests[2].queries == ("новый покупательский вопрос",) * 3
+        assert repository.latest_query_set(plan.id, "ADAPTIVE").version == 2
+        assert repository.latest_query_set(plan.id, "CONTROL").id == control_id
+
+
 def test_automation_freezes_queries_repeats_three_times_and_records_run() -> None:
     db = database()
     launcher = AutomationLauncher()

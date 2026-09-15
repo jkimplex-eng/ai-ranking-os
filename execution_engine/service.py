@@ -361,8 +361,20 @@ def start_task_execution(
     *,
     retry_base_seconds: float,
     sleep: Callable[[float], None] = time.sleep,
+    wait_for_agent_seconds: float = 0,
 ) -> Execution:
-    execution, task, agent = schedule_task_execution(db, task_id, manager)
+    deadline = time.monotonic() + wait_for_agent_seconds
+    while True:
+        try:
+            execution, task, agent = schedule_task_execution(db, task_id, manager)
+            break
+        except NoAgentAvailableError:
+            # Release task locks before waiting for another research to finish.
+            db.rollback()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise
+            sleep(min(1.0, remaining))
     return run_execution(
         db,
         execution,

@@ -142,11 +142,15 @@ class AliceAutomationService:
         if self.repository.active_run(plan.id):
             raise AliceAutomationError("Автоматическое исследование уже выполняется")
         now = self._aware(self.clock())
-        context = self.templates.context(
-            organization_id, plan.template_research_id, plan.website_url
-        )
         query_kind = "CONTROL" if kind == "DAILY" else "ADAPTIVE"
-        query_set = self._query_set(plan, query_kind, list(context.queries), context.metadata)
+        query_set = (
+            self.repository.latest_query_set(plan.id, "CONTROL") if kind == "DAILY" else None
+        )
+        if query_set is None:
+            context = self.templates.context(
+                organization_id, plan.template_research_id, plan.website_url
+            )
+            query_set = self._query_set(plan, query_kind, list(context.queries), context.metadata)
         limit = plan.daily_query_limit if kind == "DAILY" else plan.weekly_query_limit
         base_queries = [str(item["text"]) for item in query_set.queries[:limit]]
         queries = tuple(query for query in base_queries for _ in range(plan.repetitions))
