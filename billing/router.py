@@ -112,6 +112,26 @@ def checkout(
         "SuccessURL": settings.tbank_success_url,
         "FailURL": settings.tbank_fail_url,
         "DATA": {"OperationInitiatorType": "1"},
+        # The live terminal has online-cash enabled.  T-Bank therefore
+        # requires a fiscal receipt on Init; without it the API returns 309.
+        # Subscription is a single digital service, so one full-prepayment
+        # item is enough for the hosted payment form flow.
+        "Receipt": {
+            "Email": principal.email,
+            "Taxation": "usn_income",
+            "Items": [
+                {
+                    "Name": f"Подписка AI Ranking OS — {tariff[0]}",
+                    "Price": amount,
+                    "Quantity": 1,
+                    "Amount": amount,
+                    "PaymentMethod": "full_prepayment",
+                    "PaymentObject": "service",
+                    "Tax": "none",
+                    "MeasurementUnit": "шт",
+                }
+            ],
+        },
     }
     request_payload["Token"] = _token(request_payload, settings.tbank_password)
     endpoint = (
