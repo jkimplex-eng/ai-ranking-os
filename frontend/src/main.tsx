@@ -271,6 +271,18 @@ function healthLabel(value: number) {
         : "Критично";
 }
 
+function SignalMark({ compact = false }: { compact?: boolean }) {
+  return (
+    <span className={`signal-mark${compact ? " compact" : ""}`} aria-hidden="true">
+      <svg viewBox="0 0 48 48" role="img">
+        <circle cx="24" cy="24" r="4.5" fill="currentColor" />
+        <path d="M15.8 15.8a11.6 11.6 0 0 0 0 16.4M32.2 15.8a11.6 11.6 0 0 1 0 16.4" />
+        <path d="M10.4 10.4a19.2 19.2 0 0 0 0 27.2M37.6 10.4a19.2 19.2 0 0 1 0 27.2" />
+      </svg>
+    </span>
+  );
+}
+
 function Login({ onReady }: { onReady: (profile: AuthProfile) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -292,7 +304,7 @@ function Login({ onReady }: { onReady: (profile: AuthProfile) => void }) {
   return (
     <main className="login-shell">
       <section className="login-panel">
-        <div className="login-brand"><div className="logo-mark">AR</div><span>AI Ranking OS</span></div>
+        <div className="login-brand"><SignalMark /><span>SIGNAL</span></div>
         <span className="eyebrow">GEO-АНАЛИТИКА ДЛЯ ЯНДЕКСА</span>
         <h1>Узнайте, почему Яндекс рекомендует конкурентов.</h1>
         <p>
@@ -403,8 +415,8 @@ function Shell({
     <div className="app-shell">
       <aside className="sidebar">
         <button className="wordmark" onClick={() => onNavigate("home")}>
-          <span className="logo-mark small">AR</span>
-          <span>AI Ranking OS</span>
+          <SignalMark compact />
+          <span>SIGNAL</span>
         </button>
         <nav aria-label="Основная навигация">
           <span className="nav-section-label">Главное</span>
@@ -433,7 +445,7 @@ function Shell({
       <div className="app-main">
         <header className="topbar">
           <div>
-            <span className="mobile-brand">AI Ranking OS</span>
+            <span className="mobile-brand">SIGNAL</span>
           </div>
           <div className="top-actions">
             <Badge tone={systemReady === true ? "success" : systemReady === false ? "danger" : "neutral"}>● {systemReady === true ? "Система работает" : systemReady === false ? "Система недоступна" : "Проверка системы"}</Badge>
