@@ -56,7 +56,8 @@ from recommendation.research_adapter import SqlAlchemyResearchScoreAdapter
 from research.models import ExtractedEntity, Research, ResearchStatus, ResearchTask, Response
 from research.reporting import ReportingService
 from research.repositories import ResearchRepository
-from research.schemas import ResearchCreate, ResearchRunRequest
+from research.queue import enqueue as enqueue_research
+from research.schemas import ResearchCreate, ResearchEnqueueRequest, ResearchRunRequest
 from research.scoring import SCORING_VERSION, SCORING_WEIGHTS
 from research.service import run_research
 from trend.research_adapter import build_trend_engine
@@ -296,7 +297,7 @@ class ProductPipeline:
                 break
         return result
 
-    def run(self, payload: WizardRequest) -> Research:
+    def _create_research(self, payload: WizardRequest) -> tuple[Research, WizardReview]:
         review = self.review(payload)
         organization_id = None
         if self.user_id is not None:
@@ -354,6 +355,27 @@ class ProductPipeline:
             )
         )
         self.ensure_research_runner()
+        return research, review
+
+    def enqueue(self, payload: WizardRequest) -> Research:
+        """Create a research and hand its long-running work to the worker queue."""
+        research, review = self._create_research(payload)
+        enqueue_research(
+            self.db,
+            ResearchEnqueueRequest(
+                research_id=research.id,
+                models=payload.models,
+                routing_profile=payload.routing_profile,
+                query=review.prompt,
+                queries=review.query_catalog,
+            ),
+        )
+        self.db.refresh(research)
+        return research
+
+    def run(self, payload: WizardRequest) -> Research:
+        """Run synchronously for internal callers and backward-compatible tests."""
+        research, review = self._create_research(payload)
         research = run_research(
             self.db,
             research.id,

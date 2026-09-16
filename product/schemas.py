@@ -191,4 +191,4 @@ class WizardReview(BaseModel):
 class WizardRunResult(BaseModel):
     research: ResearchRead
     report_url: str
-    report: dict[str, Any]
+    report: dict[str, Any] = Field(default_factory=dict)

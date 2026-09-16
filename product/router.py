@@ -180,13 +180,8 @@ def run_wizard(payload: WizardRequest, request: Request, db: DbSession) -> Wizar
             build_change_detection(db, notifications),
             notifications,
             user_id,
-        ).run(payload)
-        if research.status != ResearchStatus.COMPLETED:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Research {research.id} failed; no report was generated",
-            )
-        report = FinalReportService(db).get(research.id)
+        ).enqueue(payload)
+        report = FinalReportService(db).get(research.id) if research.status == ResearchStatus.COMPLETED else {}
         return WizardRunResult(
             research=ResearchRead.model_validate(research),
             report_url=f"/research/{research.id}/final-report",

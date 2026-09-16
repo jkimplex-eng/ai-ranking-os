@@ -2030,6 +2030,7 @@ function Wizard({
   const [review, setReview] = useState<WizardReview>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [launchStatus, setLaunchStatus] = useState("");
   useEffect(() => {
     Promise.all([api.routerModels(), api.systemProviders()])
       .then(([registry, runtime]) => {
@@ -2134,6 +2135,7 @@ function Wizard({
   async function run() {
     setBusy(true);
     setError("");
+    setLaunchStatus("Создаём исследование и ставим его в очередь…");
     try {
       const knownResearchIds = new Set((await api.listResearch()).map((item) => item.id));
       let result: ReportResult;
@@ -2146,7 +2148,9 @@ function Wizard({
         if (!connectionLost) throw reason;
         result = await recoverResearchResult(knownResearchIds, brand);
       }
-      if (result.research.status !== "COMPLETED") throw new Error("Исследование завершилось с ошибкой. Подробности доступны в разделе Research.");
+      if (result.research.status !== "COMPLETED") {
+        result = await waitForResearchResult(result.research.id, result.research.title);
+      }
       try {
         await api.createAliceAutomationPlan({ template_research_id: result.research.id, brand, website_url: websiteUrl, language, region, research_profile: researchProfile, routing_profile: profile, models: payload().models, repetitions: 1, daily_query_limit: queryLimit, weekly_query_limit: queryLimit, monitoring_frequency: cadence });
       } catch {
@@ -2160,7 +2164,23 @@ function Wizard({
       );
     } finally {
       setBusy(false);
+      setLaunchStatus("");
     }
+  }
+  async function waitForResearchResult(researchId: number, title: string): Promise<ReportResult> {
+    for (let attempt = 0; attempt < 600; attempt += 1) {
+      const current = (await api.listResearch()).find((item) => item.id === researchId);
+      if (current?.status === "COMPLETED") {
+        return { research: { id: current.id, title: current.title, status: current.status }, report_url: `/research/${current.id}/final-report`, report: await api.finalReport(current.id) };
+      }
+      if (current?.status === "FAILED") throw new Error("Исследование завершилось с ошибкой. Подробности доступны в разделе «Исследования».");
+      const progress = Number(current?.progress_percent ?? 0);
+      const completed = Number(current?.completed_tasks ?? 0);
+      const total = Number(current?.total_tasks ?? 0);
+      setLaunchStatus(`Исследование выполняется: ${progress}%${total ? ` · ответов ${completed} из ${total}` : ""}. Можно оставить эту страницу открытой.`);
+      await new Promise((resolve) => window.setTimeout(resolve, 2000));
+    }
+    throw new Error("Исследование продолжает выполняться. Его статус доступен в разделе «Исследования».");
   }
   async function recoverResearchResult(knownIds: Set<number>, expectedBrand: string): Promise<ReportResult> {
     for (let attempt = 0; attempt < 300; attempt += 1) {
@@ -2363,6 +2383,7 @@ function Wizard({
             {error}
           </div>
         )}
+        {launchStatus ? <div className="wizard-progress" role="status">{launchStatus}</div> : null}
         <div className="wizard-actions">
           {step < 3 ? (
             <button

@@ -15,8 +15,10 @@ from competitor_intelligence.telegram_connector import TelegramConnectionService
 from provider_connections.crypto import SecretCipher
 from provider_connections.repository import ProviderConnectionRepository
 from provider_connections.service import hydrate_provider_credentials
+from product.service import ProductPipeline
 from recommendation.simulation import models as simulation_models  # noqa: F401
 from recommendation.templates import models as template_models  # noqa: F401
+from research.models import Research, ResearchStatus
 from research.queue import process_next
 from scheduler.research_adapter import build_scheduler_engine
 
@@ -44,6 +46,12 @@ async def run_worker() -> None:
                 job = process_next(db)
                 if job is not None:
                     logger.info("Research job processed id=%s state=%s", job.id, job.state)
+                    research = db.get(Research, job.research_id)
+                    if research is not None and research.status == ResearchStatus.COMPLETED:
+                        try:
+                            ProductPipeline(db).complete_existing(research)
+                        except Exception:  # noqa: BLE001 - keep a completed research observable
+                            logger.exception("Product pipeline finalization failed research_id=%s", job.research_id)
                     CompetitorIntelligenceService(db).ingest_research(job.research_id)
                     try:
                         learned = learn_from_completed_research(db, job.research_id)
