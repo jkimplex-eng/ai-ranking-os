@@ -292,13 +292,16 @@ function Login({ onReady }: { onReady: (profile: AuthProfile) => void }) {
   return (
     <main className="login-shell">
       <section className="login-panel">
-        <div className="logo-mark">AR</div>
-        <span className="eyebrow">AI RANKING OS</span>
-        <h1>Понимайте, как AI видит ваш бренд</h1>
+        <div className="login-brand"><div className="logo-mark">AR</div><span>AI Ranking OS</span></div>
+        <span className="eyebrow">GEO-АНАЛИТИКА ДЛЯ ЯНДЕКСА</span>
+        <h1>Узнайте, почему Яндекс рекомендует конкурентов.</h1>
         <p>
-          Измеряйте присутствие, находите точки роста и превращайте данные в
-          понятный план действий.
+          Проверяем ваш сайт, запросы покупателей, ответы YandexGPT и реальные
+          источники. В итоге — ясный план действий, а не абстрактный рейтинг.
         </p>
+        <div className="login-proof" aria-label="Возможности платформы">
+          <span>Сайт</span><i>→</i><span>Запросы</span><i>→</i><span>Источники</span><i>→</i><b>Действия</b>
+        </div>
         <form onSubmit={submit}>
           <label>
             Email
@@ -333,14 +336,22 @@ function Login({ onReady }: { onReady: (profile: AuthProfile) => void }) {
         <ClientRegistration api={api} />
       </section>
       <aside className="login-story">
-        <span>AI visibility, made actionable</span>
-        <blockquote>
-          «Не просто следите за рейтингом. Понимайте, что именно изменить, чтобы
-          AI чаще рекомендовал ваш бренд».
-        </blockquote>
-        <div className="story-metric">
-          <strong>89.9</strong>
-          <span>пример AI Visibility</span>
+        <div className="story-nav"><span>Продукт</span><span>Как работает</span><span>Тарифы</span></div>
+        <div className="story-content">
+          <span>AI visibility, made actionable</span>
+          <blockquote>
+            Видимость бренда в Яндексе — это не догадка. Это цепочка наблюдений,
+            которую можно измерить и улучшить.
+          </blockquote>
+          <div className="story-flow">
+            <article><small>01</small><b>Находим спрос</b><span>Wordstat и запросы покупателей</span></article>
+            <article><small>02</small><b>Считываем ответы</b><span>YandexGPT, источники и конкуренты</span></article>
+            <article><small>03</small><b>Проверяем эффект</b><span>Повторное измерение и Timeline</span></article>
+          </div>
+          <div className="story-metric">
+            <strong>1</strong>
+            <span>понятный путь: от сайта к подтверждаемым действиям</span>
+          </div>
         </div>
       </aside>
     </main>
@@ -1590,18 +1601,23 @@ function Dashboard({
     return (
       <main className="page">
         <section className="welcome">
-          <span className="eyebrow">ДОБРО ПОЖАЛОВАТЬ</span>
-          <h1>Что хотите узнать сегодня?</h1>
+          <span className="eyebrow">AI RANKING OS · ВАША GEO-ЛАБОРАТОРИЯ</span>
+          <h1>Сделайте бренд понятным источником для Яндекса.</h1>
           <p>
-            Начните с первого исследования — результат появится здесь в виде
-            понятной картины состояния бренда.
+            За несколько минут создайте первое исследование. Система проверит сайт,
+            соберёт запросы, найдёт конкурентов и покажет, какие действия стоит сделать первыми.
           </p>
+          <div className="welcome-flow" aria-label="Сценарий первого исследования">
+            <div><span>01</span><b>Добавьте сайт</b><small>Название компании и официальный домен</small></div>
+            <div><span>02</span><b>Получите картину</b><small>Запросы, ответы, конкуренты и источники</small></div>
+            <div><span>03</span><b>Внесите изменения</b><small>Три приоритетных действия с доказательствами</small></div>
+          </div>
           <div className="choice-grid">
             <button className="choice primary-choice" onClick={onStart}>
               <span className="choice-icon">◎</span>
-              <b>Добавить компанию</b>
-              <small>Название и официальный сайт</small>
-              <i>Начать →</i>
+              <b>Проверить мой сайт</b>
+              <small>Начать первое GEO-исследование</small>
+              <i>Добавить компанию →</i>
             </button>
             <button className="choice" onClick={() => onNavigate("competitors")}>
               <span className="choice-icon">◇</span>
