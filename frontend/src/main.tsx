@@ -2454,7 +2454,7 @@ function SourceInspectionPanel({ researchId }: { researchId: number }) {
       {inspection.sources.length ? inspection.sources.map((source) => <details className="evidence-details" key={source.domain}>
         <summary>{source.domain} · {source.observation.response_count} ответов · {source.observation.query_count} запросов · уверенность наблюдения {source.observation.confidence}</summary>
         <p>{source.observation.interpretation}</p>
-        <p><b>Основания:</b> ответы #{source.observation.response_ids.join(", ") || "—"}; модели {source.observation.models.join(", ") || "—"}.</p>
+        <p><b>Основания:</b> ответы #{source.observation.response_ids.join(", ") || "—"}; каналы {source.observation.channels.join(", ") || "—"}; модели {source.observation.models.join(", ") || "—"}.</p>
         <p><b>Запросы:</b> {source.observation.queries.join(" · ") || "не сохранены"}</p>
         {source.observation.urls.length ? <ul>{source.observation.urls.map((url) => <li key={url}><a href={url} target="_blank" rel="noreferrer">{url}</a></li>)}</ul> : null}
         {source.page.status === "MEASURED" ? <><p><b>Проверенная страница:</b> <a href={source.page.url} target="_blank" rel="noreferrer">{source.page.url}</a></p><p><b>HTML-признаки:</b> FAQ {value(source.page.features, "has_faq_schema")}; автор {value(source.page.features, "has_author")}; дата {value(source.page.features, "has_publication_date")}; sameAs {value(source.page.features, "has_same_as")}; контакты {value(source.page.features, "has_contact_schema")}.</p></> : <p><b>Страница не измерена:</b> {source.page.reason}</p>}

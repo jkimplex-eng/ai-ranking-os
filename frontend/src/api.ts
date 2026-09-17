@@ -70,7 +70,7 @@ export type SourceInspection = {
   target_site: { status: string; url?: string; reason?: string; features: Record<string, unknown> };
   sources: Array<{
     domain: string;
-    observation: { response_count: number; query_count: number; response_ids: number[]; queries: string[]; models: string[]; urls: string[]; titles: string[]; confidence: "HIGH" | "MEDIUM" | "LOW"; interpretation: string };
+    observation: { response_count: number; query_count: number; response_ids: number[]; queries: string[]; models: string[]; channels: string[]; urls: string[]; titles: string[]; confidence: "HIGH" | "MEDIUM" | "LOW"; interpretation: string };
     page: { status: string; url?: string; reason?: string; features: Record<string, unknown> };
     comparison_with_target: { status: string; source_has_target_lacks: Array<{ signal: string; action: string }>; interpretation: string };
   }>;

@@ -47,12 +47,12 @@ class SourceInspectionService:
                 .where(ResearchTask.research_id == research_id)
             )
         )
-        grouped = self._group(citations)
+        grouped = self._group(citations, research.metadata_payload.get("product_artifacts", {}))
         target = self._target_features(str(research.metadata_payload.get("website_url") or ""))
         sources = [
             self._inspect_source(domain, evidence, target)
             for domain, evidence in sorted(
-                grouped.items(), key=lambda pair: (-len(pair[1]["response_ids"]), pair[0])
+                grouped.items(), key=lambda pair: (-max(len(pair[1]["response_ids"]), len(pair[1]["queries"]), int(pair[1]["evidence_count"])), pair[0])
             )[: self.MAX_SOURCES]
         ]
         return {
@@ -80,9 +80,11 @@ class SourceInspectionService:
         }
 
     @staticmethod
-    def _group(citations: list[ExtractedCitation]) -> dict[str, dict[str, Any]]:
+    def _group(
+        citations: list[ExtractedCitation], artifacts: dict[str, Any]
+    ) -> dict[str, dict[str, Any]]:
         grouped: dict[str, dict[str, Any]] = defaultdict(
-            lambda: {"response_ids": set(), "queries": set(), "models": set(), "urls": set(), "titles": set()}
+            lambda: {"response_ids": set(), "queries": set(), "models": set(), "urls": set(), "titles": set(), "channels": set(), "evidence_count": 0}
         )
         for citation in citations:
             url = str(citation.url or "")
@@ -98,9 +100,51 @@ class SourceInspectionService:
             item["queries"].add(response.prompt)
             item["models"].add(f"{response.provider}/{response.model}")
             item["urls"].add(url)
+            item["channels"].add("AI_MODEL_RESPONSE")
+            item["evidence_count"] += 1
             if citation.title:
                 item["titles"].add(citation.title)
+        generative = artifacts.get("yandex_generative_evidence", {}) if isinstance(artifacts, dict) else {}
+        for observation in generative.get("observations", []) if isinstance(generative, dict) else []:
+            if not isinstance(observation, dict):
+                continue
+            query = str(observation.get("query") or "")
+            for source in observation.get("sources", []):
+                if not isinstance(source, dict):
+                    continue
+                SourceInspectionService._add_external_source(
+                    grouped, str(source.get("url") or ""), query, str(source.get("title") or ""), "YANDEX_GENERATIVE_ANSWER"
+                )
+        search = artifacts.get("yandex_search_evidence", {}) if isinstance(artifacts, dict) else {}
+        for resource in search.get("resources", []) if isinstance(search, dict) else []:
+            if not isinstance(resource, dict):
+                continue
+            for evidence in resource.get("evidence", []):
+                if not isinstance(evidence, dict):
+                    continue
+                SourceInspectionService._add_external_source(
+                    grouped, str(evidence.get("url") or ""), str(evidence.get("query") or ""), str(evidence.get("title") or ""), "YANDEX_SEARCH_RESULT"
+                )
         return grouped
+
+    @staticmethod
+    def _add_external_source(
+        grouped: dict[str, dict[str, Any]], url: str, query: str, title: str, channel: str
+    ) -> None:
+        try:
+            domain = (urlparse(url).hostname or "").casefold().removeprefix("www.")
+        except ValueError:
+            domain = ""
+        if not domain:
+            return
+        item = grouped[domain]
+        item["urls"].add(url)
+        item["channels"].add(channel)
+        item["evidence_count"] += 1
+        if query:
+            item["queries"].add(query)
+        if title:
+            item["titles"].add(title)
 
     def _target_features(self, url: str) -> dict[str, Any]:
         if not url:
@@ -127,7 +171,7 @@ class SourceInspectionService:
             facts = {"status": "MEASURED", "url": final, "features": self._features(parser)}
         except (SiteAuditError, SourceInspectionError) as error:
             facts = {"status": "NOT_MEASURED", "url": url, "reason": str(error), "features": {}}
-        response_count = len(evidence["response_ids"])
+        response_count = max(len(evidence["response_ids"]), len(evidence["queries"]), int(evidence["evidence_count"]))
         query_count = len(evidence["queries"])
         confidence = "HIGH" if response_count >= 5 and query_count >= 2 else "MEDIUM" if response_count >= 2 else "LOW"
         gaps = self._gaps(facts.get("features", {}), target.get("features", {}))
@@ -139,6 +183,7 @@ class SourceInspectionService:
                 "response_ids": sorted(evidence["response_ids"]),
                 "queries": sorted(evidence["queries"]),
                 "models": sorted(evidence["models"]),
+                "channels": sorted(evidence["channels"]),
                 "urls": sorted(evidence["urls"]),
                 "titles": sorted(evidence["titles"]),
                 "confidence": confidence,
