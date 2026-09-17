@@ -950,7 +950,7 @@ function OnboardingScreen({ onResearch, onOrganization }: { onResearch: () => vo
   const [organizations, setOrganizations] = useState<OrganizationItem[]>([]);
   useEffect(() => { api.organizations().then(setOrganizations).catch(() => undefined); }, []);
   const ready = organizations.length > 0;
-  return <main className="analytics-page onboarding-page"><header className="analytics-hero"><div><span className="eyebrow">CLOSED BETA</span><h1>Начните с первого результата</h1><p>Три коротких шага — и AI Ranking OS покажет, как модели видят ваш бренд.</p></div><Badge tone={ready ? "success" : "warning"}>● {ready ? "Workspace готов" : "Нужна организация"}</Badge></header>
+  return <main className="analytics-page onboarding-page"><header className="analytics-hero"><div><span className="eyebrow">CLOSED BETA</span><h1>Начните с первого результата</h1><p>Три коротких шага — и SIGNAL покажет, как модели видят ваш бренд.</p></div><Badge tone={ready ? "success" : "warning"}>● {ready ? "Workspace готов" : "Нужна организация"}</Badge></header>
     <section className="onboarding-steps"><article className="analytics-card onboarding-step"><span>01</span><h2>Настройте пространство</h2><p>Организация объединяет команду, проекты и лимиты.</p><button onClick={onOrganization}>{ready ? "Открыть организацию" : "Создать организацию"}</button></article><article className="analytics-card onboarding-step"><span>02</span><h2>Проверьте свой бренд</h2><p>Укажите бренд, регион, язык и профиль маршрутизации.</p><button onClick={onResearch} disabled={!ready}>Открыть исследование</button></article><article className="analytics-card onboarding-step"><span>03</span><h2>Получите отчёт</h2><p>Visibility, источники и план действий собираются автоматически.</p><div className="onboarding-result">Report → Share → Improve</div></article></section>
     <section className="analytics-card beta-expectations"><h3>Что проверить в закрытой бете</h3><div><span>Исследование проходит без ручного вмешательства</span><b>Pipeline</b></div><div><span>Рекомендации понятны и применимы</span><b>Value</b></div><div><span>Отчёт можно передать клиенту</span><b>Sharing</b></div></section>
   </main>;
@@ -1088,7 +1088,7 @@ function ProductAnalyticsScreen() {
     <main className="analytics-page">
       <header className="analytics-hero">
         <div><span className="eyebrow">PRODUCT INTELLIGENCE</span><h1>Product Analytics</h1>
-          <p>Как команды используют AI Ranking OS — от активности до стоимости моделей.</p></div>
+          <p>Как команды используют SIGNAL — от активности до стоимости моделей.</p></div>
         <div className="analytics-filters">
           <label>Период<select value={period} onChange={(event) => { setError(""); setPeriod(event.target.value); }}>
             <option value="HOURLY">По часам</option><option value="DAILY">По дням</option>
@@ -1601,7 +1601,7 @@ function Dashboard({
     const actions = (reportData.geo_opportunities ?? []).slice(0, 10).map((item, index) => `<article><h2>${index + 1}. ${escapeHtml(item.resource)}</h2><p><b>Почему:</b> ${escapeHtml(item.reason)}</p><p><b>Что сделать:</b> ${escapeHtml(item.deliverable)}</p><p><b>Как проверить:</b> ${escapeHtml(item.verification)}</p><small>Уверенность ${Math.round(item.confidence * 100)}% · срок ${item.estimated_days} дней · это прогноз, а не гарантия</small></article>`).join("");
     const sources = (reportData.sources ?? []).filter((item) => item.url).map((item) => `<li><a href="${escapeHtml(item.url)}">${escapeHtml(item.title || item.source || item.url)}</a></li>`).join("");
     const scoreValue = valueOf(reportData.score ?? {}, "visibility_score");
-    const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>GEO-план — ${escapeHtml(report.research.title)}</title><style>body{font:16px Arial,sans-serif;color:#162033;max-width:920px;margin:40px auto;padding:0 24px;line-height:1.5}header{border-bottom:3px solid #347cf7;margin-bottom:28px}h1{font-size:34px}article{padding:18px 0;border-bottom:1px solid #d8e0ea}small{color:#5b6575}a{color:#145ac5}@media print{body{margin:0}}</style></head><body><header><p>AI Ranking OS · исследование #${report.research.id}</p><h1>${escapeHtml(report.research.title)}</h1><p><b>Единая GEO-оценка: ${scoreValue.toFixed(1)} из 100</b></p></header><h1>План действий</h1>${actions || "<p>Действия ещё не рассчитаны.</p>"}<h1>Источники со ссылками</h1><ul>${sources || "<li>В ответах текущего исследования ссылки не обнаружены.</li>"}</ul><p><small>Отчёт фиксирует только исследованную выборку запросов, региона, времени и модели. Причинный эффект подтверждается повторным исследованием.</small></p></body></html>`;
+    const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>GEO-план — ${escapeHtml(report.research.title)}</title><style>body{font:16px Arial,sans-serif;color:#162033;max-width:920px;margin:40px auto;padding:0 24px;line-height:1.5}header{border-bottom:3px solid #347cf7;margin-bottom:28px}h1{font-size:34px}article{padding:18px 0;border-bottom:1px solid #d8e0ea}small{color:#5b6575}a{color:#145ac5}@media print{body{margin:0}}</style></head><body><header><p>SIGNAL · исследование #${report.research.id}</p><h1>${escapeHtml(report.research.title)}</h1><p><b>Единая GEO-оценка: ${scoreValue.toFixed(1)} из 100</b></p></header><h1>План действий</h1>${actions || "<p>Действия ещё не рассчитаны.</p>"}<h1>Источники со ссылками</h1><ul>${sources || "<li>В ответах текущего исследования ссылки не обнаружены.</li>"}</ul><p><small>Отчёт фиксирует только исследованную выборку запросов, региона, времени и модели. Причинный эффект подтверждается повторным исследованием.</small></p></body></html>`;
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const href = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -2690,7 +2690,7 @@ function BillingScreen() {
   };
 
   return <main className="analytics-page">
-    <header className="analytics-hero"><div><span className="eyebrow">ПОДПИСКА</span><h1>Выберите тариф</h1><p>После выбора вы перейдёте на защищённую платёжную страницу Т‑Банка. Данные карты не проходят через AI Ranking OS.</p></div></header>
+    <header className="analytics-hero"><div><span className="eyebrow">ПОДПИСКА</span><h1>Выберите тариф</h1><p>После выбора вы перейдёте на защищённую платёжную страницу Т‑Банка. Данные карты не проходят через SIGNAL.</p></div></header>
     {error ? <div className="error" role="alert">{error}</div> : null}
     <section className="panel research-lab-section">
       <span className="section-label">ТЕКУЩИЙ ДОСТУП</span>
