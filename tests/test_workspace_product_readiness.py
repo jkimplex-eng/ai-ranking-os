@@ -694,6 +694,35 @@ def test_closed_beta_invitation_access_limits_search_and_audit(client: TestClien
     ).status_code == 404
 
 
+def test_public_registration_creates_trial_customer_without_invitation(client: TestClient) -> None:
+    created = client.post(
+        "/beta/register",
+        json={
+            "email": "new-customer@example.com",
+            "display_name": "New Customer",
+            "password": "strong-password",
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["email"] == "new-customer@example.com"
+    assert created.json()["status"] == "ACTIVE"
+
+    duplicate = client.post(
+        "/beta/register",
+        json={
+            "email": "new-customer@example.com",
+            "display_name": "Duplicate",
+            "password": "strong-password",
+        },
+    )
+    assert duplicate.status_code == 409
+
+    users = client.get("/admin/beta/users", params={"search": "new-customer"})
+    assert users.status_code == 200
+    assert users.json()[0]["limits"]["monthly_research_limit"] == 10
+    assert users.json()[0]["subscription"]["plan_code"] == "trial"
+
+
 def test_feedback_center_triage_bulk_history_and_attachment_metadata(
     client: TestClient,
 ) -> None:

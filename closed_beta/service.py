@@ -15,6 +15,7 @@ from closed_beta.schemas import (
     InvitationCreate,
     InvitationCreated,
     InvitationRead,
+    PublicRegistration,
     SubscriptionRead,
     SubscriptionUpdate,
     TariffRead,
@@ -355,4 +356,38 @@ class ClosedBetaService:
         )
         return InvitationAccepted(
             user_id=user_id, email=invite.email, status=BetaAccessStatus(profile.status)
+        )
+
+    def register_public(self, payload: PublicRegistration) -> InvitationAccepted:
+        """Create a regular customer account without granting any privileged role."""
+        email = str(payload.email).lower()
+        if self.identities.exists(email):
+            raise BetaAdminError("Account already exists")
+        user_id = self.identities.create(email, payload.password, payload.display_name)
+        trial_limits = self.TARIFFS["trial"][3]
+        profile = self.repository.save_profile(
+            BetaUserProfile(
+                user_id=user_id,
+                status=BetaAccessStatus.ACTIVE.value,
+                plan_code="trial",
+                subscription_status=SubscriptionStatus.NONE.value,
+                daily_research_limit=trial_limits.daily_research_limit,
+                monthly_research_limit=trial_limits.monthly_research_limit,
+                max_projects=trial_limits.max_projects,
+                max_domains=trial_limits.max_domains,
+                max_organization_users=trial_limits.max_organization_users,
+            )
+        )
+        self.audit.record(
+            actor_id=str(user_id),
+            actor_type="user",
+            action="beta.public_registration.completed",
+            category="closed_beta",
+            resource="beta_user",
+            resource_id=str(user_id),
+            correlation_id=secrets.token_hex(16),
+            new_state={"plan_code": profile.plan_code, "status": profile.status},
+        )
+        return InvitationAccepted(
+            user_id=user_id, email=email, status=BetaAccessStatus(profile.status)
         )

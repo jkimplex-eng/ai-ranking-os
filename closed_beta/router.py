@@ -2,6 +2,7 @@ from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
+from rate_limit.backend import MemoryRateLimitBackend
 
 from closed_beta.dependencies import BetaAdminId, BetaServiceDependency
 from closed_beta.models import BetaAccessStatus
@@ -13,12 +14,30 @@ from closed_beta.schemas import (
     InvitationCreate,
     InvitationCreated,
     InvitationRead,
+    PublicRegistration,
     SubscriptionUpdate,
     TariffRead,
 )
 from closed_beta.service import BetaAdminError, BetaNotFoundError
 
 router = APIRouter(tags=["closed-beta"])
+_public_registration_limiter = MemoryRateLimitBackend()
+
+
+@router.post("/beta/register", response_model=InvitationAccepted, status_code=status.HTTP_201_CREATED)
+def register_public(
+    payload: PublicRegistration, request: Request, service: BetaServiceDependency
+) -> InvitationAccepted:
+    client_ip = request.client.host if request.client else "unknown"
+    decision = _public_registration_limiter.token_bucket(
+        f"public-registration:{client_ip}", 5, 60, burst=3
+    )
+    if not decision.allowed:
+        raise HTTPException(status_code=429, detail="Too many registration attempts")
+    try:
+        return service.register_public(payload)
+    except BetaAdminError as error:
+        raise HTTPException(status_code=409, detail="Account is unavailable") from error
 
 
 @router.get("/admin/billing/tariffs", response_model=list[TariffRead])

@@ -92,6 +92,10 @@ class InvitationAccept(BaseModel):
     password: str = Field(min_length=8, max_length=1024)
 
 
+class PublicRegistration(InvitationAccept):
+    email: EmailStr
+
+
 class InvitationAccepted(BaseModel):
     user_id: int
     email: str

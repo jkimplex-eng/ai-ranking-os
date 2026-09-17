@@ -22,6 +22,7 @@ PUBLIC_PATHS = {
     "/redoc",
     "/auth/login",
     "/auth/refresh",
+    "/beta/register",
     "/observability/health",
     "/observability/liveness",
     "/observability/readiness",
