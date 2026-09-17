@@ -27,6 +27,7 @@ from product.schemas import (
     WizardRunResult,
 )
 from product.service import FinalReportService, ProductPipeline, WizardValidationError
+from product.source_inspection import SourceInspectionError, SourceInspectionService
 from research.access import require_research_access
 from research.models import ResearchStatus
 from research.schemas import ResearchRead
@@ -199,3 +200,11 @@ def final_report(research_id: int, db: DbSession) -> dict:
         return FinalReportService(db).get(research_id)
     except (ProductNotFoundError, LookupError) as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
+
+@router.post("/research/{research_id}/sources/inspect", response_model=dict)
+def inspect_research_sources(research_id: int, db: DbSession) -> dict:
+    try:
+        return SourceInspectionService(db).inspect(research_id)
+    except (ProductNotFoundError, SourceInspectionError) as error:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)) from error

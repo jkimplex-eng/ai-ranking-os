@@ -41,6 +41,7 @@ import {
   type SimulationItem,
   type SystemProviderItem,
   type SocialDashboard,
+  type SourceInspection,
   type TelegramConnection,
   type WorkspaceProjectItem,
   type YandexWebmasterHost,
@@ -2431,6 +2432,40 @@ function RecommendationCard({ recommendation, plan, simulation }: { recommendati
   );
 }
 
+function SourceInspectionPanel({ researchId }: { researchId: number }) {
+  const [inspection, setInspection] = useState<SourceInspection>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const inspect = async () => {
+    setBusy(true); setError("");
+    try { setInspection(await api.inspectResearchSources(researchId)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось проверить источники"); }
+    finally { setBusy(false); }
+  };
+  const value = (features: Record<string, unknown>, key: string) => features[key] === true ? "есть" : features[key] === false ? "нет" : "не измерено";
+  return <section className="panel research-lab-section">
+    <span className="section-label">ПРОВЕРКА ИСТОЧНИКОВ</span>
+    <h2>Почему эти ресурсы наблюдаются в ответах</h2>
+    <p>Проверяем реальные URL из ответов: повторяемость по запросам, модели и публичные признаки HTML. Система не приписывает эти признаки закрытому алгоритму Яндекса.</p>
+    <button className="primary-action" onClick={inspect} disabled={busy}>{busy ? "Проверяем публичные страницы…" : "Проверить источники"}</button>
+    {error ? <p className="error" role="alert">{error}</p> : null}
+    {inspection ? <>
+      <p className="method-note">Найдено доменов: {inspection.sample.observed_sources}; проверено: {inspection.sample.inspected_sources}; записей ссылок: {inspection.sample.citation_records}. Версия: {inspection.version}.</p>
+      {inspection.sources.length ? inspection.sources.map((source) => <details className="evidence-details" key={source.domain}>
+        <summary>{source.domain} · {source.observation.response_count} ответов · {source.observation.query_count} запросов · уверенность наблюдения {source.observation.confidence}</summary>
+        <p>{source.observation.interpretation}</p>
+        <p><b>Основания:</b> ответы #{source.observation.response_ids.join(", ") || "—"}; модели {source.observation.models.join(", ") || "—"}.</p>
+        <p><b>Запросы:</b> {source.observation.queries.join(" · ") || "не сохранены"}</p>
+        {source.observation.urls.length ? <ul>{source.observation.urls.map((url) => <li key={url}><a href={url} target="_blank" rel="noreferrer">{url}</a></li>)}</ul> : null}
+        {source.page.status === "MEASURED" ? <><p><b>Проверенная страница:</b> <a href={source.page.url} target="_blank" rel="noreferrer">{source.page.url}</a></p><p><b>HTML-признаки:</b> FAQ {value(source.page.features, "has_faq_schema")}; автор {value(source.page.features, "has_author")}; дата {value(source.page.features, "has_publication_date")}; sameAs {value(source.page.features, "has_same_as")}; контакты {value(source.page.features, "has_contact_schema")}.</p></> : <p><b>Страница не измерена:</b> {source.page.reason}</p>}
+        {source.comparison_with_target.source_has_target_lacks.length ? <><h3>Что есть у источника, но не найдено на вашем сайте</h3><ul>{source.comparison_with_target.source_has_target_lacks.map((gap) => <li key={gap.signal}><b>{gap.signal}:</b> {gap.action}</li>)}</ul></> : <p>По измеренным признакам структурного разрыва с вашим сайтом не найдено либо сравнение недоступно.</p>}
+        <p className="method-note">{source.comparison_with_target.interpretation}</p>
+      </details>) : <p className="empty-state">В сохранённых ответах нет URL, доступных для проверки.</p>}
+      <details className="evidence-details"><summary>Метод и ограничения</summary><p>{inspection.method}</p><p>{inspection.limitation}</p><p><b>Следующий шаг:</b> {inspection.next_step}</p></details>
+    </> : null}
+  </section>;
+}
+
 function Report({
   result,
   onHome,
@@ -2567,6 +2602,7 @@ function Report({
         <div className="publication-form"><h3>Зарегистрировать новый материал</h3><p>Укажите запросы, на которые должен повлиять материал. Остальные запросы останутся контрольной группой и помогут отделить эффект публикации от общего изменения модели.</p><input aria-label="Название публикации" placeholder="Название материала" value={publicationTitle} onChange={(event) => setPublicationTitle(event.target.value)} /><input aria-label="URL публикации" placeholder="https://..." value={publicationUrl} onChange={(event) => setPublicationUrl(event.target.value)} /><fieldset className="publication-query-picker"><legend>Целевые запросы публикации</legend>{report.query_catalog?.map((item) => <label key={item.id}><input type="checkbox" checked={publicationTargetQueries.includes(item.text)} onChange={() => setPublicationTargetQueries((current) => current.includes(item.text) ? current.filter((query) => query !== item.text) : [...current, item.text])} /><span>{item.text}</span></label>)}</fieldset><p className="method-note">Целевых: {publicationTargetQueries.length}. Контрольных: {Math.max(0, (report.query_catalog?.length ?? 0) - publicationTargetQueries.length)}.</p><button type="button" disabled={!publicationTitle.trim() || !publicationUrl.trim() || !publicationTargetQueries.length || ((report.query_catalog?.length ?? 0) > 1 && publicationTargetQueries.length === report.query_catalog?.length)} onClick={async () => { try { const entityId = String((report.research as Record<string, unknown> | undefined)?.entity_id ?? ""); if (!entityId) throw new Error("У исследования отсутствует entity_id"); const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(publicationUrl.trim())); const contentHash = Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join(""); await api.createResearchPublication({ entity_id: entityId, research_id: result.research.id, url: publicationUrl.trim(), content_hash: contentHash, title: publicationTitle.trim(), channel: "EARNED", content_type: "ARTICLE", target_queries: publicationTargetQueries, published_at: new Date().toISOString() }); setPublicationStatus("Публикация сохранена. Повторите исследование с той же матрицей: система сравнит целевые и контрольные запросы."); setPublicationTitle(""); setPublicationUrl(""); setPublicationTargetQueries([]); } catch (error) { setPublicationStatus(error instanceof Error ? error.message : "Не удалось сохранить публикацию"); } }}>Сохранить эксперимент</button>{publicationStatus ? <p>{publicationStatus}</p> : null}</div>
         {report.publication_learning?.influence_estimates.length ? report.publication_learning.influence_estimates.slice(0, 12).map((item) => <article className="influence-estimate" key={item.id}><h3>{item.resource_domain} · {metricNames[item.metric] ?? item.metric}</h3><p>{item.provider === "ALL" ? "Все модели" : `${item.provider}/${item.model}`} · {item.channel} · {item.content_type}</p><div className="action-meta"><div><span>Наблюдаемый эффект</span><b>{item.expected_delta >= 0 ? "+" : ""}{item.expected_delta.toFixed(1)}</b></div><div><span>Диапазон</span><b>{item.confidence_min.toFixed(1)}…{item.confidence_max.toFixed(1)}</b></div><div><span>Наблюдений</span><b>{item.sample_size}</b></div><div><span>С контролем</span><b>{item.controlled_experiments}</b></div><div><span>Уверенность</span><b>{Math.round(item.confidence_score * 100)}%</b></div></div><small>{item.evidence_grade} · {item.effect_method === "QUERY_LEVEL_DIFFERENCE_IN_DIFFERENCES_V1" ? "эффект скорректирован по контрольным запросам" : "простое сравнение до/после"}; результат не является гарантией причинного влияния.</small></article>) : <p className="empty-state">Пока недостаточно сопоставимых исследований. После публикации повторите тот же набор запросов и моделей.</p>}
       </section>
+      <SourceInspectionPanel researchId={result.research.id} />
       <section id="actions" className="plan-section">
         <div className="section-head">
           <div>

@@ -64,6 +64,18 @@ export type ResearchLaboratory = {
   timeline: Array<{ type: string; at: string; id: number; label: string }>;
   publications: Array<{ id: number; title: string; url: string; channel: string; content_type: string; topic?: string; target_queries: string[]; published_at: string; observations: Array<{ id: number; provider: string; model: string; first_observed_at: string; evidence_excerpt: string }> }>;
 };
+export type SourceInspection = {
+  version: string; research_id: number;
+  sample: { observed_sources: number; inspected_sources: number; citation_records: number; max_sources: number };
+  target_site: { status: string; url?: string; reason?: string; features: Record<string, unknown> };
+  sources: Array<{
+    domain: string;
+    observation: { response_count: number; query_count: number; response_ids: number[]; queries: string[]; models: string[]; urls: string[]; titles: string[]; confidence: "HIGH" | "MEDIUM" | "LOW"; interpretation: string };
+    page: { status: string; url?: string; reason?: string; features: Record<string, unknown> };
+    comparison_with_target: { status: string; source_has_target_lacks: Array<{ signal: string; action: string }>; interpretation: string };
+  }>;
+  method: string; limitation: string; next_step: string;
+};
 export type PublicationCreatePayload = { entity_id: string; research_id?: number; url: string; content_hash: string; title: string; channel: string; content_type: string; topic?: string; target_queries: string[]; published_at: string };
 export type ActionPlanItem = { recommendation: RecommendationItem; template?: { title: string; description: string; steps: string[]; expected_result: string; estimated_time: string; version: string }; steps: string[]; expected_effect: string; estimated_time?: string };
 export type ActionPlan = { research_id: number; engine_version: string; generated_at: string; items: ActionPlanItem[] };
@@ -387,6 +399,7 @@ export class ApiClient {
   routerModels() { return this.request<{ items: RouterModel[]; total: number }>("/router/models?page_size=100&status=ACTIVE&capability=chat"); }
   researchTasks(researchId: number) { return this.request<ResearchTaskItem[]>(`/research-tasks?research_id=${researchId}`); }
   researchLaboratory(researchId: number) { return this.request<ResearchLaboratory>(`/research/${researchId}/laboratory`); }
+  inspectResearchSources(researchId: number) { return this.request<SourceInspection>(`/research/${researchId}/sources/inspect`, { method: "POST" }); }
   createResearchPublication(payload: PublicationCreatePayload) { return this.request("/research-publications", { method: "POST", body: JSON.stringify(payload) }); }
   execution(id: number) { return this.request<ExecutionItem>(`/execution/${id}`); }
   reports() { return this.request<{ items: ReportCatalogItem[]; total: number }>("/reports?limit=100"); }
