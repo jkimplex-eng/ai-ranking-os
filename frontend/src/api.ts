@@ -485,6 +485,9 @@ export class ApiClient {
     cost_per_placement?: number; evidence: Record<string, unknown>;
   }) { return this.request<GeoPlatform>("/geo/platforms", { method: "POST", body: JSON.stringify(payload) }); }
   deleteGeoPlatform(id: string) { return this.request<void>(`/geo/platforms/${id}`, { method: "DELETE" }); }
+  updateGeoPlatform(id: string, payload: { evidence?: Record<string, unknown>; category?: string; active?: boolean }) {
+    return this.request<GeoPlatform>(`/geo/platforms/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+  }
   frozenPromptSets() { return this.request<FrozenPromptSet[]>("/geo/prompt-sets"); }
   prioritizeGeoPlatforms(platformIds: string[], aiEngine: string) {
     return this.request<EisPriorityResult>("/v1/eis/batch-prioritize", {
