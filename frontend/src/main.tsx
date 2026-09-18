@@ -2546,9 +2546,11 @@ function SourceInspectionPanel({ researchId }: { researchId: number }) {
 function Report({
   result,
   onHome,
+  onNavigate,
 }: {
   result: ReportResult;
   onHome: () => void;
+  onNavigate: (screen: Screen) => void;
 }) {
   const report = result.report as ReportShape;
   const score = report.score ?? {};
@@ -2603,6 +2605,7 @@ function Report({
         </div>
       </section>
       <section className="report-plain-summary" aria-label="Краткий вывод"><article><span>Что означает {visibility.toFixed(1)}</span><h2>{visibility >= 75 ? "Бренд заметен в этой выборке, но результат не универсален" : visibility >= 50 ? "Бренд упоминается, но не всегда становится рекомендацией" : "Бренд редко появляется в исследованных ответах"}</h2><p>Проверено {successfulResponses} успешных ответов по {report.explainability?.sample_scope?.query_count ?? report.query_catalog?.length ?? 0} запросам и {models.length} моделям. Оценка относится только к этой матрице.</p></article><article><span>Главное ограничение</span><h2>{weakest.label}: {weakest.value.toFixed(1)} из 100</h2><p>{weakest.label === "Цитирование" ? `Ссылки найдены в ${citedResponses} из ${successfulResponses} ответов. Без внешних источников ИИ не подтверждает выводы о бренде.` : weakest.label === "Рекомендации" ? `Бренд рекомендован в ${recommendedResponses} из ${successfulResponses} ответов. Простого упоминания недостаточно.` : "Подробное основание и ответы перечислены ниже."}</p></article><article><span>Что делать сначала</span><h2>Открыть раздел «Где публиковаться»</h2><p>Там показаны найденные источники, дефицитные запросы, конкретный материал и способ повторной проверки результата.</p><a href="#actions">Перейти к плану действий ↓</a></article></section>
+      <section className="panel research-lab-section" aria-label="Следующие шаги"><span className="section-label">СЛЕДУЮЩИЕ ШАГИ</span><h2>Превратите наблюдения в измеримый результат</h2><div className="button-row"><button className="primary-action" onClick={() => onNavigate("geo")}>1. Изучить найденные источники</button><button className="secondary" onClick={() => onNavigate("competitors")}>2. Начать мониторинг конкурентов</button><button className="secondary" onClick={() => document.getElementById("actions")?.scrollIntoView({ behavior: "smooth" })}>3. Назначить действия</button></div><p className="method-note">После публикации зарегистрируйте её URL ниже и повторите тот же набор запросов. Только так появится наблюдаемое сравнение до и после.</p></section>
       <nav className="report-nav" aria-label="Разделы отчёта"><a href="#summary">Сводка</a><a href="#demand-map">Запросы</a><a href="#patterns">Закономерности</a><a href="#models">Модели</a><a href="#entities">Сущности</a><a href="#sources">Источники</a><a href="#actions">Где публиковаться</a></nav>
       <section id="summary" className="panel report-proof"><div><span>Как сформирована оценка</span><strong>{visibility.toFixed(1)}</strong></div><dl><div><dt>Запросов</dt><dd>{report.explainability?.sample_scope?.query_count ?? report.query_catalog?.length ?? 0}</dd></div><div><dt>Моделей</dt><dd>{models.length}</dd></div><div><dt>Ответов</dt><dd>{responses.length}</dd></div><div><dt>Успешных</dt><dd>{report.explainability?.sample_scope?.successful_response_count ?? responses.length}</dd></div><div><dt>Исследование</dt><dd>#{result.research.id}</dd></div><div><dt>Алгоритм</dt><dd>{String(score.version ?? "не указан")}</dd></div></dl><p className="method-note">{report.explainability?.sample_scope?.limitation ?? "Результат относится только к исследованной выборке и не означает видимость во всех ИИ."}</p><details><summary>Показать расчёт</summary>{visibilityEvidence.lines.map((line) => <p key={line}>{line}</p>)}<code>{visibilityEvidence.formula}</code></details></section>
       <section id="demand-map" className="panel research-lab-section"><span className="section-label">КАРТА СПРОСА</span><h2>По каким запросам проверялся бренд</h2>{report.query_catalog?.length ? report.query_catalog.map((item) => <details className="evidence-details" key={item.id}><summary>{item.cluster} · {item.intent}</summary><p>{item.text}</p></details>) : <p className="empty-state">Для старого исследования карта смежных запросов не сохранена.</p>}</section>
@@ -2885,7 +2888,7 @@ function App() {
       ) : screen === "expert" ? (
         <ExpertGuideScreen onNavigate={navigate} />
       ) : screen === "report" && report ? (
-        <Report result={report} onHome={() => navigate("home")} />
+        <Report result={report} onHome={() => navigate("home")} onNavigate={navigate} />
       ) : loading ? (
         <DashboardSkeleton />
       ) : (
