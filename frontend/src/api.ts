@@ -193,7 +193,7 @@ export type AliceAutomationDashboard = {
 };
 export type GeoPlatform = {
   id: string; name: string; domain: string; platform_type: string; category: string;
-  country: string; language: string; ai_engines: string[]; domain_trust?: number;
+  country: string; language: string; source?: string; source_reference?: string | null; ai_engines: string[]; domain_trust?: number;
   topical_authority_score?: number; ai_citation_history?: number;
   allows_ai_crawlers?: boolean; in_knowledge_graph?: boolean;
   cost_per_placement?: number; evidence: Record<string, unknown>; active: boolean;
@@ -480,6 +480,7 @@ export class ApiClient {
   geoPlatforms() { return this.request<GeoPlatform[]>("/geo/platforms"); }
   createGeoPlatform(payload: {
     name: string; domain: string; category: string; country: string; language: string;
+    platform_type?: string; source?: string; source_reference?: string; ai_engines?: string[];
     domain_trust?: number; topical_authority_score?: number; ai_citation_history?: number;
     cost_per_placement?: number; evidence: Record<string, unknown>;
   }) { return this.request<GeoPlatform>("/geo/platforms", { method: "POST", body: JSON.stringify(payload) }); }

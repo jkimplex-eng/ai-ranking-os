@@ -391,8 +391,8 @@ function Shell({
   useEffect(() => { api.systemHealth().then((health) => setSystemReady(health.status === "healthy" || health.status === "ready")).catch(() => setSystemReady(false)); }, []);
   const isAdmin = roles.some((role) => ["superadmin", "admin", "SUPERADMIN", "ADMIN"].includes(role));
   const primaryNav = [
-    ["⌂", "Главный результат", "home"], ["＋", "Добавить компанию", "wizard"],
-    ["▤", "Отчёты", "reports"], ["✓", "Что делать", "recommendations"],
+    ["⌂", "Мой план", "home"], ["＋", "Проверить бренд", "wizard"],
+    ["▤", "Исследования", "reports"], ["✓", "План действий", "recommendations"],
     ["◇", "Конкуренты", "competitors"],
   ] as const;
   const expertNavSource = [
@@ -459,7 +459,7 @@ function Shell({
         {children}
         <nav className="mobile-nav" aria-label="Мобильная навигация">
           {primaryNav.slice(0, 4).map(([icon, label, target]) => (
-            <button key={target} className={active === target ? "active" : ""} onClick={() => onNavigate(target)}><span>{icon}</span><small>{label === "Добавить компанию" ? "Добавить" : label}</small></button>
+            <button key={target} className={active === target ? "active" : ""} onClick={() => onNavigate(target)}><span>{icon}</span><small>{label === "Проверить бренд" ? "Проверить" : label}</small></button>
           ))}
         </nav>
       </div>
@@ -1385,6 +1385,39 @@ function GeoOpportunitiesScreen() {
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось добавить площадку"); }
     finally { setBusy(false); }
   };
+  const registerObservedSource = async (source: NonNullable<NonNullable<ReportShape["yandex_generative_evidence"]>["source_patterns"]>[number]) => {
+    if (platforms.some((item) => item.domain.toLowerCase() === source.domain.toLowerCase())) {
+      setOperationResult(`${source.domain} уже есть в вашем списке площадок.`);
+      return;
+    }
+    setBusy(true); setError(""); setOperationResult("");
+    try {
+      await api.createGeoPlatform({
+        name: source.domain,
+        domain: source.domain,
+        platform_type: "PUBLICATION",
+        category: "OBSERVED_YANDEX_SOURCE",
+        country: "RU",
+        language: "ru",
+        source: "YandexGPT_RESPONSE",
+        source_reference: `research:${selectedResearchId ?? "unknown"}`,
+        ai_engines: ["YandexGPT"],
+        evidence: {
+          status: "OBSERVED",
+          research_id: selectedResearchId,
+          used_in_answers: source.used_in_answers,
+          coverage_percent: source.coverage_percent,
+          confidence: source.confidence,
+          urls: source.evidence.map((item) => item.url),
+          recorded_at: new Date().toISOString(),
+        },
+      });
+      await load();
+      setOperationResult(`${source.domain} добавлен в список кандидатов. Это наблюдаемый источник, а не подтверждённая рекомендация для размещения.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Не удалось добавить источник в список площадок");
+    } finally { setBusy(false); }
+  };
   const calculate = async () => {
     if (!platforms.length) { setError("Площадки ещё не измерены. Подключите Яндекс или добавьте подтверждённый ресурс вручную."); return; }
     setBusy(true); setError("");
@@ -1494,7 +1527,7 @@ function GeoOpportunitiesScreen() {
   return (
     <main className="analytics-page geo-page">
       <header className="analytics-hero">
-        <div><span className="eyebrow">GEO OPPORTUNITY ENGINE</span><h1>Где публиковаться, чтобы вас рекомендовали ИИ</h1><p>Сравните площадки по авторитетности, тематической близости, истории цитирования и стоимости. Оценка EIS показывает потенциал влияния, а не выдаёт корреляцию за доказанную причинность.</p></div>
+        <div><span className="eyebrow">ПУБЛИКАЦИИ И ИСТОЧНИКИ ЯНДЕКСА</span><h1>Где изучить возможность публикации</h1><p>Сначала соберите домены, которые YandexGPT использовал в ответах на ваши вопросы. Затем проверьте тематическое соответствие и правила размещения. Оценка EIS появляется только после измерения данных, а не заменяет их догадкой.</p></div>
         <div className="geo-hero-controls"><label className="research-selector">Анализируемый бренд<select aria-label="Бренд для экспертного анализа" value={selectedResearchId ?? ""} onChange={(event) => setSelectedResearchId(Number(event.target.value))}><option value="" disabled>Выберите исследование</option>{researches.map((item) => <option value={item.id} key={item.id}>{researchBrand(item)} · исследование #{item.id}</option>)}</select></label><div className="geo-method"><span>Методология</span><b>{priorities?.methodology_version ?? "heuristic_v1.0"}</b><small>Версионированный расчёт</small></div></div>
       </header>
       {error && <div className="error" role="alert">{error}</div>}
@@ -1503,11 +1536,11 @@ function GeoOpportunitiesScreen() {
       <section className="geo-summary">
         <article className="analytics-card metric"><span>Источники в ответах</span><strong>{researchEvidence ? observedYandexSources.length : "—"}</strong><small>домены из выбранного исследования</small></article>
         <article className="analytics-card metric"><span>Активные планы мониторинга</span><strong>{aliceAutomation ? selectedPlans.filter((plan) => plan.is_enabled).length : "—"}</strong><small>для выбранного бренда</small></article>
-        <article className="analytics-card metric"><span>Наблюдения YandexGPT</span><strong>{aliceLearning?.observation_count ?? "—"}</strong><small>сохранённые ответы по бренду</small></article>
+        <article className="analytics-card metric"><span>Наблюдения YandexGPT API</span><strong>{aliceLearning?.observation_count ?? "—"}</strong><small>сохранённые ответы по бренду</small></article>
       </section>
       <section className="analytics-card geo-site-audit">
         <div className="geo-audit-intro"><span className="eyebrow">РЕАЛЬНЫЕ ИСТОЧНИКИ ЯНДЕКСА</span><h2>Где стоит добиваться публикации или упоминания</h2><p>Это домены, которые генеративный поиск Яндекса действительно использовал в ответах выбранного исследования. Мы не присваиваем площадкам выдуманные звёзды: показываем частоту, ссылки на наблюдения и уверенность.</p></div>
-        {observedYandexSources.length ? <div className="geo-audit-result"><header><div><strong>{observedYandexSources.length}</strong><span>доменов использовано в ответах</span></div><Badge tone="success">ИЗМЕРЕНО</Badge></header>{observedYandexSources.slice(0, 12).map((source) => <article className="geo-audit-action" key={source.domain}><Badge tone={source.confidence === "HIGH" ? "success" : "warning"}>{source.confidence}</Badge><div><b>{source.domain}</b><p>Использован в {source.used_in_answers} ответах · покрытие {source.coverage_percent.toFixed(1)}%</p><small>{source.interpretation}</small><details><summary>Почему площадка в списке</summary>{source.evidence.map((item) => <p key={`${item.query}:${item.url}`}><a href={item.url} target="_blank" rel="noreferrer">{item.title || item.url}</a><br />Запрос: «{item.query}»</p>)}</details></div></article>)}<p className="method-note">Наличие домена в ответе доказывает использование источника в этой выборке, но не доказывает, что публикация на нём автоматически приведёт к рекомендации. Сначала проверьте правила размещения и тематическое соответствие.</p></div> : <div className="geo-empty"><strong>{evidenceError ? "Не удалось загрузить источники" : !researchEvidence && selectedResearchId ? "Загружаем источники…" : "Площадки ещё не измерены"}</strong><p>{evidenceError || (researchEvidence?.yandex_generative_evidence?.limitations ?? []).join(" ") || "В выбранном исследовании нет измеренных источников генеративного поиска. Соберите спрос Wordstat и выполните новое исследование."}</p></div>}
+        {observedYandexSources.length ? <div className="geo-audit-result"><header><div><strong>{observedYandexSources.length}</strong><span>доменов использовано в ответах</span></div><Badge tone="success">ИЗМЕРЕНО</Badge></header>{observedYandexSources.slice(0, 12).map((source) => { const added = platforms.some((item) => item.domain.toLowerCase() === source.domain.toLowerCase()); return <article className="geo-audit-action" key={source.domain}><Badge tone={source.confidence === "HIGH" ? "success" : "warning"}>{source.confidence}</Badge><div><b>{source.domain}</b><p>Использован в {source.used_in_answers} ответах · покрытие {source.coverage_percent.toFixed(1)}%</p><small>{source.interpretation}</small><details><summary>Почему площадка в списке</summary>{source.evidence.map((item) => <p key={`${item.query}:${item.url}`}><a href={item.url} target="_blank" rel="noreferrer">{item.title || item.url}</a><br />Запрос: «{item.query}»</p>)}</details><div className="button-row"><button className="secondary" disabled={busy || added} onClick={() => void registerObservedSource(source)}>{added ? "Добавлен в кандидаты" : "Добавить в кандидаты"}</button></div></div></article>; })}<p className="method-note">Кнопка добавляет домен как наблюдаемый кандидат со ссылкой на это исследование. Наличие домена в ответе доказывает использование источника в этой выборке, но не доказывает, что публикация на нём автоматически приведёт к рекомендации.</p></div> : <div className="geo-empty"><strong>{evidenceError ? "Не удалось загрузить источники" : !researchEvidence && selectedResearchId ? "Загружаем источники…" : "Площадки ещё не измерены"}</strong><p>{evidenceError || (researchEvidence?.yandex_generative_evidence?.limitations ?? []).join(" ") || "В выбранном исследовании нет измеренных источников генеративного поиска. Соберите спрос Wordstat и выполните новое исследование."}</p></div>}
         <MeasuredSources analysis={researchEvidence?.source_analysis} />
       </section>
       <section className="analytics-card geo-site-audit">
@@ -1517,12 +1550,12 @@ function GeoOpportunitiesScreen() {
       <section className="geo-value-flow" aria-labelledby="alice-workflow-title">
         <header>
           <span className="eyebrow">КАК ЭТО ПОМОГАЕТ БРЕНДУ</span>
-          <h2 id="alice-workflow-title">От реального спроса — к плану роста в Алисе</h2>
-          <p>Система не пытается угадать закрытый алгоритм Яндекса. Она регулярно измеряет доступные сигналы и показывает, какие изменения совпадают с появлением бренда в рекомендациях.</p>
+          <h2 id="alice-workflow-title">От реального спроса — к повторному измерению в YandexGPT</h2>
+          <p>Система не пытается угадать закрытый алгоритм Яндекса. Она регулярно измеряет доступные сигналы в YandexGPT API и показывает, какие изменения совпадают с появлением бренда в этой выборке.</p>
         </header>
         <div>
           <article><span>1</span><b>Находим спрос</b><p>Wordstat показывает самые частотные формулировки категории в выбранном регионе.</p></article>
-          <article><span>2</span><b>Проверяем Алису</b><p>Задаём одинаковые покупательские вопросы и сохраняем ответы.</p></article>
+          <article><span>2</span><b>Проверяем YandexGPT API</b><p>Задаём одинаковые покупательские вопросы и сохраняем ответы. Пользовательская Алиса этим запуском не измеряется.</p></article>
           <article><span>3</span><b>Сравниваем изменения</b><p>Отслеживаем рекомендации, источники, позиции и публикации во времени.</p></article>
           <article><span>4</span><b>Предлагаем действие</b><p>Показываем, какую страницу или источник улучшить и как проверить результат.</p></article>
         </div>
@@ -2210,7 +2243,7 @@ function Wizard({
     }
     throw new Error("Исследование продолжает выполняться. Его статус доступен в разделе «Исследования».");
   }
-  const titles = ["Добавьте компанию", "Подтвердите спрос", "Проверьте вопросы"];
+  const titles = ["Проверьте бренд", "Подтвердите спрос", "Проверьте вопросы"];
   return (
     <main className="wizard-page">
       <button
@@ -2236,7 +2269,7 @@ function Wizard({
               ? brandProfile?.categories.length
                 ? "Мы определили категорию по сайту. Проверьте её, географию и частоту мониторинга."
                 : "Категорию по сайту определить не удалось. Укажите её своими словами — так вопросы будут естественными и полезными."
-              : "Удалите лишнее или добавьте свои вопросы — именно их система задаст Алисе."}
+              : "Удалите лишнее или добавьте свои вопросы — именно их система задаст YandexGPT API."}
         </p>
         {step === 1 && (
           <>
@@ -2299,7 +2332,7 @@ function Wizard({
               <label>Сколько запросов<select value={queryLimit} onChange={(event) => setQueryLimit(Number(event.target.value) as 30 | 50 | 100)}><option value={30}>30 — рекомендуется</option><option value={50}>50</option><option value={100}>100</option></select></label>
               <label>Повторять проверку<select value={cadence} onChange={(event) => setCadence(event.target.value as "DAILY" | "WEEKLY")}><option value="DAILY">Ежедневно</option><option value="WEEKLY">Еженедельно</option></select></label>
             </div>
-            <details><summary>Дополнительные настройки</summary><p className="muted">Основной сценарий работает только с экосистемой Яндекса: Wordstat, Поиск, Вебмастер, YandexGPT и доступные данные Алисы. Известных конкурентов можно оставить; остальных система найдёт в ответах Яндекса автоматически.</p></details>
+            <details><summary>Что именно будет измерено</summary><p className="muted">Основной сценарий работает с экосистемой Яндекса: Wordstat, Поиск, Вебмастер и YandexGPT API. Пользовательская Алиса и Нейропоиск не измеряются этим запуском и не будут выданы за его результат. Известных конкурентов можно оставить; остальных система найдёт в ответах и поисковой выдаче Яндекса автоматически.</p></details>
           </div>
         )}
         {false && step === 3 && (
