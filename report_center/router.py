@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from report_center.dependencies import ReportCenterDependency
@@ -10,8 +10,13 @@ from report_center.schemas import (
     ReportVersionRead,
 )
 from report_center.service import ReportNotFoundError
+from research.access import require_research_access
 
-router = APIRouter(prefix="/reports", tags=["report-center"])
+router = APIRouter(
+    prefix="/reports",
+    tags=["report-center"],
+    dependencies=[Depends(require_research_access)],
+)
 
 
 @router.get("", response_model=ReportCatalogPage)

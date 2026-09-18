@@ -19,8 +19,12 @@ TestingSession = sessionmaker(bind=test_engine, expire_on_commit=False)
 
 
 @pytest.fixture
-def client() -> Generator[TestClient]:
+def client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient]:
     Base.metadata.create_all(test_engine)
+    monkeypatch.setattr(
+        "backend.app.main.hydrate_provider_credentials",
+        lambda *_args, **_kwargs: None,
+    )
 
     def override_get_db() -> Generator[Session]:
         with TestingSession() as session:
@@ -117,9 +121,7 @@ def test_score_is_calculated_automatically_after_all_responses(
             "provider": "test",
             "model": "model-b",
             "content": "A different provider is discussed.",
-            "normalized_response": _normalized(
-                "A different provider is discussed."
-            ),
+            "normalized_response": _normalized("A different provider is discussed."),
         },
     )
     assert second.status_code == 201
@@ -131,9 +133,9 @@ def test_score_is_calculated_automatically_after_all_responses(
     assert score["recommendation_score"] == 50.0
     assert score["citation_score"] == 50.0
     assert score["coverage_score"] == 100.0
-    assert score["confidence_score"] == 94.0
-    assert score["visibility_score"] == 64.4
-    assert score["version"] == "1.0"
+    assert score["confidence_score"] == 79.0
+    assert score["visibility_score"] == 50.0
+    assert score["version"] == "2.0"
 
 
 def test_score_api_recalculates_same_version_without_duplicates(
@@ -161,14 +163,10 @@ def test_score_api_recalculates_same_version_without_duplicates(
     assert first.status_code == 200
     assert second.status_code == 200
     assert first.json()["id"] == second.json()["id"]
-    assert first.json()["version"] == "1.0"
+    assert first.json()["version"] == "2.0"
     with TestingSession() as db:
         scores = list(
-            db.scalars(
-                select(ResearchScore).where(
-                    ResearchScore.research_id == research_id
-                )
-            )
+            db.scalars(select(ResearchScore).where(ResearchScore.research_id == research_id))
         )
         assert len(scores) == 1
 
@@ -184,3 +182,76 @@ def test_scoring_errors_and_openapi(client: TestClient) -> None:
     assert client.post("/research/999999/score").status_code == 404
     paths = client.get("/openapi.json").json()["paths"]
     assert "/research/{research_id}/score" in paths
+
+
+def test_generic_product_recommendation_does_not_count_as_brand_recommendation(
+    client: TestClient,
+) -> None:
+    research_id = client.post(
+        "/research",
+        json={"title": "Acme", "metadata": {"target_entity": "Acme"}},
+    ).json()["id"]
+    task_id = _create_task(client, research_id, "model-a")
+    with TestingSession() as db:
+        research = db.get(Research, research_id)
+        assert research is not None
+        research.total_tasks = 1
+        db.commit()
+
+    created = client.post(
+        "/responses",
+        json={
+            "research_task_id": task_id,
+            "provider": "test",
+            "model": "model-a",
+            "content": "Для чувствительной кожи рекомендую увлажняющую сыворотку.",
+            "normalized_response": _normalized(
+                "Для чувствительной кожи рекомендую увлажняющую сыворотку.",
+                metadata={"recommendations": ["Выберите увлажняющую сыворотку"]},
+            ),
+        },
+    )
+
+    assert created.status_code == 201
+    score = client.get(f"/research/{research_id}/score").json()
+    assert score["recommendation_score"] == 0.0
+
+
+def test_target_entity_request_metadata_does_not_create_a_brand_mention(
+    client: TestClient,
+) -> None:
+    research_id = client.post(
+        "/research",
+        json={"title": "Acme", "metadata": {"target_entity": "Acme"}},
+    ).json()["id"]
+    task_id = _create_task(client, research_id, "model-a")
+    with TestingSession() as db:
+        research = db.get(Research, research_id)
+        assert research is not None
+        research.total_tasks = 1
+        db.commit()
+
+    created = client.post(
+        "/responses",
+        json={
+            "research_task_id": task_id,
+            "provider": "test",
+            "model": "model-a",
+            "content": "Другой сервис решает эту задачу.",
+            "normalized_response": _normalized(
+                "Другой сервис решает эту задачу.",
+                metadata={
+                    "entities": [
+                        {"name": "Acme", "type": "BRAND", "confidence": 0.98}
+                    ]
+                },
+            ),
+        },
+    )
+
+    assert created.status_code == 201
+    assert created.json()["processing_status"] == "PROCESSED"
+    extraction = client.get(f"/responses/{created.json()['id']}/extraction").json()
+    assert extraction["brands"] == []
+    score = client.get(f"/research/{research_id}/score").json()
+    assert score["mention_score"] == 0.0

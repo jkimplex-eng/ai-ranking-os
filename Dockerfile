@@ -8,6 +8,15 @@ WORKDIR /app
 
 RUN useradd --create-home --uid 10001 appuser
 
+# T-Bank API uses the Russian Trusted CA chain. Keep TLS verification enabled
+# and install the official Root and Sub CA certificates in the image trust store.
+COPY infra/certs/russian_trusted_root_ca.crt /usr/local/share/ca-certificates/russian_trusted_root_ca.crt
+COPY infra/certs/russian_trusted_sub_ca.crt /usr/local/share/ca-certificates/russian_trusted_sub_ca.crt
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends ca-certificates \
+    && update-ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt requirements.lock ./
 RUN pip install --upgrade pip && pip install --requirement requirements.lock
 
