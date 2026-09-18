@@ -1247,6 +1247,28 @@ function ProvidersDashboard() {
   );
 }
 
+type PublicationTaskDraft = {
+  status: "OBSERVED" | "REVIEWED" | "PLANNED" | "PUBLISHED" | "READY_FOR_FOLLOWUP";
+  owner: string;
+  due_date: string;
+  content_format: string;
+  publication_url: string;
+};
+
+function PublicationCandidateTask({ item, busy, onSave }: { item: GeoPlatform; busy: boolean; onSave: (task: PublicationTaskDraft) => Promise<void> }) {
+  const stored = item.evidence?.publication_task;
+  const saved = stored && typeof stored === "object" ? stored as Partial<PublicationTaskDraft> : {};
+  const [task, setTask] = useState<PublicationTaskDraft>({
+    status: saved.status ?? (typeof item.evidence?.status === "string" ? item.evidence.status as PublicationTaskDraft["status"] : "OBSERVED"),
+    owner: saved.owner ?? "",
+    due_date: saved.due_date ?? "",
+    content_format: saved.content_format ?? "Экспертная статья",
+    publication_url: saved.publication_url ?? "",
+  });
+  const update = (field: keyof PublicationTaskDraft, value: string) => setTask((current) => ({ ...current, [field]: value }));
+  return <details className="publication-candidate-task"><summary>План публикации и контрольный замер</summary><p>Сохраните рабочие параметры. Исходное наблюдение остаётся неизменным; этот план не доказывает эффект до повторного исследования.</p><div className="publication-task-fields"><label>Статус<select value={task.status} onChange={(event) => update("status", event.target.value)}><option value="OBSERVED">Замечен в ответах</option><option value="REVIEWED">Кандидат проверен</option><option value="PLANNED">Публикация запланирована</option><option value="PUBLISHED">Материал опубликован</option><option value="READY_FOR_FOLLOWUP">Готов к повторному замеру</option></select></label><label>Ответственный<input value={task.owner} onChange={(event) => update("owner", event.target.value)} placeholder="Например, редактор" /></label><label>Дедлайн<input type="date" value={task.due_date} onChange={(event) => update("due_date", event.target.value)} /></label><label>Формат материала<select value={task.content_format} onChange={(event) => update("content_format", event.target.value)}><option>Экспертная статья</option><option>Обзор продукта</option><option>Кейс</option><option>Интервью</option><option>Каталог или профиль компании</option></select></label><label className="publication-task-url">URL опубликованного материала<input type="url" value={task.publication_url} onChange={(event) => update("publication_url", event.target.value)} placeholder="https://..." /></label></div><div className="button-row"><button className="secondary" disabled={busy || (task.status === "PUBLISHED" && !task.publication_url.trim())} onClick={() => void onSave(task)}>{busy ? "Сохраняем…" : "Сохранить план"}</button></div>{task.status === "PUBLISHED" && !task.publication_url.trim() ? <p className="method-note">Чтобы отметить публикацию, добавьте её публичный URL.</p> : null}{task.status === "READY_FOR_FOLLOWUP" ? <p className="method-note">Следующий шаг: зарегистрируйте URL материала в итоговом отчёте и повторите тот же набор запросов. Только затем можно сравнивать результат.</p> : null}</details>;
+}
+
 function GeoOpportunitiesScreen() {
   const aliceFeatureLabels: Record<string, string> = {
     search_visibility: "Видимость в Яндекс Поиске",
@@ -1456,15 +1478,15 @@ function GeoOpportunitiesScreen() {
     catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось удалить площадку"); }
     finally { setBusy(false); }
   };
-  const advancePublicationCandidate = async (item: GeoPlatform, status: "REVIEWED" | "PUBLICATION_PLANNED") => {
+  const savePublicationTask = async (item: GeoPlatform, task: PublicationTaskDraft) => {
     setBusy(true); setError(""); setOperationResult("");
     try {
       const previous = item.evidence && typeof item.evidence === "object" ? item.evidence : {};
-      await api.updateGeoPlatform(item.id, { evidence: { ...previous, status, updated_at: new Date().toISOString() } });
+      await api.updateGeoPlatform(item.id, { evidence: { ...previous, status: task.status, publication_task: { ...task, updated_at: new Date().toISOString() }, updated_at: new Date().toISOString() } });
       await load();
-      setOperationResult(status === "REVIEWED"
-        ? `${item.domain} отмечен как проверенный кандидат. Зафиксируйте опубликованный URL в отчёте после выхода материала.`
-        : `Для ${item.domain} создан план публикации. После выхода материала зарегистрируйте его URL в итоговом отчёте и повторите тот же набор вопросов.`);
+      setOperationResult(task.status === "READY_FOR_FOLLOWUP"
+        ? `План для ${item.domain} готов к контрольному замеру. Зарегистрируйте URL опубликованного материала в отчёте и повторите тот же набор вопросов.`
+        : `План публикации для ${item.domain} сохранён. Исходное наблюдение не изменено.`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось обновить статус кандидата");
     } finally { setBusy(false); }
@@ -1654,7 +1676,7 @@ function GeoOpportunitiesScreen() {
       {!platforms.length ? <section className="analytics-card geo-empty"><strong>Площадки ещё не добавлены</strong><p>Добавьте реальный ресурс выше. Система не подставляет демонстрационные сайты и не выдумывает показатели.</p></section> : priorities ? <section className="geo-ranking">
         {priorities.items.map(({ score, cost_efficiency }, index) => { const platform = platformById.get(score.platform_id); const measured = score.eis_value !== undefined && score.eis_value !== null; return <article className="analytics-card geo-rank-card" key={score.id}><div className="geo-rank-number">#{index + 1}</div><div className="geo-rank-main"><div><h3>{platform?.name ?? score.platform_id}</h3><a href={`https://${platform?.domain}`} target="_blank" rel="noreferrer">{platform?.domain}</a></div><Badge tone={score.priority === "P0" ? "danger" : score.priority === "P1" ? "warning" : "neutral"}>{score.priority ?? "НЕТ ПРИОРИТЕТА"}</Badge></div><div className="geo-score"><strong>{measured ? score.eis_value?.toFixed(1) : "—"}</strong><span>из 100</span></div><div className="geo-components">{Object.entries(score.components).map(([name, component]) => <div key={name}><span>{name === "authority" ? "Авторитет" : name === "match" ? "Соответствие запросу" : name === "content" ? "Качество контента" : name}</span><b>{component.value === null || component.value === undefined ? "Нет данных" : component.value.toFixed(1)}</b><div className="track"><i style={{ width: `${component.value ?? 0}%` }} /></div>{component.exclusions.length > 0 && <small>Не учтено: {component.exclusions.join(", ")}</small>}</div>)}</div><footer><span>Доказательства: <b>{score.evidence_status === "MEASURED" ? "измерено" : score.evidence_status === "PARTIAL" ? "частичные данные" : "не измерено"}</b></span><span>Эффективность затрат: <b>{cost_efficiency === undefined || cost_efficiency === null ? "нет данных" : cost_efficiency.toFixed(4)}</b></span><button className="secondary" onClick={() => void remove(platform!)} disabled={busy}>Удалить</button></footer></article>; })}
         <p className="geo-limitation">Важно: {priorities.limitations.join(" ")} Перед размещением подтвердите эффект повторным исследованием с неизменным набором запросов.</p>
-      </section> : <section className="geo-platform-list">{platforms.map((item) => { const observed = item.source === "YANDEX_SEARCH_GENERATIVE"; const status = typeof item.evidence?.status === "string" ? item.evidence.status : ""; return <article className="analytics-card record-card" key={item.id}><div><small>{observed ? "Наблюдение · генеративный поиск Яндекса" : `${item.category} · ${item.country}/${item.language}`}</small><h2>{item.name}</h2><p>{item.domain} · Domain Trust: {item.domain_trust ?? "нет данных"} · Тематический авторитет: {item.topical_authority_score ?? "нет данных"}</p>{observed ? <><p className="method-note">Статус: <b>{status === "REVIEWED" ? "кандидат проверен" : status === "PUBLICATION_PLANNED" ? "публикация запланирована" : "замечен в ответах"}</b>. Показатели EIS не рассчитаны, пока нет измеряемых входных данных.</p><div className="button-row"><button className="secondary" disabled={busy || status === "REVIEWED" || status === "PUBLICATION_PLANNED"} onClick={() => void advancePublicationCandidate(item, "REVIEWED")}>Отметить как проверенный</button><button className="secondary" disabled={busy || status === "PUBLICATION_PLANNED"} onClick={() => void advancePublicationCandidate(item, "PUBLICATION_PLANNED")}>Запланировать публикацию</button></div></> : null}</div><Badge tone={item.active ? "success" : "neutral"}>{observed ? "КАНДИДАТ" : item.active ? "В РЕЕСТРЕ" : "ОТКЛЮЧЕНА"}</Badge></article>; })}</section>}
+      </section> : <section className="geo-platform-list">{platforms.map((item) => { const observed = item.source === "YANDEX_SEARCH_GENERATIVE"; const status = typeof item.evidence?.status === "string" ? item.evidence.status : ""; return <article className="analytics-card record-card" key={item.id}><div><small>{observed ? "Наблюдение · генеративный поиск Яндекса" : `${item.category} · ${item.country}/${item.language}`}</small><h2>{item.name}</h2><p>{item.domain} · Domain Trust: {item.domain_trust ?? "нет данных"} · Тематический авторитет: {item.topical_authority_score ?? "нет данных"}</p>{observed ? <><p className="method-note">Статус: <b>{status === "REVIEWED" ? "кандидат проверен" : status === "PLANNED" ? "публикация запланирована" : status === "PUBLISHED" ? "материал опубликован" : status === "READY_FOR_FOLLOWUP" ? "готов к повторному замеру" : "замечен в ответах"}</b>. Показатели EIS не рассчитаны, пока нет измеряемых входных данных.</p><PublicationCandidateTask key={item.id} item={item} busy={busy} onSave={(task) => savePublicationTask(item, task)} /></> : null}</div><Badge tone={item.active ? "success" : "neutral"}>{observed ? "КАНДИДАТ" : item.active ? "В РЕЕСТРЕ" : "ОТКЛЮЧЕНА"}</Badge></article>; })}</section>}
     </main>
   );
 }

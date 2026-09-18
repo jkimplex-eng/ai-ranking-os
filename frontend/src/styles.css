@@ -190,6 +190,7 @@
 .publication-query-picker { display: grid; gap: 8px; max-height: 260px; overflow: auto; padding: 14px; border: 1px solid var(--border); border-radius: 12px; }
 .publication-query-picker label { display: flex; gap: 10px; align-items: flex-start; color: var(--text-muted); }
 .publication-query-picker input { width: auto; margin-top: 3px; }
+.publication-candidate-task{margin-top:14px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface-soft)}.publication-candidate-task summary{cursor:pointer;font-weight:750}.publication-candidate-task>p{color:var(--muted);font-size:13px;line-height:1.5}.publication-task-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.publication-task-fields label{display:grid;gap:6px;color:var(--muted);font-size:12px}.publication-task-fields input,.publication-task-fields select{width:100%;padding:10px;color:var(--text);background:var(--background);border:1px solid var(--border);border-radius:9px}.publication-task-url{grid-column:1/-1}@media(max-width:620px){.publication-task-fields{grid-template-columns:1fr}}
 .influence-estimate { margin-top: 14px; padding: 18px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-soft); }
 
 /* Simplified product navigation and progressive disclosure */
