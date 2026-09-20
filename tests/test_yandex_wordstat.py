@@ -132,12 +132,25 @@ def test_wordstat_filters_ambiguous_association_noise() -> None:
         "geo продвижение сайта",
         "услуги продвижения",
     ]
-    assert snapshot.algorithm_version == "1.1"
+    assert snapshot.algorithm_version == "1.2"
 
 
 def test_wordstat_rejects_tokenized_punycode_query() -> None:
     assert WordstatService._query_well_formed("geo продвижение xn d1abiikjcedki") is False
     assert WordstatService._query_well_formed("geo продвижение сайта") is True
+
+
+def test_wordstat_rejects_food_and_fragment_noise_for_cream_category() -> None:
+    relevant = WordstatService._query_relevant_to_category
+
+    assert relevant("тональный крем", "Кремы", "TOP") is True
+    assert relevant("увлажняющий крем для лица", "Кремы", "TOP") is True
+    assert relevant("крем для рук", "Кремы", "TOP") is True
+    assert relevant("крем чиз", "Кремы", "TOP") is False
+    assert relevant("крем для торта", "Кремы", "TOP") is False
+    assert relevant("рецепт крема", "Кремы", "TOP") is False
+    assert relevant("можно кремом", "Кремы", "TOP") is False
+    assert relevant("ли крем", "Кремы", "TOP") is False
 
 
 def test_wordstat_endpoints_are_documented_in_openapi() -> None:

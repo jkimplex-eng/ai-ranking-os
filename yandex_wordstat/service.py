@@ -36,8 +36,19 @@ class WordstatError(ValueError):
 
 class WordstatService:
     BASE_URL = "https://searchapi.api.cloud.yandex.net"
-    VERSION = "1.1"
+    VERSION = "1.2"
     _AMBIGUOUS_CATEGORY_TOKENS = {"ai", "geo", "ии", "гео", "seo", "сео"}
+    _FOOD_CREAM_TOKENS = {
+        "чиз", "торт", "суп", "сливк", "творож", "сыр", "рецепт", "заварн",
+        "десерт", "кулинар", "пирож", "кекс", "бисквит", "маскарпон",
+    }
+    _COSMETIC_CREAM_TOKENS = {
+        "тональ", "увлаж", "питатель", "лиц", "рук", "тел", "волос", "кож",
+        "глаз", "век", "ног", "spf", "санскрин", "защит", "ночн", "дневн",
+        "матир", "антивозраст", "омолаж", "bb", "cc", "уход", "макияж",
+        "сух", "чувствител", "проблемн", "акне", "пигмент",
+    }
+    _LOW_SIGNAL_CREAM_TOKENS = {"ли", "можно", "какой", "хороший", "домашн", "со", "мл"}
 
     def __init__(
         self,
@@ -153,7 +164,7 @@ class WordstatService:
             item
             for item in ordered
             if self._query_well_formed(item[0])
-            and (item[2] == "TOP" or self._association_relevant(item[0], payload.category))
+            and self._query_relevant_to_category(item[0], payload.category, item[2])
         ]
         brand_key = payload.brand.casefold().strip()
         unbranded = [item for item in ordered if brand_key not in item[0].casefold()]
@@ -226,6 +237,47 @@ class WordstatService:
             same_lexeme(category_token, query_token)
             for category_token in category_tokens
             for query_token in query_tokens
+        )
+
+    @classmethod
+    def _query_relevant_to_category(
+        cls, query: str, category: str, source_type: str
+    ) -> bool:
+        """Reject high-frequency homonyms before they reach a buyer-question set.
+
+        Wordstat TOP is a popularity list, not a classification guarantee. In
+        particular, a seed like ``кремы`` mixes cosmetics with cooking. A
+        cosmetic brand must never spend an AI check on ``крем чиз`` or a recipe.
+        Uncertain, short fragments are omitted and can be added as a custom
+        question when they are intentional.
+        """
+        if source_type == "SIMILAR" and not cls._association_relevant(query, category):
+            return False
+        tokens = re.findall(r"[a-zа-яё0-9]+", query.casefold())
+        category_tokens = re.findall(r"[a-zа-яё0-9]+", category.casefold())
+        is_cream_market = any(token.startswith("крем") for token in category_tokens)
+        if not is_cream_market:
+            return True
+        if any(
+            any(token.startswith(food) for food in cls._FOOD_CREAM_TOKENS)
+            for token in tokens
+        ):
+            return False
+        cosmetic_signal = any(
+            any(token.startswith(signal) for signal in cls._COSMETIC_CREAM_TOKENS)
+            for token in tokens
+        )
+        if cosmetic_signal:
+            return True
+        meaningful = [
+            token
+            for token in tokens
+            if token not in {"для", "и", "в", "на", "с", "по", "от", "к", "из"}
+            and not token.startswith("крем")
+        ]
+        return len(meaningful) >= 2 and not all(
+            any(token.startswith(low) for low in cls._LOW_SIGNAL_CREAM_TOKENS)
+            for token in meaningful
         )
 
     @staticmethod

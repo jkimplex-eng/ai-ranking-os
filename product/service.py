@@ -226,7 +226,8 @@ class ProductPipeline:
                     "source_rank": str(index + 1),
                 }
             )
-        for index, text in enumerate(wordstat_queries):
+        for index, raw_text in enumerate(wordstat_queries):
+            text = self._wordstat_buyer_question(raw_text, payload.research_profile)
             if text.casefold() in existing:
                 continue
             existing.add(text.casefold())
@@ -245,7 +246,10 @@ class ProductPipeline:
                     "brand_mode": (
                         "branded" if payload.brand.casefold() in text.casefold() else "unbranded"
                     ),
-                    "rationale": "Частотный запрос категории из официального Yandex Wordstat API",
+                    "rationale": (
+                        "Вопрос составлен по релевантному частотному запросу "
+                        "официального Yandex Wordstat API"
+                    ),
                     "source_snapshot_id": str(wordstat_snapshot_id),
                     "source_rank": str(index + 1),
                 }
@@ -690,6 +694,15 @@ class ProductPipeline:
         return WordstatQuerySource(self.db).queries(
             organization_id, payload.brand, limit=payload.query_limit
         )
+
+    @staticmethod
+    def _wordstat_buyer_question(query: str, research_profile: str) -> str:
+        """Turn a verified demand phrase into a question safe for an AI run."""
+        phrase = " ".join(query.strip().split()).rstrip("?.!")
+        lower = phrase.casefold()
+        if research_profile == "BEAUTY" or "крем" in lower:
+            return f"Какой {phrase} выбрать и на что обратить внимание?"
+        return f"Как выбрать {phrase} и какие варианты стоит сравнить?"
 
 
 class FinalReportService:
