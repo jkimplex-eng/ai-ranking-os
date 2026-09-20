@@ -2368,7 +2368,7 @@ function Wizard({
             <input value={competitorWebsite} onChange={(event) => setCompetitorWebsite(event.target.value)} placeholder="Официальный сайт конкурента" />
             <button type="button" onClick={() => { if (!competitorName.trim()) return; setCompetitors((items) => [...items, { name: competitorName.trim(), website_url: competitorWebsite.trim() || undefined }]); setCompetitorName(""); setCompetitorWebsite(""); }}>Добавить конкурента</button>
             {competitors.map((item) => <p key={item.name}>{item.name} · {item.website_url || "сайт не указан"}</p>)}
-            <label className="hero-field">Категория спроса<input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Например, онлайн-образование" /></label>
+            <label className="hero-field">Категория спроса<input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Например, уходовые кремы для лица" /><small>Укажите товар и назначение, а не только общее слово: так Wordstat точнее отделит косметику от омонимов.</small></label>
           </div>
         )}
         {step === 2 && (
