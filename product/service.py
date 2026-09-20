@@ -476,7 +476,7 @@ class ProductPipeline:
             if item.get("cluster") == "yandex_wordstat_observed" and item.get("text")
         ]
         if not search_queries:
-            organization_id = research.metadata_payload.get("organization_id")
+            organization_id = self._research_organization_id(research)
             snapshot_id = research.metadata_payload.get("yandex_wordstat_snapshot_id")
             snapshot = None
             if isinstance(organization_id, int) and isinstance(snapshot_id, int):
@@ -527,7 +527,7 @@ class ProductPipeline:
     def _yandex_search_evidence(
         self, research: Research, queries: list[str]
     ) -> dict[str, Any]:
-        organization_id = research.metadata_payload.get("organization_id")
+        organization_id = self._research_organization_id(research)
         if not isinstance(organization_id, int) or not queries:
             return {
                 "version": YandexSearchEvidenceService.VERSION,
@@ -576,7 +576,7 @@ class ProductPipeline:
             "visibility_score": None,
             "observations": [],
         }
-        organization_id = research.metadata_payload.get("organization_id")
+        organization_id = self._research_organization_id(research)
         if not isinstance(organization_id, int) or not queries:
             return {**unavailable, "limitations": ["Нет запросов Wordstat для замера."]}
         settings = get_settings()
@@ -602,6 +602,24 @@ class ProductPipeline:
             brand=str(research.metadata_payload.get("brand") or research.entity_id),
             website_url=research.metadata_payload.get("website_url"),
         )
+
+    def _research_organization_id(self, research: Research) -> int | None:
+        """Resolve an organization for current and legacy research records.
+
+        Early product research records could be created before the workspace id
+        was persisted.  Their author is still present, so resolving the author's
+        default workspace preserves access isolation while allowing completed
+        research to use the integrations the author already connected.
+        """
+        organization_id = research.metadata_payload.get("organization_id")
+        if isinstance(organization_id, int):
+            return organization_id
+        author_id = research.metadata_payload.get("created_by_user_id")
+        if not isinstance(author_id, int):
+            return None
+        with suppress(ValueError):
+            return default_organization(self.db, author_id)
+        return None
 
     @staticmethod
     def _values(payload: WizardRequest) -> dict[str, str]:
