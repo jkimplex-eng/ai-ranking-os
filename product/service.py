@@ -32,6 +32,7 @@ from graph.ports import (
     ProvidedRelationship,
     RelationshipProvider,
 )
+from geo_platforms.models import GeoPlatform
 from insights.repository import SqlAlchemyInsightRepository
 from insights.schemas import InsightRequest
 from insights.service import InsightService
@@ -514,6 +515,9 @@ class ProductPipeline:
             artifacts["yandex_generative_evidence"] = self._yandex_generative_evidence(
                 research, search_queries
             )
+        self._materialize_yandex_publication_candidates(
+            research, artifacts.get("yandex_generative_evidence", {})
+        )
         research.metadata_payload = {**research.metadata_payload, "product_artifacts": artifacts}
         self.db.commit()
         PublicationLearningService(self.db).evaluate_followup(research.id)
@@ -606,6 +610,76 @@ class ProductPipeline:
             brand=str(research.metadata_payload.get("brand") or research.entity_id),
             website_url=research.metadata_payload.get("website_url"),
         )
+
+    def _materialize_yandex_publication_candidates(
+        self, research: Research, evidence: dict[str, Any]
+    ) -> None:
+        """Turn observed Yandex sources into a usable publication backlog.
+
+        A domain appears here only when the official Yandex generative-search
+        response marked it as a source.  It is intentionally an *observed
+        candidate*, not a recommendation or a promise of editorial access.
+        """
+        if evidence.get("status") != "MEASURED":
+            return
+        for source in evidence.get("source_patterns", []):
+            if not isinstance(source, dict):
+                continue
+            domain = str(source.get("domain") or "").strip().casefold()
+            source_evidence = source.get("evidence")
+            if not domain or not isinstance(source_evidence, list):
+                continue
+            existing = self.db.scalar(select(GeoPlatform).where(GeoPlatform.domain == domain))
+            if existing is not None:
+                # Never overwrite a manually curated registry entry.  An
+                # automatically created record keeps the first research that
+                # produced it, while the current research still exposes its
+                # own evidence in the report.
+                continue
+            first_proof = next(
+                (item for item in source_evidence if isinstance(item, dict) and item.get("query")),
+                {},
+            )
+            query = str(first_proof.get("query") or "")
+            task = {
+                "status": "OBSERVED",
+                "owner": "",
+                "due_date": "",
+                "content_format": "Экспертная статья",
+                "publication_url": "",
+            }
+            self.db.add(
+                GeoPlatform(
+                    name=domain,
+                    domain=domain,
+                    platform_type="PUBLICATION",
+                    category="OBSERVED_YANDEX_SOURCE",
+                    country="RU",
+                    language="ru",
+                    source="YANDEX_SEARCH_GENERATIVE",
+                    source_reference=f"research:{research.id}",
+                    ai_engines=["YANDEX_SEARCH_GENERATIVE"],
+                    evidence={
+                        "status": "OBSERVED",
+                        "research_id": research.id,
+                        "used_in_answers": source.get("used_in_answers", 0),
+                        "coverage_percent": source.get("coverage_percent", 0),
+                        "confidence": source.get("confidence", "LOW"),
+                        "urls": [
+                            str(item.get("url"))
+                            for item in source_evidence
+                            if isinstance(item, dict) and item.get("url")
+                        ],
+                        "why_observed": source.get("interpretation", ""),
+                        "suggested_topic": (
+                            f"Материал, который полно отвечает на запрос: «{query}»."
+                            if query
+                            else "Проверить формат материалов площадки по теме исследования."
+                        ),
+                        "publication_task": task,
+                    },
+                )
+            )
 
     def _research_organization_id(self, research: Research) -> int | None:
         """Resolve an organization for current and legacy research records.
