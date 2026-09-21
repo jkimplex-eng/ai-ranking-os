@@ -654,8 +654,10 @@ class ProductPipeline:
                     domain=domain,
                     platform_type="PUBLICATION",
                     category="OBSERVED_YANDEX_SOURCE",
-                    country="RU",
-                    language="ru",
+                    # A source used by a Russian-language Yandex answer is
+                    # not proof of its publication geography or language.
+                    country="GLOBAL",
+                    language="ALL",
                     source="YANDEX_SEARCH_GENERATIVE",
                     source_reference=f"research:{research.id}",
                     ai_engines=["YANDEX_SEARCH_GENERATIVE"],
