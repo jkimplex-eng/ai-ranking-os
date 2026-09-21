@@ -375,9 +375,6 @@ export class ApiClient {
   acceptClientInvitation(token: string, display_name: string, password: string) {
     return this.request<{email: string}>(`/beta/invitations/${encodeURIComponent(token)}/accept`, {method: "POST", body: JSON.stringify({display_name, password})});
   }
-  registerClient(email: string, display_name: string, password: string) {
-    return this.request<{email: string}>("/beta/register", {method: "POST", body: JSON.stringify({email, display_name, password})});
-  }
   adminFeedback() { return this.request<AdminFeedback[]>("/admin/feedback"); }
   adminAudit() { return this.request<{ items: AdminAudit[]; total: number }>("/audit/events?page_size=20"); }
   adminReports() { return this.request<{ items: Array<{ research_id: number; title: string; status: string; visibility_score?: number }>; total: number }>("/reports?limit=20"); }

@@ -3,7 +3,6 @@ import type { ApiClient } from "./api";
 
 export function ClientRegistration({api}: {api: ApiClient}) {
   const [token, setToken] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get("invite") || "");
-  const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -13,22 +12,21 @@ export function ClientRegistration({api}: {api: ApiClient}) {
   async function register() {
     setError("");
     if (password !== confirmation) {setError("Пароли не совпадают."); return;}
+    if (!token.trim()) {setError("Введите действующий код приглашения."); return;}
     setBusy(true);
     try {
-      const result = token
-        ? await api.acceptClientInvitation(token.trim(), name.trim(), password)
-        : await api.registerClient(email.trim(), name.trim(), password);
+      const result = await api.acceptClientInvitation(token.trim(), name.trim(), password);
       setMessage(`Аккаунт ${result.email} создан. Войдите с вашим паролем выше.`);
       setPassword(""); setConfirmation(""); setToken("");
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    } catch {setError(token ? "Не удалось зарегистрироваться. Проверьте приглашение: оно могло истечь или уже быть использовано." : "Не удалось создать аккаунт. Возможно, этот email уже зарегистрирован.");}
+    } catch {setError("Не удалось зарегистрироваться. Проверьте приглашение: оно могло истечь или уже быть использовано.");}
     finally {setBusy(false);}
   }
   return <details open>
     <summary>Как зарегистрироваться</summary>
-    <p>{token ? "Вы регистрируетесь по приглашению владельца платформы. Email берётся из приглашения." : "Регистрация открыта для всех. После создания аккаунта будет доступен пробный тариф с лимитами, а оплата при регистрации не списывается."}</p>
+    <p>Регистрация доступна только по приглашению владельца платформы. Email берётся из приглашения; оплата при регистрации не списывается.</p>
     {message ? <p role="status">{message}</p> : <form onSubmit={e => {e.preventDefault(); void register();}}>
-      {token ? <label>Код приглашения<input type="password" autoComplete="off" required value={token} onChange={e => setToken(e.target.value)} /></label> : <label>Email<input type="email" required autoComplete="email" maxLength={320} value={email} onChange={e => setEmail(e.target.value)} /></label>}
+      <label>Код приглашения<input type="password" autoComplete="off" required value={token} onChange={e => setToken(e.target.value)} /></label>
       <label>Ваше имя<input required maxLength={200} autoComplete="name" value={name} onChange={e => setName(e.target.value)} /></label>
       <label>Новый пароль<input type="password" required minLength={8} maxLength={1024} autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} /></label>
       <label>Повторите пароль<input type="password" required minLength={8} autoComplete="new-password" value={confirmation} onChange={e => setConfirmation(e.target.value)} /></label>
