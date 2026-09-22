@@ -18,6 +18,7 @@ class AuditCheck(BaseModel):
     max_points: float
     evidence: str
     recommendation: str | None = None
+    checked_url: str | None = None
 
 
 class AuditOpportunity(BaseModel):
@@ -29,6 +30,7 @@ class AuditOpportunity(BaseModel):
     confidence: str
     effort: str
     verification: str
+    checked_url: str | None = None
 
 
 class SiteAuditRead(BaseModel):

@@ -91,6 +91,8 @@ def test_geo_site_audit_is_evidence_based_and_persisted(client: TestClient) -> N
     assert result.algorithm_version == "1.1"
     assert len(result.checks) == 23
     assert all(check.evidence for check in result.checks)
+    assert all(check.checked_url == "https://brand.example/" for check in result.checks)
+    assert all(item.checked_url == "https://brand.example/" for item in result.opportunities)
     assert result.evidence["robots_status"] == 200
     assert result.evidence["crawl_scope"]["pages_scanned"] == 1
     assert result.evidence["knowledge_graph"]["nodes"]

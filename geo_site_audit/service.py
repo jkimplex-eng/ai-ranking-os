@@ -581,6 +581,7 @@ class GeoSiteAuditService:
                 max_points=max_points,
                 evidence=evidence,
                 recommendation=None if passed else recommendation,
+                checked_url=final,
             )
             for code, category, title, passed, max_points, evidence, recommendation in facts
         ]
@@ -661,6 +662,7 @@ class GeoSiteAuditService:
                 confidence="Высокая" if item.evidence else "Средняя",
                 effort="Средняя" if item.max_points >= 5 else "Низкая",
                 verification=f"Повторить проверку {item.code} и подтвердить URL-доказательство",
+                checked_url=item.checked_url,
             )
             for item in failed[:10]
         ]
