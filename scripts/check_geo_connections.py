@@ -1,6 +1,13 @@
 """Read-only live connection probe; never print credentials or provider payloads."""
 
 import json
+import sys
+from pathlib import Path
+
+# ``python scripts/check_geo_connections.py`` puts only ``scripts/`` on
+# ``sys.path``. Include the repository root so this operational probe works
+# inside the production container as well as when invoked locally.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend.app.database import SessionLocal
 from backend.app.main import app  # noqa: F401 -- registers ORM models
