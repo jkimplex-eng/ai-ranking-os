@@ -7,6 +7,8 @@ from urllib.parse import urlparse
 
 import httpx
 
+from research.brand_verdict import VERSION as BRAND_VERDICT_VERSION
+from research.brand_verdict import classify_brand
 from yandex_wordstat.search_evidence import YandexSearchEvidenceService
 
 
@@ -14,7 +16,7 @@ class YandexGenerativeEvidenceService:
     """Measure Yandex generative-search answers without calling them consumer Alice."""
 
     BASE_URL = "https://searchapi.api.cloud.yandex.net/v2/gen/search"
-    VERSION = "yandex-generative-search-1.0"
+    VERSION = f"yandex-generative-search-1.1-{BRAND_VERDICT_VERSION}"
 
     def __init__(self, client: httpx.Client | None = None) -> None:
         self.client = client or httpx.Client(timeout=60)
@@ -71,20 +73,22 @@ class YandexGenerativeEvidenceService:
                     for item in payload.get("sources", [])
                     if isinstance(item, dict) and item.get("url")
                 ]
-                normalized = content.casefold()
-                brand_mentioned = brand.strip().casefold() in normalized
+                verdict = classify_brand(content, brand)
+                brand_mentioned = verdict.status not in {"NOT_MEASURED", "NOT_MENTIONED"}
                 target_cited = bool(
                     target_domain
                     and any(target_domain == self._domain(item["url"]) for item in sources)
                 )
-                recommendation_markers = ("рекоменду", "совету", "подойд", "выбрать")
                 observations.append(
                     {
                         "query": query,
                         "answer": content,
                         "brand_mentioned": brand_mentioned,
-                        "brand_recommended": brand_mentioned
-                        and any(marker in normalized for marker in recommendation_markers),
+                        # Keep this boolean for the existing report contract,
+                        # but derive it from the same scoped verdict that is
+                        # used by research scoring and Wordstat analytics.
+                        "brand_recommended": verdict.status == "RECOMMENDED",
+                        "brand_verdict": verdict.to_dict(),
                         "target_cited": target_cited,
                         "sources": sources,
                         "search_queries": payload.get("searchQueries", []),
@@ -178,8 +182,8 @@ class YandexGenerativeEvidenceService:
                 "пользовательской Алисы.",
                 "Интерфейс, персонализация и экспериментальные варианты ответа Алисы могут "
                 "отличаться.",
-                "Рекомендация определяется прозрачным языковым правилом и требует просмотра "
-                "исходного ответа.",
+                "Метка рекомендации определяется версионированным правилом, относится только "
+                "к указанному бренду и требует просмотра исходного ответа.",
             ],
         }
 

@@ -224,6 +224,7 @@ type ReportShape = {
       answer: string;
       brand_mentioned: boolean;
       brand_recommended: boolean;
+      brand_verdict?: { status: string; evidence: string[]; version: string };
       target_cited: boolean;
       sources: Array<{ url: string; title: string; used: boolean }>;
     }>;
@@ -2724,7 +2725,7 @@ function Report({
           <h3>Источники, реально использованные Яндексом</h3>
           {yandexGenerative?.source_patterns?.length ? yandexGenerative.source_patterns.slice(0, 12).map((source) => <details className="evidence-details" key={source.domain}><summary>{source.domain} · использован в {source.used_in_answers} ответах · уверенность {source.confidence}</summary><p>{source.interpretation}</p><p><b>Покрытие выборки:</b> {source.coverage_percent.toFixed(1)}%</p><ul>{source.evidence.map((item) => <li key={`${item.query}:${item.url}`}><a href={item.url} target="_blank" rel="noreferrer">{item.title || source.domain}</a> · запрос «{item.query}»</li>)}</ul></details>) : <p>Использованные источники не возвращены.</p>}
           <h3>Исходные ответы</h3>
-          {yandexGenerative?.observations?.map((item) => <details className="evidence-details" key={item.query}><summary>{item.brand_recommended ? "Рекомендует" : item.brand_mentioned ? "Упоминает" : "Не упоминает"} · {item.query}</summary><p>{item.answer}</p>{item.sources.length ? <ul>{item.sources.map((source) => <li key={source.url}><a href={source.url} target="_blank" rel="noreferrer">{source.title || source.url}</a>{source.used ? " · использован в ответе" : ""}</li>)}</ul> : <p>Источники не возвращены.</p>}</details>)}
+          {yandexGenerative?.observations?.map((item) => { const verdictLabel: Record<string, string> = { RECOMMENDED: "Рекомендует бренд", NOT_RECOMMENDED: "Не рекомендует бренд", AMBIGUOUS: "Неоднозначно", MENTIONED: "Упоминает бренд", NOT_MENTIONED: "Не упоминает бренд", NOT_MEASURED: "Не измерено" }; const verdict = item.brand_verdict; const label = verdict ? (verdictLabel[verdict.status] ?? verdict.status) : item.brand_recommended ? "Рекомендует бренд" : item.brand_mentioned ? "Упоминает бренд" : "Не упоминает бренд"; return <details className="evidence-details" key={item.query}><summary>{label} · {item.query}</summary>{verdict ? <p><b>Вердикт {verdict.version}:</b> {label}</p> : <p className="method-note">Старое измерение без сохранённого вердикта: повторите его для единой разметки.</p>}{verdict?.evidence?.map((quote, index) => <blockquote key={index}>{quote}</blockquote>)}<p>{item.answer}</p>{item.sources.length ? <ul>{item.sources.map((source) => <li key={source.url}><a href={source.url} target="_blank" rel="noreferrer">{source.title || source.url}</a>{source.used ? " · использован в ответе" : ""}</li>)}</ul> : <p>Источники не возвращены.</p>}</details>; })}
           <details className="evidence-details"><summary>Формула и ограничения</summary><p>{yandexGenerative?.formula}</p><ul>{yandexGenerative?.limitations?.map((item) => <li key={item}>{item}</li>)}</ul></details>
         </section> : <div className="empty-state">Генеративный поиск Яндекса пока не измерен; оценка API-модели не заменяет пользовательскую выдачу.</div>}
         {report.publication_opportunities?.length ? <section className="panel research-lab-section">
