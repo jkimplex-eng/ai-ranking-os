@@ -12,10 +12,10 @@ from backend.app.logging import configure_logging
 from competitor_intelligence.service import CompetitorIntelligenceService
 from competitor_intelligence.social_monitor import CompetitorSocialMonitorService
 from competitor_intelligence.telegram_connector import TelegramConnectionService
+from product.service import ProductPipeline
 from provider_connections.crypto import SecretCipher
 from provider_connections.repository import ProviderConnectionRepository
 from provider_connections.service import hydrate_provider_credentials
-from product.service import ProductPipeline
 from recommendation.simulation import models as simulation_models  # noqa: F401
 from recommendation.templates import models as template_models  # noqa: F401
 from research.models import Research, ResearchStatus
@@ -51,7 +51,10 @@ async def run_worker() -> None:
                         try:
                             ProductPipeline(db).complete_existing(research)
                         except Exception:  # noqa: BLE001 - keep a completed research observable
-                            logger.exception("Product pipeline finalization failed research_id=%s", job.research_id)
+                            logger.exception(
+                                "Product pipeline finalization failed research_id=%s",
+                                job.research_id,
+                            )
                     CompetitorIntelligenceService(db).ingest_research(job.research_id)
                     try:
                         learned = learn_from_completed_research(db, job.research_id)

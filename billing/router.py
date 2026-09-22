@@ -71,19 +71,24 @@ def tariffs(principal: CurrentPrincipal) -> list[TariffRead]:
 
 @router.get("/billing/subscription", response_model=SubscriptionSummary)
 def subscription(principal: CurrentPrincipal, db: DbSession) -> SubscriptionSummary:
-    profile = db.scalar(select(BetaUserProfile).where(BetaUserProfile.user_id == int(principal.user_id)))
+    profile = db.scalar(
+        select(BetaUserProfile).where(BetaUserProfile.user_id == int(principal.user_id))
+    )
     plan_code = profile.plan_code if profile else "trial"
     tariff = ClosedBetaService.TARIFFS.get(plan_code, ClosedBetaService.TARIFFS["trial"])
     settings = get_settings()
     configured = bool(settings.tbank_terminal_key and settings.tbank_password)
     return SubscriptionSummary(
-        plan_code=plan_code, plan_name=tariff[0],
+        plan_code=plan_code,
+        plan_name=tariff[0],
         status=profile.subscription_status if profile else SubscriptionStatus.NONE.value,
         starts_at=profile.subscription_started_at if profile else None,
         ends_at=profile.subscription_ends_at if profile else None,
         payment_provider=profile.payment_provider if profile else None,
         checkout_available=configured,
-        checkout_message="Оплата откроется на защищённой странице Т‑Банка." if configured else "Приём оплаты ещё настраивается.",
+        checkout_message="Оплата откроется на защищённой странице Т‑Банка."
+        if configured
+        else "Приём оплаты ещё настраивается.",
     )
 
 

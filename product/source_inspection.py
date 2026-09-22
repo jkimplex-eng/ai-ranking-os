@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from geo_site_audit.service import _AuditParser, PublicSiteFetcher, SiteAuditError
+from geo_site_audit.service import PublicSiteFetcher, SiteAuditError, _AuditParser
 from research.models import ExtractedCitation, Research, ResearchTask, Response
 
 
@@ -52,7 +52,15 @@ class SourceInspectionService:
         sources = [
             self._inspect_source(domain, evidence, target)
             for domain, evidence in sorted(
-                grouped.items(), key=lambda pair: (-max(len(pair[1]["response_ids"]), len(pair[1]["queries"]), int(pair[1]["evidence_count"])), pair[0])
+                grouped.items(),
+                key=lambda pair: (
+                    -max(
+                        len(pair[1]["response_ids"]),
+                        len(pair[1]["queries"]),
+                        int(pair[1]["evidence_count"]),
+                    ),
+                    pair[0],
+                ),
             )[: self.MAX_SOURCES]
         ]
         return {
@@ -84,7 +92,15 @@ class SourceInspectionService:
         citations: list[ExtractedCitation], artifacts: dict[str, Any]
     ) -> dict[str, dict[str, Any]]:
         grouped: dict[str, dict[str, Any]] = defaultdict(
-            lambda: {"response_ids": set(), "queries": set(), "models": set(), "urls": set(), "titles": set(), "channels": set(), "evidence_count": 0}
+            lambda: {
+                "response_ids": set(),
+                "queries": set(),
+                "models": set(),
+                "urls": set(),
+                "titles": set(),
+                "channels": set(),
+                "evidence_count": 0,
+            }
         )
         for citation in citations:
             url = str(citation.url or "")
@@ -104,8 +120,12 @@ class SourceInspectionService:
             item["evidence_count"] += 1
             if citation.title:
                 item["titles"].add(citation.title)
-        generative = artifacts.get("yandex_generative_evidence", {}) if isinstance(artifacts, dict) else {}
-        for observation in generative.get("observations", []) if isinstance(generative, dict) else []:
+        generative = (
+            artifacts.get("yandex_generative_evidence", {}) if isinstance(artifacts, dict) else {}
+        )
+        for observation in (
+            generative.get("observations", []) if isinstance(generative, dict) else []
+        ):
             if not isinstance(observation, dict):
                 continue
             query = str(observation.get("query") or "")
@@ -113,7 +133,11 @@ class SourceInspectionService:
                 if not isinstance(source, dict):
                     continue
                 SourceInspectionService._add_external_source(
-                    grouped, str(source.get("url") or ""), query, str(source.get("title") or ""), "YANDEX_GENERATIVE_ANSWER"
+                    grouped,
+                    str(source.get("url") or ""),
+                    query,
+                    str(source.get("title") or ""),
+                    "YANDEX_GENERATIVE_ANSWER",
                 )
         search = artifacts.get("yandex_search_evidence", {}) if isinstance(artifacts, dict) else {}
         for resource in search.get("resources", []) if isinstance(search, dict) else []:
@@ -123,7 +147,11 @@ class SourceInspectionService:
                 if not isinstance(evidence, dict):
                     continue
                 SourceInspectionService._add_external_source(
-                    grouped, str(evidence.get("url") or ""), str(evidence.get("query") or ""), str(evidence.get("title") or ""), "YANDEX_SEARCH_RESULT"
+                    grouped,
+                    str(evidence.get("url") or ""),
+                    str(evidence.get("query") or ""),
+                    str(evidence.get("title") or ""),
+                    "YANDEX_SEARCH_RESULT",
                 )
         return grouped
 
@@ -148,7 +176,11 @@ class SourceInspectionService:
 
     def _target_features(self, url: str) -> dict[str, Any]:
         if not url:
-            return {"status": "NOT_MEASURED", "reason": "Официальный сайт не указан", "features": {}}
+            return {
+                "status": "NOT_MEASURED",
+                "reason": "Официальный сайт не указан",
+                "features": {},
+            }
         try:
             final, html, status, _, content_type = self.fetcher.fetch(url)
             if status >= 400 or "html" not in content_type.casefold():
@@ -159,7 +191,9 @@ class SourceInspectionService:
         except (SiteAuditError, SourceInspectionError) as error:
             return {"status": "NOT_MEASURED", "reason": str(error), "features": {}}
 
-    def _inspect_source(self, domain: str, evidence: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:
+    def _inspect_source(
+        self, domain: str, evidence: dict[str, Any], target: dict[str, Any]
+    ) -> dict[str, Any]:
         url = sorted(evidence["urls"])[0]
         facts: dict[str, Any]
         try:
@@ -171,9 +205,17 @@ class SourceInspectionService:
             facts = {"status": "MEASURED", "url": final, "features": self._features(parser)}
         except (SiteAuditError, SourceInspectionError) as error:
             facts = {"status": "NOT_MEASURED", "url": url, "reason": str(error), "features": {}}
-        response_count = max(len(evidence["response_ids"]), len(evidence["queries"]), int(evidence["evidence_count"]))
+        response_count = max(
+            len(evidence["response_ids"]), len(evidence["queries"]), int(evidence["evidence_count"])
+        )
         query_count = len(evidence["queries"])
-        confidence = "HIGH" if response_count >= 5 and query_count >= 2 else "MEDIUM" if response_count >= 2 else "LOW"
+        confidence = (
+            "HIGH"
+            if response_count >= 5 and query_count >= 2
+            else "MEDIUM"
+            if response_count >= 2
+            else "LOW"
+        )
         gaps = self._gaps(facts.get("features", {}), target.get("features", {}))
         return {
             "domain": domain,
@@ -194,7 +236,9 @@ class SourceInspectionService:
             },
             "page": facts,
             "comparison_with_target": {
-                "status": "AVAILABLE" if target.get("status") == "MEASURED" and facts["status"] == "MEASURED" else "PARTIAL",
+                "status": "AVAILABLE"
+                if target.get("status") == "MEASURED" and facts["status"] == "MEASURED"
+                else "PARTIAL",
                 "source_has_target_lacks": gaps,
                 "interpretation": (
                     "Это различия в публичной разметке и структуре одной страницы. Они полезны "
@@ -208,14 +252,17 @@ class SourceInspectionService:
         nodes = SourceInspectionService._json_nodes(parser.json_ld)
         types = sorted({str(item.get("@type")) for item in nodes if item.get("@type")})
         has_faq = any("FAQPage" in str(item.get("@type", "")) for item in nodes)
-        has_author = bool(parser.meta.get("author")) or any(bool(item.get("author")) for item in nodes)
+        has_author = bool(parser.meta.get("author")) or any(
+            bool(item.get("author")) for item in nodes
+        )
         has_date = any(
-            parser.meta.get(key)
-            for key in ("article:published_time", "date", "datepublished")
+            parser.meta.get(key) for key in ("article:published_time", "date", "datepublished")
         ) or any(bool(item.get("datePublished") or item.get("dateModified")) for item in nodes)
         has_same_as = any(bool(item.get("sameAs")) for item in nodes)
         has_contact = any(
-            item.get("contactPoint") or item.get("address") or "ContactPoint" in str(item.get("@type", ""))
+            item.get("contactPoint")
+            or item.get("address")
+            or "ContactPoint" in str(item.get("@type", ""))
             for item in nodes
         )
         return {
@@ -246,11 +293,31 @@ class SourceInspectionService:
     @staticmethod
     def _gaps(source: dict[str, Any], target: dict[str, Any]) -> list[dict[str, str]]:
         checks = [
-            ("has_faq_schema", "FAQ-разметка", "Добавить FAQPage только для реальных вопросов и ответов."),
-            ("has_author", "автор материала", "Указать автора и его роль на экспертных материалах."),
-            ("has_publication_date", "дата публикации", "Указывать datePublished/dateModified для статей."),
-            ("has_same_as", "подтверждённые профили sameAs", "Связать официальный сайт с реальными официальными профилями."),
-            ("has_contact_schema", "ContactPoint или PostalAddress", "Добавить реальные контактные данные в JSON-LD."),
+            (
+                "has_faq_schema",
+                "FAQ-разметка",
+                "Добавить FAQPage только для реальных вопросов и ответов.",
+            ),
+            (
+                "has_author",
+                "автор материала",
+                "Указать автора и его роль на экспертных материалах.",
+            ),
+            (
+                "has_publication_date",
+                "дата публикации",
+                "Указывать datePublished/dateModified для статей.",
+            ),
+            (
+                "has_same_as",
+                "подтверждённые профили sameAs",
+                "Связать официальный сайт с реальными официальными профилями.",
+            ),
+            (
+                "has_contact_schema",
+                "ContactPoint или PostalAddress",
+                "Добавить реальные контактные данные в JSON-LD.",
+            ),
         ]
         return [
             {"signal": title, "action": action}

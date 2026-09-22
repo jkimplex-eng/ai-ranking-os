@@ -54,36 +54,91 @@ class CompetitorIntelligenceService:
     def suggestions(self, user_id: int, project_id: int) -> list[dict]:
         """Suggest observed businesses, keeping cited pages separate from owned domains."""
         self._authorize(user_id, project_id)
-        existing = {alias for item in CompetitorRepository(self.db).list(project_id)
-                    for alias in self._aliases(item)}
+        existing = {
+            alias
+            for item in CompetitorRepository(self.db).list(project_id)
+            for alias in self._aliases(item)
+        }
         candidates: dict[str, dict] = {}
-        researches = self.db.scalars(select(Research).where(
-            Research.project_id == project_id, Research.status == ResearchStatus.COMPLETED,
-        ).options(selectinload(Research.tasks).selectinload(ResearchTask.responses)
-                  .selectinload(Response.extracted_entities),
-                  selectinload(Research.tasks).selectinload(ResearchTask.responses)
-                  .selectinload(Response.extracted_citations)))
+        researches = self.db.scalars(
+            select(Research)
+            .where(
+                Research.project_id == project_id,
+                Research.status == ResearchStatus.COMPLETED,
+            )
+            .options(
+                selectinload(Research.tasks)
+                .selectinload(ResearchTask.responses)
+                .selectinload(Response.extracted_entities),
+                selectinload(Research.tasks)
+                .selectinload(ResearchTask.responses)
+                .selectinload(Response.extracted_citations),
+            )
+        )
         for research in researches:
-            target = str((research.metadata_payload or {}).get("brand", research.title)).casefold().strip()
+            target = (
+                str((research.metadata_payload or {}).get("brand", research.title))
+                .casefold()
+                .strip()
+            )
             for task in research.tasks:
                 for response in task.responses:
-                    if response.error_type or not response.content or response.processing_status != ResponseProcessingStatus.PROCESSED:
+                    if (
+                        response.error_type
+                        or not response.content
+                        or response.processing_status != ResponseProcessingStatus.PROCESSED
+                    ):
                         continue
                     seen = set()
                     for entity in response.extracted_entities:
                         name = (entity.canonical_name or entity.name or "").strip()
                         key = name.casefold()
-                        if entity.entity_type not in {"BRAND", "ORGANIZATION"} or not key or key == target or key in existing or key in seen:
+                        if (
+                            entity.entity_type not in {"BRAND", "ORGANIZATION"}
+                            or not key
+                            or key == target
+                            or key in existing
+                            or key in seen
+                        ):
                             continue
                         seen.add(key)
-                        item = candidates.setdefault(key, {"name": name, "evidence": [], "domains": [],
-                            "status": "CANDIDATE", "limitation": "Компания названа в ответах. Подтвердите, что это аналог вашего бизнеса. Ссылки ответа могут вести на СМИ и не считаются официальным сайтом конкурента."})
-                        urls = sorted({url for citation in response.extracted_citations
-                                       if (url := self._normalized_url(citation))})
-                        item["evidence"].append({"research_id": research.id, "response_id": response.id,
-                            "query": response.prompt, "provider": response.provider, "model": response.model,
-                            "urls": urls, "observed_at": response.finished_at.isoformat() if response.finished_at else None})
-        return sorted(candidates.values(), key=lambda item: (-len(item["evidence"]), item["name"]))[:30]
+                        item = candidates.setdefault(
+                            key,
+                            {
+                                "name": name,
+                                "evidence": [],
+                                "domains": [],
+                                "status": "CANDIDATE",
+                                "limitation": (
+                                    "Компания названа в ответах. Подтвердите, что это аналог "
+                                    "вашего бизнеса. Ссылки ответа могут вести на СМИ и не "
+                                    "считаются официальным сайтом конкурента."
+                                ),
+                            },
+                        )
+                        urls = sorted(
+                            {
+                                url
+                                for citation in response.extracted_citations
+                                if (url := self._normalized_url(citation))
+                            }
+                        )
+                        item["evidence"].append(
+                            {
+                                "research_id": research.id,
+                                "response_id": response.id,
+                                "query": response.prompt,
+                                "provider": response.provider,
+                                "model": response.model,
+                                "urls": urls,
+                                "observed_at": response.finished_at.isoformat()
+                                if response.finished_at
+                                else None,
+                            }
+                        )
+        return sorted(candidates.values(), key=lambda item: (-len(item["evidence"]), item["name"]))[
+            :30
+        ]
 
     def refresh_project(self, user_id: int, project_id: int) -> CompetitorDashboardRead:
         self._authorize(user_id, project_id)

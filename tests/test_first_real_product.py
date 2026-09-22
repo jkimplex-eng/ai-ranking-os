@@ -11,8 +11,7 @@ from backend.app.main import app
 from execution_engine import service as execution_service
 from execution_engine.worker_manager import WorkerManager
 from product.models import PromptDefinition, ResearchTemplateDefinition
-from product.service import PIPELINE
-from product.service import ProductPipeline
+from product.service import PIPELINE, ProductPipeline
 
 engine = create_engine(
     "sqlite+pysqlite:///:memory:",
@@ -89,9 +88,10 @@ def test_prompt_lifecycle_and_template_api(client: TestClient) -> None:
 
 
 def test_wordstat_phrase_is_rendered_as_a_buyer_question() -> None:
-    assert ProductPipeline._wordstat_buyer_question(
-        "увлажняющий крем", "BEAUTY"
-    ) == "Какой увлажняющий крем выбрать и на что обратить внимание?"
+    assert (
+        ProductPipeline._wordstat_buyer_question("увлажняющий крем", "BEAUTY")
+        == "Какой увлажняющий крем выбрать и на что обратить внимание?"
+    )
 
 
 def test_skinjestique_end_to_end_wizard(client: TestClient) -> None:

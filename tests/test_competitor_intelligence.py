@@ -398,8 +398,11 @@ def _completed_research(project_id: int) -> int:
         return research.id
 
 
-def test_suggestions_keep_evidence_and_do_not_assign_media_as_owned_domain(client: TestClient) -> None:
+def test_suggestions_keep_evidence_and_do_not_assign_media_as_owned_domain(
+    client: TestClient,
+) -> None:
     from workspace.models import ProjectCompetitor
+
     project_id, competitor_id = _project_and_competitor(client)
     research_id = _completed_research(project_id)
     with TestingSession() as db:

@@ -182,7 +182,11 @@ def run_wizard(payload: WizardRequest, request: Request, db: DbSession) -> Wizar
             notifications,
             user_id,
         ).enqueue(payload)
-        report = FinalReportService(db).get(research.id) if research.status == ResearchStatus.COMPLETED else {}
+        report = (
+            FinalReportService(db).get(research.id)
+            if research.status == ResearchStatus.COMPLETED
+            else {}
+        )
         return WizardRunResult(
             research=ResearchRead.model_validate(research),
             report_url=f"/research/{research.id}/final-report",
@@ -207,4 +211,6 @@ def inspect_research_sources(research_id: int, db: DbSession) -> dict:
     try:
         return SourceInspectionService(db).inspect(research_id)
     except (ProductNotFoundError, SourceInspectionError) as error:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)) from error
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
+        ) from error

@@ -24,6 +24,7 @@ from change_detection.ports import ChangeDetectorPort
 from decision_center import service as decision_service
 from decision_center.models import AgentType
 from decision_center.schemas import AgentCreate
+from geo_platforms.models import GeoPlatform
 from graph.engine import GraphEngine
 from graph.ports import (
     EntityProvider,
@@ -32,7 +33,6 @@ from graph.ports import (
     ProvidedRelationship,
     RelationshipProvider,
 )
-from geo_platforms.models import GeoPlatform
 from insights.repository import SqlAlchemyInsightRepository
 from insights.schemas import InsightRequest
 from insights.service import InsightService
@@ -55,9 +55,9 @@ from publication_learning.service import PublicationLearningService
 from recommendation.engine import RecommendationEngine
 from recommendation.research_adapter import SqlAlchemyResearchScoreAdapter
 from research.models import ExtractedEntity, Research, ResearchStatus, ResearchTask, Response
+from research.queue import enqueue as enqueue_research
 from research.reporting import ReportingService
 from research.repositories import ResearchRepository
-from research.queue import enqueue as enqueue_research
 from research.schemas import ResearchCreate, ResearchEnqueueRequest, ResearchRunRequest
 from research.scoring import SCORING_VERSION, SCORING_WEIGHTS
 from research.service import run_research
@@ -425,9 +425,7 @@ class ProductPipeline:
             )
 
     def _complete_product_pipeline(self, research: Research) -> None:
-        artifacts: dict[str, Any] = dict(
-            research.metadata_payload.get("product_artifacts", {})
-        )
+        artifacts: dict[str, Any] = dict(research.metadata_payload.get("product_artifacts", {}))
         recommendations = RecommendationEngine(
             self.db, SqlAlchemyResearchScoreAdapter(self.db)
         ).generate(research.id)
@@ -532,9 +530,7 @@ class ProductPipeline:
                 resource_id=str(research.id),
             )
 
-    def _yandex_search_evidence(
-        self, research: Research, queries: list[str]
-    ) -> dict[str, Any]:
+    def _yandex_search_evidence(self, research: Research, queries: list[str]) -> dict[str, Any]:
         organization_id = self._research_organization_id(research)
         if not isinstance(organization_id, int) or not queries:
             return {
@@ -575,9 +571,7 @@ class ProductPipeline:
             region_id=225,
         )
 
-    def _yandex_generative_evidence(
-        self, research: Research, queries: list[str]
-    ) -> dict[str, Any]:
+    def _yandex_generative_evidence(self, research: Research, queries: list[str]) -> dict[str, Any]:
         unavailable = {
             "version": YandexGenerativeEvidenceService.VERSION,
             "status": "NOT_MEASURED",
