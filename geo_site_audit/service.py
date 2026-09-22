@@ -28,18 +28,22 @@ class SiteFetcher(Protocol):
 
 
 class PublicSiteFetcher:
+    def __init__(self, client: httpx.Client | None = None) -> None:
+        # An injected client keeps redirect handling testable. Production uses
+        # a short-lived client below.
+        self._client = client
+
     def fetch(self, url: str) -> tuple[str, str, int, float, str]:
-        parsed = urlparse(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-            raise SiteAuditError("Укажите публичный URL с http:// или https://")
-        self._public(parsed.hostname)
         started = time.perf_counter()
-        with httpx.Client(
-            follow_redirects=True,
-            timeout=httpx.Timeout(15.0),
-            headers={"User-Agent": "AI-Ranking-OS-GEO-Audit/1.0"},
-        ) as client:
-            response = client.get(url)
+        if self._client is None:
+            with httpx.Client(
+                follow_redirects=False,
+                timeout=httpx.Timeout(15.0),
+                headers={"User-Agent": "AI-Ranking-OS-GEO-Audit/1.0"},
+            ) as client:
+                response = self._fetch_redirects(client, url)
+        else:
+            response = self._fetch_redirects(self._client, url)
         elapsed = (time.perf_counter() - started) * 1000
         final = urlparse(str(response.url))
         if not final.hostname:
@@ -53,6 +57,20 @@ class PublicSiteFetcher:
             elapsed,
             response.headers.get("content-type", ""),
         )
+
+    def _fetch_redirects(self, client: httpx.Client, url: str) -> httpx.Response:
+        current = url
+        for _ in range(6):
+            parsed = urlparse(current)
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+                raise SiteAuditError("Укажите публичный URL с http:// или https://")
+            self._public(parsed.hostname)
+            response = client.get(current, follow_redirects=False)
+            if response.is_redirect and response.headers.get("location"):
+                current = urljoin(str(response.url), response.headers["location"])
+                continue
+            return response
+        raise SiteAuditError("Сайт вернул слишком длинную цепочку редиректов")
 
     @staticmethod
     def _public(host: str) -> None:

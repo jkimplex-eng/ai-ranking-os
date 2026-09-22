@@ -1,5 +1,6 @@
 from collections.abc import Generator
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -9,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 from backend.app.database import Base, get_db
 from backend.app.main import app
 from geo_site_audit.schemas import SiteAuditCreate
-from geo_site_audit.service import GeoSiteAuditService
+from geo_site_audit.service import GeoSiteAuditService, PublicSiteFetcher, SiteAuditError
 
 engine = create_engine(
     "sqlite+pysqlite:///:memory:",
@@ -173,3 +174,26 @@ def test_geo_site_audit_is_documented_in_openapi(client: TestClient) -> None:
     paths = client.get("/openapi.json").json()["paths"]
     assert "/geo/site-audits" in paths
     assert "/geo/site-audits/{audit_id}" in paths
+
+
+def test_public_fetcher_revalidates_every_redirect_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    attempted: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempted.append(str(request.url))
+        return httpx.Response(302, headers={"location": "http://127.0.0.1/private"})
+
+    fetcher = PublicSiteFetcher(httpx.Client(transport=httpx.MockTransport(handler)))
+    checked: list[str] = []
+
+    def check_public(host: str) -> None:
+        checked.append(host)
+        if host == "127.0.0.1":
+            raise SiteAuditError("Разрешён аудит только публичных сайтов")
+
+    monkeypatch.setattr(fetcher, "_public", check_public)
+    with pytest.raises(SiteAuditError, match="только публичных"):
+        fetcher.fetch("https://brand.example")
+
+    assert attempted == ["https://brand.example"]
+    assert checked == ["brand.example", "127.0.0.1"]
