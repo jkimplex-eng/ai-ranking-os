@@ -62,9 +62,15 @@ def test_response_is_automatically_extracted_and_available_via_api(
             "research_task_id": task_id,
             "provider": "openai",
             "model": "gpt-test",
-            "content": "OpenAI Inc recommends ChatGPT. See https://openai.com.",
+            "content": (
+                "OpenAI Inc recommends ChatGPT. Sam Altman leads OpenAI. "
+                "See https://openai.com."
+            ),
             "normalized_response": {
-                "content": "OpenAI Inc recommends ChatGPT. See https://openai.com.",
+                "content": (
+                    "OpenAI Inc recommends ChatGPT. Sam Altman leads OpenAI. "
+                    "See https://openai.com."
+                ),
                 "citations": [
                     {
                         "url": "https://openai.com",
