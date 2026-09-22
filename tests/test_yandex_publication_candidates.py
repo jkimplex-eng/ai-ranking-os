@@ -2,6 +2,9 @@ from types import SimpleNamespace
 
 from geo_platforms.models import GeoPlatform
 from product.service import ProductPipeline
+# ProductPipeline instantiates ORM entities.  Load this relationship target so
+# this focused test does not depend on imports performed by unrelated tests.
+from recommendation.simulation.models import RecommendationSimulation  # noqa: F401
 
 
 class _Db:
@@ -49,3 +52,9 @@ def test_yandex_sources_become_observed_publication_candidates() -> None:
     assert candidate.evidence["suggested_topic"] == (
         "Материал, который полно отвечает на запрос: «как выбрать крем для лица»."
     )
+    assert candidate.evidence["source_observations"] == [{
+        "query": "как выбрать крем для лица",
+        "url": "https://example.ru/article",
+        "title": "Guide",
+    }]
+    assert candidate.evidence["publication_task"]["editorial_status"] == "NOT_CHECKED"

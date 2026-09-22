@@ -635,12 +635,26 @@ class ProductPipeline:
                 {},
             )
             query = str(first_proof.get("query") or "")
+            # Keep the exact public observations with the candidate. A bare
+            # domain is insufficient evidence once the report is no longer open.
+            source_observations = [
+                {
+                    "query": str(item.get("query") or ""),
+                    "url": str(item.get("url") or ""),
+                    "title": str(item.get("title") or ""),
+                }
+                for item in source_evidence
+                if isinstance(item, dict) and item.get("url")
+            ]
             task = {
                 "status": "OBSERVED",
                 "owner": "",
                 "due_date": "",
                 "content_format": "Экспертная статья",
                 "publication_url": "",
+                "editorial_status": "NOT_CHECKED",
+                "editorial_rules_url": "",
+                "editorial_note": "",
             }
             self.db.add(
                 GeoPlatform(
@@ -666,6 +680,7 @@ class ProductPipeline:
                             for item in source_evidence
                             if isinstance(item, dict) and item.get("url")
                         ],
+                        "source_observations": source_observations,
                         "why_observed": source.get("interpretation", ""),
                         "suggested_topic": (
                             f"Материал, который полно отвечает на запрос: «{query}»."
