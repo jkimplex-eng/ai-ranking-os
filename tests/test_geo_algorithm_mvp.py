@@ -274,3 +274,4 @@ def test_batch_prioritization_and_openapi_contract(client: TestClient) -> None:
     nginx = Path("deployment/production/nginx/internal.conf").read_text(encoding="utf-8")
     assert "location /api/v1/eis/" in nginx
     assert "proxy_pass http://backend_upstream/api/v1/eis/;" in nginx
+    assert "server backend:8000 resolve;" in nginx
