@@ -535,7 +535,7 @@ function metricEvidence(key: string, data: ReportShape, research: ResearchItem) 
     citation_score: { lines: [`${total} ответов моделей`, `${citations} независимых источников`, `Максимум v1: ${total * 3} источников`], formula: `${citations} / ${Math.max(total * 3, 1)} × 100 = ${value.toFixed(1)}` },
     coverage_score: { lines: [`${uniqueModels} уникальных пар «провайдер/модель»`, `${research.total_tasks ?? total} запланированных задач`], formula: `${uniqueModels} / ${Math.max(research.total_tasks ?? total, 1)} × 100 = ${value.toFixed(1)}` },
     confidence_score: { lines: [`${processed} из ${total} ответов обработано`, `${entities.length} извлечённых сущностей`, `Средняя достоверность сущностей: ${averageConfidence.toFixed(1)}`], formula: `70% успешности обработки + 30% достоверности сущностей = ${value.toFixed(1)}` },
-    visibility_score: { lines: ["Mention × 35%", "Recommendation × 20%", "Citation × 15%", "Coverage × 20%", "Confidence × 10%"], formula: `Взвешенная сумма Scoring ${String(score.version ?? "1.0")} = ${value.toFixed(1)}` },
+    visibility_score: { lines: ["Упоминание × 45%", "Рекомендация бренда × 35%", "Цитирование × 20%", "Покрытие и достоверность не входят в итоговую видимость"], formula: `Взвешенная сумма Scoring ${String(score.version ?? "не указан")} = ${value.toFixed(1)}` },
   };
   return details[key] ?? { lines: [`Research #${research.id}`], formula: value.toFixed(1) };
 }
