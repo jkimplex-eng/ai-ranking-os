@@ -40,6 +40,15 @@ def test_worker_recovery_marks_abandoned_research_and_execution_terminal() -> No
             status=ResearchTaskStatus.RUNNING,
             decision_task_id=decision_task.id,
         )
+        pending_decision_task = Task(title="Queued follow-up", status=TaskStatus.READY)
+        db.add(pending_decision_task)
+        db.flush()
+        pending_research_task = ResearchTask(
+            research_id=research.id,
+            query="Which source should be checked?",
+            status=ResearchTaskStatus.PENDING,
+            decision_task_id=pending_decision_task.id,
+        )
         execution = Execution(
             task_id=decision_task.id,
             state=ExecutionState.RUNNING,
@@ -51,11 +60,12 @@ def test_worker_recovery_marks_abandoned_research_and_execution_terminal() -> No
             started_at=stale_at,
             payload={},
         )
-        db.add_all([research_task, execution, job])
+        db.add_all([research_task, pending_research_task, execution, job])
         db.commit()
 
         research.updated_at = stale_at
         research_task.updated_at = stale_at
+        pending_research_task.updated_at = stale_at
         db.commit()
 
         assert recover_stale_executions(db, stale_after_seconds=60) == 1
@@ -65,16 +75,18 @@ def test_worker_recovery_marks_abandoned_research_and_execution_terminal() -> No
         db.refresh(research_task)
         db.refresh(execution)
         db.refresh(decision_task)
+        db.refresh(pending_decision_task)
         db.refresh(job)
         assert research.status == ResearchStatus.FAILED
         assert research.progress_percent == 100
-        assert research.failed_tasks == 1
+        assert research.failed_tasks == 2
         assert research_task.status == ResearchTaskStatus.FAILED
         assert research_task.error == STALE_RESEARCH_ERROR
         assert job.state == ResearchJobState.FAILED
         assert job.error == STALE_RESEARCH_ERROR
         assert execution.state == ExecutionState.FAILED
         assert decision_task.status == TaskStatus.BLOCKED
+        assert pending_decision_task.status == TaskStatus.BLOCKED
 
     Base.metadata.drop_all(engine)
 

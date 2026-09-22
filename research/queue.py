@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.app.config import get_settings
+from decision_center.models import Task, TaskStatus
 from research.models import (
     Research,
     ResearchJob,
@@ -146,6 +147,14 @@ def recover_stale_researches(
         for task in stale_tasks:
             task.status = ResearchTaskStatus.FAILED
             task.error = STALE_RESEARCH_ERROR
+            if task.decision_task_id is not None:
+                decision_task = db.get(Task, task.decision_task_id)
+                if decision_task is not None and decision_task.status in {
+                    TaskStatus.READY,
+                    TaskStatus.IN_PROGRESS,
+                }:
+                    decision_task.status = TaskStatus.BLOCKED
+                    decision_task.owner_id = None
 
         research.completed_tasks = int(
             db.scalar(
