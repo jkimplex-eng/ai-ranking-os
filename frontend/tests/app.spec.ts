@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("login page exposes product entry point", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Понимайте, как AI видит ваш бренд" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Узнайте, почему Яндекс рекомендует конкурентов." })).toBeVisible();
   await expect(page.getByRole("button", { name: "Войти" })).toBeVisible();
 });
 
@@ -21,12 +21,12 @@ test("mobile navigation keeps the four core user actions reachable", async ({ pa
   });
   await page.goto("/");
   await page.getByLabel("Email").fill("user@example.com");
-  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByLabel("Пароль", { exact: true }).fill("strong-password");
   await page.getByRole("button", { name: "Войти" }).click();
   const mobileNav = page.getByRole("navigation", { name: "Мобильная навигация" });
   await expect(mobileNav).toBeVisible();
   await expect(mobileNav.getByRole("button")).toHaveCount(4);
-  await mobileNav.getByRole("button", { name: /Результаты/ }).click();
+  await mobileNav.getByRole("button", { name: /Исследования/ }).click();
   await expect(page).toHaveURL(/\/reports$/);
 });
 
@@ -113,6 +113,8 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
     } else if (path.endsWith("/competitor-intelligence/projects/10/competitors/22/social")) {
       const posts = socialConnected && socialPostPresent ? [{ id: 90, external_post_id: "42", url: "https://t.me/librederm/42", title: "Новая сыворотка", content: "Публикация о новой сыворотке", published_at: "2026-08-20T10:00:00Z", views: 1200, likes: 80, comments: 12, shares: 7, significance_score: 64 }] : [];
       json = { competitor_id: 22, total_posts: posts.length, limitation: "Значимость не доказывает влияние на выдачу AI.", sources: socialConnected ? [{ id: 70, competitor_id: 22, platform: "TELEGRAM", profile_url: "https://t.me/librederm", external_id: "librederm", configured: true, active: true, status: "CONNECTED", last_scanned_at: "2026-08-20T10:00:00Z", next_scan_at: "2026-08-21T10:00:00Z", last_error: null, posts }] : [] };
+    } else if (path.endsWith("/competitor-intelligence/projects/10/suggestions")) {
+      json = [];
     } else if (path.includes("/competitor-intelligence/projects/10")) json = dashboard();
     else if (path.endsWith("/research") || path.endsWith("/providers")) json = [];
     else if (path.endsWith("/system/health")) json = { status: "healthy" };
@@ -121,7 +123,7 @@ test("competitor center adds a brand and shows evidence-based daily analytics", 
 
   await page.goto("/");
   await page.getByLabel("Email").fill("admin@example.com");
-  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByLabel("Пароль", { exact: true }).fill("strong-password");
   await page.getByRole("button", { name: "Войти" }).click();
   await page.getByRole("button", { name: "Конкуренты" }).click();
   await page.getByLabel("Название проекта").fill("Skinjestique");
@@ -214,7 +216,7 @@ test("wizard transparently refreshes an expired access token", async ({ page }) 
 
   await page.goto("/");
   await page.getByLabel("Email").fill("analyst@example.com");
-  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByLabel("Пароль", { exact: true }).fill("strong-password");
   await page.getByRole("button", { name: "Войти" }).click();
   await page.getByRole("button", { name: /Добавить компанию/ }).first().click();
   await page.getByLabel("Название бренда").fill("Acme");
@@ -259,7 +261,7 @@ test("wizard recovers a completed research after the run connection is lost", as
 
   await page.goto("/");
   await page.getByLabel("Email").fill("analyst@example.com");
-  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByLabel("Пароль", { exact: true }).fill("strong-password");
   await page.getByRole("button", { name: "Войти" }).click();
   await page.getByRole("button", { name: /Добавить компанию/ }).first().click();
   await page.getByLabel("Название бренда").fill("Acme");
@@ -309,7 +311,7 @@ test("authenticated routes survive refresh and browser history", async ({ page }
   });
   await page.goto("/");
   await page.getByLabel("Email").fill("admin@example.com");
-  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByLabel("Пароль", { exact: true }).fill("strong-password");
   await page.getByRole("button", { name: "Войти" }).click();
   await page.getByText("Рабочее пространство", { exact: true }).click();
   await page.getByRole("button", { name: "Настройки" }).click();
@@ -318,7 +320,7 @@ test("authenticated routes survive refresh and browser history", async ({ page }
   await page.reload();
   await expect(page).toHaveURL(/\/settings$/);
   await expect(page.getByRole("heading", { name: "Настройки" })).toBeVisible();
-  await page.getByRole("button", { name: "Обзор" }).click();
+  await page.getByRole("button", { name: "Мой план" }).click();
   await expect(page).toHaveURL(/\/$/);
   await page.goBack();
   await expect(page).toHaveURL(/\/settings$/);
@@ -326,15 +328,15 @@ test("authenticated routes survive refresh and browser history", async ({ page }
   await expect(page).toHaveURL(/\/$/);
 
   await page.getByText("Рабочее пространство", { exact: true }).click();
-  await page.getByText("Для экспертов", { exact: true }).click();
+  await page.getByText("Подробная аналитика", { exact: true }).click();
   const routes = [
-    ["Как пользоваться", "/expert-guide", "Инструменты для глубокого анализа"],
+    ["Как это работает", "/expert-guide", "Инструменты для глубокого анализа"],
     ["Как начать", "/getting-started", "Начните с первого результата"],
     ["Все исследования", "/research", "Исследования"],
-    ["Результаты", "/reports", "Отчёты"],
+    ["Исследования", "/reports", "Отчёты"],
     ["План действий", "/recommendations", "Что поможет бренду чаще появляться в ответах ИИ"],
-    ["Связи и источники", "/knowledge-graph", "Граф знаний"],
-    ["Где публиковаться", "/geo-opportunities", "Где публиковаться, чтобы вас рекомендовали ИИ"],
+    ["Карта бренда", "/knowledge-graph", "Что система узнала о бренде"],
+    ["Где публиковаться", "/geo-opportunities", "Где изучить возможность публикации"],
     ["Конкуренты", "/competitors", "Конкуренты"],
     ["История изменений", "/history", "История"],
     ["Подключения ИИ", "/providers", "Провайдеры ИИ"],
@@ -344,7 +346,7 @@ test("authenticated routes survive refresh and browser history", async ({ page }
     ["Обратная связь", "/feedback", "Обратная связь"],
     ["Профиль", "/profile", "Профиль"],
     ["Настройки", "/settings", "Настройки"],
-    ["Администрирование", "/admin", "Admin Console"],
+    ["Администрирование", "/admin", "Управление платформой"],
   ] as const;
   for (const [link, path, heading] of routes) {
     if (link === "Где публиковаться") {
@@ -354,7 +356,11 @@ test("authenticated routes survive refresh and browser history", async ({ page }
       });
       expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
     }
-    await page.getByRole("navigation").getByRole("button").filter({ hasText: link }).click();
+    const navigation = page.getByRole("navigation", { name: "Основная навигация" });
+    const button = link === "Исследования"
+      ? navigation.getByRole("button", { name: "▤ Исследования", exact: true })
+      : navigation.getByRole("button").filter({ hasText: link });
+    await button.click();
     await expect(page).toHaveURL(new RegExp(`${path.replace("/", "\\/")}$`));
     await expect(page.getByRole("heading", { name: heading, exact: true }).first()).toBeVisible();
     if (link === "Где публиковаться") {
@@ -363,8 +369,7 @@ test("authenticated routes survive refresh and browser history", async ({ page }
   }
 });
 
-test("GEO screen exposes real platform scoring and explainability", async ({ page }) => {
-  const platform = { id: "platform-1", name: "Отраслевое СМИ", domain: "media.example", platform_type: "PUBLICATION", category: "BEAUTY", country: "RU", language: "ru", ai_engines: [], domain_trust: 82, topical_authority_score: 76, ai_citation_history: 12, cost_per_placement: 25000, evidence: { source: "USER_INPUT" }, active: true, created_at: "2026-08-19T00:00:00Z", updated_at: "2026-08-19T00:00:00Z" };
+test("GEO screen shows only observed publication sources and auditable site checks", async ({ page }) => {
   const audit = { id: 9, project_id: null, brand: "Skinjestique", website_url: "https://skinjestique.ru", final_url: "https://skinjestique.ru/", score: 72, grade: "Хорошая готовность", category_scores: { "Доступность": 20, "Сущность": 12, "Контент": 15, "Доказательность": 10, "Техника": 15 }, checks: [{ code: "entity_schema", category: "Сущность", title: "Разметка организации", passed: false, points: 0, max_points: 8, evidence: "JSON-LD не найден", recommendation: "Добавить Organization/Brand JSON-LD с официальными реквизитами." }], opportunities: [{ priority: "P0", problem: "Разметка организации", affected_metric: "Сущность", action: "Добавить Organization/Brand JSON-LD с официальными реквизитами.", expected_effect: "до +8 баллов GEO-готовности", confidence: "Высокая", effort: "Средняя", verification: "Повторный GEO-аудит" }], evidence: { http_status: 200, robots_status: 200, sitemap_status: 200 }, algorithm_version: "1.0", limitation: "Оценка измеряет публичные GEO-сигналы сайта и не доказывает индексацию.", created_at: "2026-08-20T00:00:00Z" };
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -372,68 +377,48 @@ test("GEO screen exposes real platform scoring and explainability", async ({ pag
     let status = 200;
     if (path.endsWith("/auth/login")) json = { access_token: "access", refresh_token: "refresh-token-with-valid-length" };
     else if (path.endsWith("/auth/me")) json = { id: 1, display_name: "Analyst", email: "analyst@example.com", roles: ["analyst"] };
-    else if (path.endsWith("/geo/platforms") && route.request().method() === "POST") { json = platform; status = 201; }
-    else if (path.endsWith("/geo/platforms")) json = [platform];
-    else if (path.endsWith("/geo/prompt-sets")) json = [{ id: "set-1", code: "beauty-core", version: 1, name: "Beauty Core", category: "BEAUTY", language: "ru", region: "RU", fingerprint: "0123456789abcdef", frozen: true, active: true, templates: [{ key: "category", query_type: "CATEGORY", template: "Какую {category} выбрать?" }], instances: [], created_at: "2026-08-19T00:00:00Z" }];
     else if (path.endsWith("/geo/site-audits") && route.request().method() === "POST") { json = audit; status = 201; }
     else if (path.endsWith("/geo/site-audits")) json = [];
-    else if (path.endsWith("/publication-learning/influence")) json = [{ id: 7, resource_domain: "media.example", channel: "EARNED", content_type: "ARTICLE", metric: "visibility_score", provider: "ALL", model: "ALL", category: "BEAUTY", language: "ru", region: "RU", sample_size: 3, expected_delta: 12.4, confidence_min: 4.1, confidence_max: 20.7, confidence_score: .71, evidence_grade: "MODERATE", evidence_level: "CORRELATION", positive_experiments: 3, negative_experiments: 0, neutral_experiments: 0, controlled_experiments: 2, effect_method: "MIXED_EVIDENCE_V1", last_observed_at: "2026-08-19T00:00:00Z", limitations: ["Correlation only"], algorithm_version: "1.2" }];
-    else if (path.endsWith("/v1/eis/batch-prioritize")) json = { methodology_version: "heuristic_v1.0", limitations: ["Correlation-based estimates; no causal effect is claimed."], items: [{ cost_efficiency: 0.0034, score: { id: "score-1", platform_id: "platform-1", ai_engine: "YandexGPT", eis_value: 84.6, priority: "P1", evidence_status: "PARTIAL", methodology_version: "heuristic_v1.0", weight_set_version: "geo-eis-v1", explanation: {}, calculated_at: "2026-08-19T00:00:00Z", components: { authority: { value: 81, numerator: 81, denominator: 1, inputs: {}, weights: {}, exclusions: [] }, match: { value: 76, numerator: 76, denominator: 1, inputs: {}, weights: {}, exclusions: ["cep_coverage"] }, content: { value: 90, numerator: 90, denominator: 1, inputs: {}, weights: {}, exclusions: [] } } } }] };
     else if (path.endsWith("/research") || path.endsWith("/providers")) json = [];
     else if (path.endsWith("/system/health")) json = { status: "healthy" };
     await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(json) });
   });
   await page.goto("/geo-opportunities");
   await page.getByLabel("Email").fill("analyst@example.com");
-  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByLabel("Пароль", { exact: true }).fill("strong-password");
   await page.getByRole("button", { name: "Войти" }).click();
-  await expect(page.getByRole("heading", { name: "Где публиковаться, чтобы вас рекомендовали ИИ" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "От реального спроса — к плану роста в Алисе" })).toBeVisible();
-  await expect(page.getByText("Находим спрос", { exact: true })).toBeVisible();
-  await expect(page.getByText("Проверяем Алису", { exact: true })).toBeVisible();
-  await expect(page.getByText("Предлагаем действие", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Какие вопросы чаще всего задают в Яндексе" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Что чаще встречается рядом с рекомендацией бренда" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Следим, помогли ли ваши действия" })).toBeVisible();
-  await expect(page.getByText("Отраслевое СМИ")).toBeVisible();
-  await expect(page.getByText("Beauty Core")).toBeVisible();
-  await expect(page.getByText("Что уже повлияло на ответы ИИ")).toBeVisible();
-  await expect(page.getByText("С КОНТРОЛЬНОЙ ГРУППОЙ")).toBeVisible();
-  await expect(page.getByText("+12.4")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Где изучить возможность публикации" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Где стоит изучить возможность публикации или упоминания" })).toBeVisible();
+  await expect(page.getByText("Площадки ещё не измерены")).toBeVisible();
   await page.getByLabel("Бренд для GEO-аудита").fill("Skinjestique");
   await page.getByLabel("Сайт для GEO-аудита").fill("https://skinjestique.ru");
   await page.getByRole("button", { name: "Провести GEO-аудит" }).click();
   await expect(page.getByText("72.0")).toBeVisible();
   await page.getByText("Показать все доказательства расчёта").click();
   await expect(page.getByText("JSON-LD не найден")).toBeVisible();
-  await page.getByRole("button", { name: "Рассчитать приоритет" }).click();
-  await expect(page.getByText("84.6")).toBeVisible();
-  await expect(page.getByText("частичные данные")).toBeVisible();
-  await expect(page.getByText(/не выдаёт корреляцию за доказанную причинность/)).toBeVisible();
 });
 
-test("GEO screen keeps working when one independent data source fails", async ({ page }) => {
+test("GEO screen clearly distinguishes an empty evidence set from a recommendation", async ({ page }) => {
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     const isLogin = path.endsWith("/auth/login");
     const isProfile = path.endsWith("/auth/me");
-    const isPlatformFailure = path.endsWith("/geo/platforms");
-    const json: unknown = isLogin
+  const json: unknown = isLogin
       ? { access_token: "access", refresh_token: "refresh-token-with-valid-length" }
       : isProfile
         ? { id: 1, display_name: "Analyst", email: "analyst@example.com", roles: ["analyst"] }
         : path.endsWith("/system/health")
           ? { status: "healthy" }
           : [];
-    await route.fulfill({ status: isPlatformFailure ? 503 : 200, contentType: "application/json", body: JSON.stringify(isPlatformFailure ? { detail: "temporarily unavailable" } : json) });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(json) });
   });
   await page.goto("/geo-opportunities");
   await page.getByLabel("Email").fill("analyst@example.com");
-  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByLabel("Пароль", { exact: true }).fill("strong-password");
   await page.getByRole("button", { name: "Войти" }).click();
-  await expect(page.getByRole("heading", { name: "Где публиковаться, чтобы вас рекомендовали ИИ" })).toBeVisible();
-  await expect(page.getByRole("alert")).toContainText("реестр площадок");
-  await expect(page.getByRole("heading", { name: "Какие вопросы чаще всего задают в Яндексе" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Где изучить возможность публикации" })).toBeVisible();
+  await expect(page.getByText("Площадки ещё не измерены")).toBeVisible();
+  await expect(page.getByText(/нет измеренных источников генеративного поиска/)).toBeVisible();
 });
 
 test("GEO screen renders a new Wordstat snapshot before YandexGPT checks", async ({ page }) => {
@@ -473,15 +458,15 @@ test("GEO screen renders a new Wordstat snapshot before YandexGPT checks", async
   });
   await page.goto("/geo-opportunities");
   await page.getByLabel("Email").fill("analyst@example.com");
-  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByLabel("Пароль", { exact: true }).fill("strong-password");
   await page.getByRole("button", { name: "Войти" }).click();
-  await expect(page.getByRole("heading", { name: "Где публиковаться, чтобы вас рекомендовали ИИ" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Где изучить возможность публикации" })).toBeVisible();
   await expect(page.getByText("курсы дизайна", { exact: true })).toBeVisible();
   await expect(page.getByText("Нет данных", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Интерфейс восстановлен" })).toHaveCount(0);
 });
 
-test("a broken screen block no longer removes the application shell", async ({ page }) => {
+test("GEO keeps the application shell when a learned metric is incomplete", async ({ page }) => {
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     const json: unknown = path.endsWith("/auth/login")
@@ -497,11 +482,12 @@ test("a broken screen block no longer removes the application shell", async ({ p
   });
   await page.goto("/geo-opportunities");
   await page.getByLabel("Email").fill("analyst@example.com");
-  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByLabel("Пароль", { exact: true }).fill("strong-password");
   await page.getByRole("button", { name: "Войти" }).click();
-  await expect(page.getByRole("heading", { name: "Интерфейс восстановлен" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Интерфейс восстановлен" })).toHaveCount(0);
+  await expect(page.getByText("Нет данных", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Основная навигация" })).toBeVisible();
-  await page.getByRole("button", { name: /Обзор/ }).click();
+  await page.getByRole("button", { name: "Мой план" }).click();
   await expect(page).toHaveURL(/\/$/);
 });
 
@@ -520,7 +506,7 @@ test("executive report explains metrics, zero citations and graph evidence", asy
   });
   await page.goto("/reports/latest");
   await page.getByLabel("Email").fill("analyst@example.com");
-  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByLabel("Пароль", { exact: true }).fill("strong-password");
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page.getByRole("heading", { name: "Skinjestique" })).toBeVisible();
   await expect(page.getByText("Как сформирована оценка")).toBeVisible();

@@ -6,7 +6,7 @@ async function login(page: import("@playwright/test").Page) {
   test.skip(!email || !password, "Production credentials are required for this scenario");
   await page.goto("/");
   await page.getByLabel("Email").fill(email!);
-  await page.getByLabel("Пароль").fill(password!);
+  await page.getByLabel("Пароль", { exact: true }).fill(password!);
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page.getByText("СОСТОЯНИЕ БРЕНДА", { exact: true })).toBeVisible();
 }
@@ -85,5 +85,5 @@ test("authenticated Skinjestique research completes through Web UI", async ({ pa
   await page.getByRole("navigation").getByRole("button").filter({ hasText: "Notifications" }).click();
   await expect(page.getByRole("heading", { name: "Уведомления" })).toBeVisible();
   await page.getByRole("button", { name: "Выйти" }).click();
-  await expect(page.getByRole("heading", { name: "Понимайте, как AI видит ваш бренд" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Узнайте, почему Яндекс рекомендует конкурентов." })).toBeVisible();
 });

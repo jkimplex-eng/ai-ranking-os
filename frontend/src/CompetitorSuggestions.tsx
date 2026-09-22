@@ -9,10 +9,20 @@ export function CompetitorSuggestions({ api, projectId, onStart }: { api: ApiCli
   const [starting, setStarting] = useState<string>();
   useEffect(() => {
     let active = true;
-    setItems([]); setStatus("Ищем компании в ответах исследований…");
-    api.competitorSuggestions(projectId).then(result => {
-      if (active) { setItems(result); setStatus(result.length ? "" : "Новых кандидатов пока нет. Завершите исследование этого проекта; компании из ответов появятся здесь автоматически."); }
-    }).catch(error => { if (active) setStatus(error instanceof Error ? error.message : "Не удалось загрузить кандидатов"); });
+    async function loadSuggestions() {
+      setItems([]);
+      setStatus("Ищем компании в ответах исследований…");
+      try {
+        const result = await api.competitorSuggestions(projectId);
+        if (active) {
+          setItems(result);
+          setStatus(result.length ? "" : "Новых кандидатов пока нет. Завершите исследование этого проекта; компании из ответов появятся здесь автоматически.");
+        }
+      } catch (error) {
+        if (active) setStatus(error instanceof Error ? error.message : "Не удалось загрузить кандидатов");
+      }
+    }
+    void loadSuggestions();
     return () => { active = false; };
   }, [api, projectId]);
   return <section className="analytics-card"><h2>Кого ИИ называет в ваших запросах</h2><p role="status">{status}</p>{items.map(item => <article className="resource-proof" key={item.name}>

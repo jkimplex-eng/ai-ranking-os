@@ -35,10 +35,19 @@ export function ClientManagement({api}: {api: ApiClient}) {
   }
   useEffect(() => {
     let cancelled = false;
-    setLoading(true); setError("");
-    api.adminUsers(search).then(items => {if (!cancelled) setUsers(items);})
-      .catch(() => {if (!cancelled) setError("Не удалось загрузить клиентов. Проверьте доступ администратора платформы.");})
-      .finally(() => {if (!cancelled) setLoading(false);});
+    async function loadUsers() {
+      setLoading(true);
+      setError("");
+      try {
+        const items = await api.adminUsers(search);
+        if (!cancelled) setUsers(items);
+      } catch {
+        if (!cancelled) setError("Не удалось загрузить клиентов. Проверьте доступ администратора платформы.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void loadUsers();
     return () => {cancelled = true;};
   }, [api, search]);
   useEffect(() => { api.adminTariffs().then(setTariffs).catch(() => setError("Не удалось загрузить тарифы.")); }, [api]);

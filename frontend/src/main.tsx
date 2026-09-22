@@ -676,12 +676,23 @@ function RecommendationsScreen({ onNewResearch }: { onNewResearch: () => void })
     }).catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить исследования"));
   }, []);
   useEffect(() => {
-    if (!researchId) return;
+    if (researchId === undefined) return;
+    const selectedResearchId: number = researchId;
     let cancelled = false;
-    setLoading(true);
-    setError("");
-    sessionStorage.setItem(ACTIVE_RESEARCH_KEY, String(researchId));
-    api.finalReport(researchId).then((value) => { if (!cancelled) setReport(value as ReportShape); }).catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : "Не удалось загрузить план действий"); }).finally(() => { if (!cancelled) setLoading(false); });
+    async function loadReport() {
+      setLoading(true);
+      setError("");
+      sessionStorage.setItem(ACTIVE_RESEARCH_KEY, String(selectedResearchId));
+      try {
+        const value = await api.finalReport(selectedResearchId);
+        if (!cancelled) setReport(value as ReportShape);
+      } catch (reason) {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "Не удалось загрузить план действий");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void loadReport();
     return () => { cancelled = true; };
   }, [researchId]);
   const brand = researchBrand(researches.find((item) => item.id === researchId));
@@ -1675,7 +1686,7 @@ function GeoOpportunitiesScreen() {
         <div className="geo-ranking-head compact">
           <div><span className="eyebrow">ОБУЧЕНИЕ НА ПУБЛИКАЦИЯХ</span><h2>Что уже повлияло на ответы ИИ</h2><p>Здесь показаны только площадки, публикации которых были обнаружены в ответах и сопоставлены с одинаковым набором запросов до и после размещения.</p></div>
         </div>
-        {learnedInfluence.some((item) => item.metric === "visibility_score" && item.provider === "ALL") ? <div className="geo-learned-grid">{learnedInfluence.filter((item) => item.metric === "visibility_score" && item.provider === "ALL").map((item) => <article className="analytics-card geo-learned" key={item.id}><header><div><small>{item.channel} · {item.content_type}</small><h3>{item.resource_domain}</h3></div><Badge tone={item.controlled_experiments > 0 || item.evidence_level === "CORRELATION" ? "success" : "warning"}>{item.controlled_experiments > 0 ? "С КОНТРОЛЬНОЙ ГРУППОЙ" : item.evidence_level === "CORRELATION" ? "ПОВТОРЯЕМАЯ КОРРЕЛЯЦИЯ" : "НАБЛЮДЕНИЕ"}</Badge></header><div className="geo-learned-metrics"><div><span>Изменение Visibility</span><strong>{item.expected_delta >= 0 ? "+" : ""}{item.expected_delta.toFixed(1)}</strong></div><div><span>Диапазон</span><b>{item.confidence_min.toFixed(1)}…{item.confidence_max.toFixed(1)}</b></div><div><span>Наблюдения</span><b>{item.sample_size}</b></div><div><span>Контрольные</span><b>{item.controlled_experiments}</b></div><div><span>Уверенность</span><b>{Math.round(item.confidence_score * 100)}%</b></div></div><p>Алгоритм {item.algorithm_version}. Это наблюдаемая связь, а не гарантия причинного эффекта.</p></article>)}</div> : <div className="analytics-card geo-empty"><strong>Подтверждённых наблюдений пока нет</strong><p>Добавьте вышедшую публикацию в отчёте и повторите тот же Frozen Prompt Set. Площадка появится здесь только после обнаружения URL в ответах ИИ.</p></div>}
+        {learnedInfluence.some((item) => item.metric === "visibility_score" && item.provider === "ALL") ? <div className="geo-learned-grid">{learnedInfluence.filter((item) => item.metric === "visibility_score" && item.provider === "ALL").map((item) => { const delta = item.expected_delta; const confidenceMin = item.confidence_min; const confidenceMax = item.confidence_max; const confidenceScore = item.confidence_score; return <article className="analytics-card geo-learned" key={item.id}><header><div><small>{item.channel} · {item.content_type}</small><h3>{item.resource_domain}</h3></div><Badge tone={item.controlled_experiments > 0 || item.evidence_level === "CORRELATION" ? "success" : "warning"}>{item.controlled_experiments > 0 ? "С КОНТРОЛЬНОЙ ГРУППОЙ" : item.evidence_level === "CORRELATION" ? "ПОВТОРЯЕМАЯ КОРРЕЛЯЦИЯ" : "НАБЛЮДЕНИЕ"}</Badge></header><div className="geo-learned-metrics"><div><span>Изменение Visibility</span><strong>{delta == null ? "Нет данных" : `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}`}</strong></div><div><span>Диапазон</span><b>{confidenceMin == null || confidenceMax == null ? "Нет данных" : `${confidenceMin.toFixed(1)}…${confidenceMax.toFixed(1)}`}</b></div><div><span>Наблюдения</span><b>{item.sample_size ?? "—"}</b></div><div><span>Контрольные</span><b>{item.controlled_experiments ?? "—"}</b></div><div><span>Уверенность</span><b>{confidenceScore == null ? "Нет данных" : `${Math.round(confidenceScore * 100)}%`}</b></div></div><p>Алгоритм {item.algorithm_version}. Это наблюдаемая связь, а не гарантия причинного эффекта.</p></article>; })}</div> : <div className="analytics-card geo-empty"><strong>Подтверждённых наблюдений пока нет</strong><p>Добавьте вышедшую публикацию в отчёте и повторите тот же Frozen Prompt Set. Площадка появится здесь только после обнаружения URL в ответах ИИ.</p></div>}
       </section>
       <section className="geo-ranking-head">
         <div><span className="eyebrow">EIS — ВЛИЯНИЕ ИСТОЧНИКА</span><h2>Приоритет площадок</h2><p>Чем выше EIS, тем сильнее совокупные сигналы площадки для выбранной AI-системы.</p></div>
@@ -2128,10 +2139,10 @@ function Wizard({
   const [region, setRegion] = useState(
     researchRegions.some(([value]) => value === saved.region) ? saved.region ?? "RU" : "RU",
   );
-  const [language, setLanguage] = useState(saved.language ?? "ru");
-  const [profile, setProfile] = useState<WizardPayload["routing_profile"]>(saved.profile ?? "BALANCED");
-  const [scope, setScope] = useState<NonNullable<WizardPayload["research_scope"]>>(saved.scope ?? "SELECTED");
-  const [researchProfile, setResearchProfile] = useState<NonNullable<WizardPayload["research_profile"]>>(saved.researchProfile ?? "UNIVERSAL");
+  const language = saved.language ?? "ru";
+  const profile: WizardPayload["routing_profile"] = saved.profile ?? "BALANCED";
+  const scope: NonNullable<WizardPayload["research_scope"]> = saved.scope ?? "SELECTED";
+  const researchProfile: NonNullable<WizardPayload["research_profile"]> = saved.researchProfile ?? "UNIVERSAL";
   const [models, setModels] = useState<RouterModel[]>([]);
   const [runtimeProviders, setRuntimeProviders] = useState<SystemProviderItem[]>([]);
   const [selectedModels, setSelectedModels] = useState<string[]>(saved.selectedModels ?? []);
@@ -2151,6 +2162,9 @@ function Wizard({
         }
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось проверить подключение моделей"));
+  // The draft is hydrated once from session storage. It is intentionally not a
+  // reactive input to the provider discovery request.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { sessionStorage.setItem("research-wizard-v4", JSON.stringify({ step, brand, websiteUrl, brandProfile, category, region, language, profile, scope, researchProfile, selectedModels, customQueries, queryLimit, cadence })); }, [step, brand, websiteUrl, brandProfile, category, region, language, profile, scope, researchProfile, selectedModels, customQueries, queryLimit, cadence]);
   const scopedModels = () => {
@@ -2164,7 +2178,6 @@ function Wizard({
   const runtimeFor = (model: RouterModel) => runtimeProviders.find((item) => item.model_id === model.id)
     ?? runtimeProviders.find((item) => item.provider === model.provider);
   const modelIsReady = (model: RouterModel) => runtimeFor(model)?.interface.available === true;
-  const modelTitle = (model: RouterModel) => model.provider === "ollama" ? "Ollama · Qwen 2.5 3B" : model.display_name;
   const payload = (): WizardPayload => ({
     brand,
     website_url: websiteUrl,
@@ -2258,7 +2271,7 @@ function Wizard({
         result = await recoverResearchResult(knownResearchIds, brand);
       }
       if (result.research.status !== "COMPLETED") {
-        result = await waitForResearchResult(result.research.id, result.research.title);
+        result = await waitForResearchResult(result.research.id);
       }
       try {
         await api.createAliceAutomationPlan({ template_research_id: result.research.id, brand, website_url: websiteUrl, language, region, research_profile: researchProfile, routing_profile: profile, models: payload().models, repetitions: 1, daily_query_limit: queryLimit, weekly_query_limit: queryLimit, monitoring_frequency: cadence });
@@ -2276,7 +2289,7 @@ function Wizard({
       setLaunchStatus("");
     }
   }
-  async function waitForResearchResult(researchId: number, title: string): Promise<ReportResult> {
+  async function waitForResearchResult(researchId: number): Promise<ReportResult> {
     for (let attempt = 0; attempt < 600; attempt += 1) {
       const current = (await api.listResearch()).find((item) => item.id === researchId);
       if (current?.status === "COMPLETED") {
@@ -2402,54 +2415,6 @@ function Wizard({
               <label>Повторять проверку<select value={cadence} onChange={(event) => setCadence(event.target.value as "DAILY" | "WEEKLY")}><option value="DAILY">Ежедневно</option><option value="WEEKLY">Еженедельно</option></select></label>
             </div>
             <details><summary>Что именно будет измерено</summary><p className="muted">Основной сценарий работает с экосистемой Яндекса: Wordstat, Поиск, Вебмастер и YandexGPT API. Пользовательская Алиса и Нейропоиск не измеряются этим запуском и не будут выданы за его результат. Известных конкурентов можно оставить; остальных система найдёт в ответах и поисковой выдаче Яндекса автоматически.</p></details>
-          </div>
-        )}
-        {false && step === 3 && (
-          <div className="option-list">
-            {[
-              ["ru", "Русский"],
-              ["en", "English"],
-            ].map(([value, label]) => (
-              <button
-                className={language === value ? "selected" : ""}
-                onClick={() => setLanguage(value)}
-                key={value}
-              >
-                <span>{label}</span>
-                <small>{value.toUpperCase()}</small>
-              </button>
-            ))}
-          </div>
-        )}
-        {false && step === 4 && (
-          <div><div className="wizard-inline-actions"><button type="button" onClick={() => setSelectedModels(models.filter(modelIsReady).map((item) => item.id))}>Выбрать подключённые</button><button type="button" onClick={() => setSelectedModels([])}>Очистить</button><button type="button" onClick={() => localStorage.setItem("research-model-preset", JSON.stringify(selectedModels))}>Сохранить набор</button><button type="button" onClick={() => { try { const savedPreset = JSON.parse(localStorage.getItem("research-model-preset") ?? "[]") as string[]; setSelectedModels(savedPreset.filter((id) => models.some((model) => model.id === id && modelIsReady(model)))); } catch { setSelectedModels([]); } }}>Загрузить набор</button></div><div className="model-grid">
-            {models.length ? models.map((model) => { const ready = modelIsReady(model); const runtime = runtimeFor(model); return <button type="button" disabled={!ready} aria-disabled={!ready} className={`model ${selectedModels.includes(model.id) ? "active" : ""} ${ready ? "ready" : "not-ready"}`} key={model.id} onClick={() => setSelectedModels((current) => current.includes(model.id) ? current.filter((id) => id !== model.id) : [...current, model.id])}><span className="provider-icon">{selectedModels.includes(model.id) ? "✓" : ready ? "○" : "×"}</span><b>{modelTitle(model)}</b><small>{model.provider === "ollama" ? "Локальная бесплатная модель" : `${model.provider} · ${model.version}`}</small><i className={ready ? "provider-ready" : "provider-offline"}>{ready ? "Подключена" : runtime?.interface.error ? "Ошибка подключения" : "Не подключена"}</i></button>; }) : <p className="empty-state">Активные модели не найдены в реестре. Проверьте настройки провайдеров.</p>}
-          </div></div>
-        )}
-        {false && step === 5 && (
-          <div className="option-list">{[["ALL", "Все модели"], ["SELECTED", "Только выбранные"], ["RUSSIAN", "Только российские"], ["COMMERCIAL", "Только коммерческие"], ["FREE", "Только бесплатные"], ["CONSENSUS", "Консенсус"], ["COMPARE", "Сравнить модели"]].map(([value, label]) => <button type="button" className={scope === value ? "selected" : ""} onClick={() => setScope(value as typeof scope)} key={value}><span>{label}</span><small>{value}</small></button>)}</div>
-        )}
-        {false && step === 6 && (
-          <div className="option-list">{[["GEO", "GEO"], ["ECOMMERCE", "Электронная коммерция"], ["MEDICAL", "Медицина"], ["BEAUTY", "Красота"], ["ENTERPRISE", "Корпоративный"], ["UNIVERSAL", "Универсальный"]].map(([value, label]) => <button type="button" className={researchProfile === value ? "selected" : ""} onClick={() => setResearchProfile(value as typeof researchProfile)} key={value}><span>{label}</span><small>Профиль сохраняется в методологии</small></button>)}</div>
-        )}
-        {false && step === 7 && (
-          <div className="model-grid routing-profile-grid">
-            {routingProfiles.map(([value, title, description, icon]) => {
-              if (!["FAST", "BALANCED", "HIGH_QUALITY"].includes(value)) return null;
-              return (
-                <button
-                  type="button"
-                  className={`model routing-profile ${profile === value ? "active" : ""}`}
-                  key={value}
-                  onClick={() => setProfile(value)}
-                >
-                  <span className="provider-icon">{icon}</span>
-                  <b>{title}</b>
-                  <small>{description}</small>
-                  <i>{profile === value ? "✓" : ""}</i>
-                </button>
-              );
-            })}
           </div>
         )}
         {step === 3 && (
@@ -2592,7 +2557,6 @@ function Report({
   const primaryVisibility = hasYandexGenerative ? Number(yandexGenerative?.visibility_score) : visibility;
   const weakest = metricMeta.map(([label, key]) => ({ label, value: valueOf(score, key) })).sort((a, b) => a.value - b.value)[0];
   const visibilityMetric = report.trend?.metrics?.find((item) => item.metric === "visibility");
-  const latestDelta = visibilityMetric?.points.at(-1)?.percentage_change;
   const strengths = metricMeta
     .filter(([, key]) => valueOf(score, key) >= 80)
     .map(([label]) => label);

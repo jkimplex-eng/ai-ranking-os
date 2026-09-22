@@ -27,7 +27,7 @@ test("manager can trace a task to a source and see an audit failure without losi
   });
   await page.goto("/");
   await page.getByLabel("Email").fill("manager@example.com");
-  await page.getByLabel("Пароль").fill("strong-password");
+  await page.getByLabel("Пароль", { exact: true }).fill("strong-password");
   await page.getByRole("button", {name: "Войти", exact: true}).click();
   await expect(page.getByLabel("Email")).not.toBeVisible();
   await page.goto("/recommendations");
