@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+from sqlalchemy.dialects import sqlite
+
 from research.models import ResponseProcessingStatus
 from yandex_wordstat.service import WordstatService
 
@@ -35,9 +37,11 @@ def test_analytics_uses_verdict_evidence_and_excludes_empty_answers():
 
     class Database:
         calls = 0
+        statements = []
 
         def scalars(self, statement):
             self.calls += 1
+            self.statements.append(statement)
             return [research] if self.calls == 1 else []
 
         def execute(self, statement):
@@ -55,3 +59,7 @@ def test_analytics_uses_verdict_evidence_and_excludes_empty_answers():
     assert item.verdicts[0]["status"] == "NOT_RECOMMENDED"
     assert item.verdicts[0]["evidence"] == ("Не рекомендую Пример",)
     assert "brand-verdict-1.1" in result.methodology_version
+    compiled = Database.statements[0].compile(
+        dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
+    )
+    assert 'yandex_wordstat_snapshot_id' in str(compiled)

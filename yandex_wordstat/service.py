@@ -319,6 +319,8 @@ class WordstatService:
                     == organization_id,
                     func.lower(Research.metadata_payload["brand"].as_string())
                     == snapshot.brand.casefold(),
+                    Research.metadata_payload["yandex_wordstat_snapshot_id"].as_integer()
+                    == snapshot.id,
                 )
                 .order_by(Research.created_at.desc())
                 .limit(100)
@@ -432,7 +434,8 @@ class WordstatService:
                 "сумма частотностей проверенных запросов.",
                 "Непроверенные запросы не входят в знаменатель и явно помечены NOT_MEASURED.",
                 "Метрика относится только к сохранённой выборке Wordstat, региону, "
-                "периоду и ответам YandexGPT.",
+                "периоду, снимку спроса и ответам YandexGPT. Исследования без связи "
+                "с этим снимком не подмешиваются в результат.",
             ],
         )
 
