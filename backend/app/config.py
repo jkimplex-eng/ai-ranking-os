@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     execution_retry_base_seconds: float = Field(default=0.1, ge=0)
     research_agent_wait_seconds: float = Field(default=0, ge=0, le=300)
+    research_stale_seconds: int = Field(default=900, ge=60, le=86_400)
     build_sha: str = "development"
     release_channel: str = "production"
     auth_jwt_secret: str = "development-only-change-me"

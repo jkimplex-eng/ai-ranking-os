@@ -1,9 +1,17 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from research.models import Research, ResearchJob, ResearchJobState, ResearchStatus
+from backend.app.config import get_settings
+from research.models import (
+    Research,
+    ResearchJob,
+    ResearchJobState,
+    ResearchStatus,
+    ResearchTask,
+    ResearchTaskStatus,
+)
 from research.repositories import EntityNotFoundError
 from research.schemas import ResearchEnqueueRequest, ResearchJobRead, ResearchRunRequest
 from research.service import run_research
@@ -11,6 +19,9 @@ from research.service import run_research
 
 class ResearchAlreadyQueuedError(RuntimeError):
     pass
+
+
+STALE_RESEARCH_ERROR = "Research expired after worker interruption"
 
 
 def get_job(db: Session, job_id: int) -> ResearchJobRead:
@@ -81,3 +92,86 @@ def process_next(db: Session) -> ResearchJob | None:
     db.commit()
     db.refresh(job)
     return job
+
+
+def recover_stale_researches(
+    db: Session,
+    *,
+    stale_after_seconds: int | None = None,
+) -> list[int]:
+    """Terminally mark abandoned research so clients never see week-old runs as active."""
+    timeout = stale_after_seconds or get_settings().research_stale_seconds
+    cutoff = datetime.now(UTC) - timedelta(seconds=timeout)
+    recovered: list[int] = []
+    active_researches = list(
+        db.scalars(
+            select(Research).where(
+                Research.status == ResearchStatus.ACTIVE,
+                Research.updated_at < cutoff,
+            )
+        )
+    )
+    for research in active_researches:
+        active_job = db.scalar(
+            select(ResearchJob)
+            .where(
+                ResearchJob.research_id == research.id,
+                ResearchJob.state.in_([ResearchJobState.PENDING, ResearchJobState.RUNNING]),
+            )
+            .order_by(ResearchJob.id.desc())
+            .limit(1)
+        )
+        job_activity = (
+            (active_job.started_at or active_job.created_at) if active_job is not None else None
+        )
+        if job_activity is not None and job_activity >= cutoff:
+            continue
+        if active_job is not None:
+            active_job.state = ResearchJobState.FAILED
+            active_job.error = STALE_RESEARCH_ERROR
+            active_job.finished_at = datetime.now(UTC)
+
+        stale_tasks = list(
+            db.scalars(
+                select(ResearchTask).where(
+                    ResearchTask.research_id == research.id,
+                    ResearchTask.status.in_([
+                        ResearchTaskStatus.PENDING,
+                        ResearchTaskStatus.RUNNING,
+                    ]),
+                    ResearchTask.updated_at < cutoff,
+                )
+            )
+        )
+        for task in stale_tasks:
+            task.status = ResearchTaskStatus.FAILED
+            task.error = STALE_RESEARCH_ERROR
+
+        research.completed_tasks = int(
+            db.scalar(
+                select(func.count())
+                .select_from(ResearchTask)
+                .where(
+                    ResearchTask.research_id == research.id,
+                    ResearchTask.status == ResearchTaskStatus.COMPLETED,
+                )
+            )
+            or 0
+        )
+        research.failed_tasks = int(
+            db.scalar(
+                select(func.count())
+                .select_from(ResearchTask)
+                .where(
+                    ResearchTask.research_id == research.id,
+                    ResearchTask.status == ResearchTaskStatus.FAILED,
+                )
+            )
+            or 0
+        )
+        research.status = ResearchStatus.FAILED
+        research.progress_percent = 100.0
+        recovered.append(research.id)
+    if recovered:
+        db.commit()
+    return recovered

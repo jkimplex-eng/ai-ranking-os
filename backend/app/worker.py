@@ -12,6 +12,7 @@ from backend.app.logging import configure_logging
 from competitor_intelligence.service import CompetitorIntelligenceService
 from competitor_intelligence.social_monitor import CompetitorSocialMonitorService
 from competitor_intelligence.telegram_connector import TelegramConnectionService
+from execution_engine.service import recover_stale_executions
 from product.service import ProductPipeline
 from provider_connections.crypto import SecretCipher
 from provider_connections.repository import ProviderConnectionRepository
@@ -19,7 +20,7 @@ from provider_connections.service import hydrate_provider_credentials
 from recommendation.simulation import models as simulation_models  # noqa: F401
 from recommendation.templates import models as template_models  # noqa: F401
 from research.models import Research, ResearchStatus
-from research.queue import process_next
+from research.queue import process_next, recover_stale_researches
 from scheduler.research_adapter import build_scheduler_engine
 
 settings = get_settings()
@@ -69,6 +70,14 @@ async def run_worker() -> None:
                 now = loop.time()
                 if now - last_scheduler_run >= 60:
                     try:
+                        recovered_executions = recover_stale_executions(db)
+                        recovered_researches = recover_stale_researches(db)
+                        if recovered_executions or recovered_researches:
+                            logger.warning(
+                                "Recovered stale work executions=%s researches=%s",
+                                recovered_executions,
+                                recovered_researches,
+                            )
                         executions = build_scheduler_engine(db).run_due()
                         for execution in executions:
                             if execution.research_id is not None:
