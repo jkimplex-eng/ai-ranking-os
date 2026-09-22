@@ -54,4 +54,4 @@ def test_analytics_uses_verdict_evidence_and_excludes_empty_answers():
     assert result.weighted_visibility == 50
     assert item.verdicts[0]["status"] == "NOT_RECOMMENDED"
     assert item.verdicts[0]["evidence"] == ("Не рекомендую Пример",)
-    assert "brand-verdict-1.0" in result.methodology_version
+    assert "brand-verdict-1.1" in result.methodology_version

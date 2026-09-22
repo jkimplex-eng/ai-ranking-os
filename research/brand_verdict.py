@@ -3,7 +3,7 @@
 import re
 from dataclasses import asdict, dataclass
 
-VERSION = "brand-verdict-1.0"
+VERSION = "brand-verdict-1.1"
 
 
 @dataclass(frozen=True)
@@ -40,9 +40,18 @@ def classify_brand(content: str, brand: str) -> BrandVerdict:
                 rf"do\s+not\s+recommend|don't\s+recommend)\s+{name}"
             )
             positive_pattern = rf"(?:рекомендую|рекомендуем|советую|советуем|recommend)\s+{name}"
-            reverse_pattern = rf"{name}\s+(?:рекомендую|рекомендуем|советую|советуем)\b"
+            reverse_pattern = (
+                rf"{name}\s+(?:(?:is|was)\s+)?(?:recommended|suggested)\b|"
+                rf"{name}\s+(?:рекомендуется|советуют|советуются)\b|"
+                rf"{name}\s+(?:рекомендую|рекомендуем|советую|советуем)\b"
+            )
             neg_reverse = rf"{name}\s+не\s+(?:рекомендую|рекомендуем|советую|советуем)\b"
-            if re.search(negative_pattern, clause, re.I) or re.search(neg_reverse, clause, re.I):
+            negative_passive = rf"{name}\s+(?:(?:is|was)\s+)?not\s+recommended\b"
+            if (
+                re.search(negative_pattern, clause, re.I)
+                or re.search(neg_reverse, clause, re.I)
+                or re.search(negative_passive, clause, re.I)
+            ):
                 negative = True
             elif re.search(positive_pattern, clause, re.I) or re.search(
                 reverse_pattern, clause, re.I

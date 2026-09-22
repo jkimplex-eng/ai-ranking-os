@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from research.brand_verdict import VERSION as BRAND_VERDICT_VERSION
+from research.brand_verdict import classify_brand
 from research.models import (
     Research,
     ResearchScore,
@@ -13,7 +15,7 @@ from research.models import (
 )
 from research.repositories import EntityNotFoundError
 
-SCORING_VERSION = "2.0"
+SCORING_VERSION = f"3.0-{BRAND_VERDICT_VERSION}"
 SCORING_WEIGHTS = {
     "mention": 0.45,
     "recommendation": 0.35,
@@ -165,12 +167,13 @@ class ScoringService:
 
     @staticmethod
     def _recommends_target(response: Response, target: str) -> bool:
-        """Count only recommendations that explicitly name the measured brand.
+        """Use the same scoped, conservative verdict as Wordstat analytics.
 
-        Generic product/category advice is useful evidence, but it is not a brand
-        recommendation and must not inflate the target's recommendation score.
+        Generic extraction snippets are useful for a reader, but they must not
+        decide the measured recommendation rate.  The verdict checks the target
+        brand in its own sentence/clause and rejects negated or uncertain cases.
         """
-        return any(target in item.content.casefold() for item in response.extracted_recommendations)
+        return classify_brand(response.content, target).status == "RECOMMENDED"
 
 
 def response_recommends_target(response: Response, target: str) -> bool:

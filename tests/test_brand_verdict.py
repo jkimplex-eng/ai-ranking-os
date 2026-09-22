@@ -20,6 +20,8 @@ from research.brand_verdict import VERSION, classify_brand
         ("Рекомендую АвтоПримерПлюс", "АвтоПример", "NOT_MENTIONED"),
         ("I do not recommend Example", "Example", "NOT_RECOMMENDED"),
         ("I recommend Example", "Example", "RECOMMENDED"),
+        ("Example is recommended.", "Example", "RECOMMENDED"),
+        ("Example is not recommended.", "Example", "NOT_RECOMMENDED"),
         ("Рекомендую магазин АвтоПример", "АвтоПример", "AMBIGUOUS"),
         ("", "АвтоПример", "NOT_MEASURED"),
         ("Рекомендую магазин", "", "NOT_MEASURED"),
