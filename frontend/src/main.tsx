@@ -1399,12 +1399,12 @@ function GeoOpportunitiesScreen() {
       setWordstatSnapshot(undefined); setWordstatAnalytics(undefined); setAliceLearning(undefined);
       setWordstatForm((current) => ({ ...current, brand: selectedBrand, category: "" }));
       api.aliceLearningDashboard(selectedBrand).then((result) => { if (!cancelled) setAliceLearning(result); }).catch((reason) => { if (!cancelled) setLoadErrors((current) => ({ ...current, "закономерности YandexGPT API": reason instanceof Error ? reason.message : "Ошибка запроса" })); });
-      api.latestWordstat(selectedBrand).then((snapshot) => {
-        if (!cancelled) { setWordstatSnapshot(snapshot); setWordstatForm((current) => ({ ...current, brand: selectedBrand, category: snapshot.category })); }
+      api.latestWordstat(selectedBrand).then(async (snapshot) => {
+        const analytics = await api.wordstatAnalytics(selectedBrand, snapshot.id);
+        if (!cancelled) { setWordstatSnapshot(snapshot); setWordstatAnalytics(analytics); setWordstatForm((current) => ({ ...current, brand: selectedBrand, category: snapshot.category })); }
       }).catch((reason) => {
         if (!cancelled && !(reason instanceof ApiError && reason.status === 404)) setError(`Спрос Wordstat: ${reason instanceof Error ? reason.message : "Ошибка запроса"}`);
       });
-      api.wordstatAnalytics(selectedBrand).then((result) => { if (!cancelled) setWordstatAnalytics(result); }).catch(() => undefined);
       api.finalReport(selectedResearchId).then((report) => {
         if (cancelled) return;
         setResearchEvidence(report as ReportShape);
@@ -1430,7 +1430,7 @@ function GeoOpportunitiesScreen() {
       const seed_phrases = wordstatForm.seedPhrases.split("\n").map((item) => item.trim()).filter(Boolean);
       const snapshot = await api.discoverWordstat({ brand, category: wordstatForm.category.trim(), seed_phrases, region_ids: wordstatForm.region ? [Number(wordstatForm.region)] : [], device: wordstatForm.device, limit: wordstatForm.limit });
       setWordstatSnapshot(snapshot);
-      setWordstatAnalytics(await api.wordstatAnalytics(brand));
+      setWordstatAnalytics(await api.wordstatAnalytics(brand, snapshot.id));
       setWordstatForm((current) => ({ ...current, brand }));
       setOperationResult(`Wordstat нашёл ${snapshot.queries.length} запросов. Они будут автоматически добавлены в следующее исследование бренда ${brand}.`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось получить запросы Wordstat"); }

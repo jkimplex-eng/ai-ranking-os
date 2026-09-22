@@ -1,6 +1,7 @@
 import json
 
 import httpx
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -16,7 +17,7 @@ from provider_connections.crypto import SecretCipher
 from yandex_wordstat.models import WordstatConnection
 from yandex_wordstat.repository import WordstatRepository
 from yandex_wordstat.schemas import WordstatDiscoveryRequest
-from yandex_wordstat.service import WordstatQuerySource, WordstatService
+from yandex_wordstat.service import WordstatError, WordstatQuerySource, WordstatService
 
 
 def database() -> Session:
@@ -226,6 +227,30 @@ def test_wordstat_accepts_all_query_sizes_offered_by_the_ui() -> None:
             limit=limit,
         )
         assert payload.limit == limit
+
+
+def test_wordstat_analytics_stays_bound_to_the_selected_regional_snapshot() -> None:
+    db = database()
+    requests: list[httpx.Request] = []
+    service = WordstatService(
+        db,
+        WordstatRepository(db),
+        SecretCipher("x" * 32),
+        client(requests),
+    )
+    service.connect(1, 7, "folder-1", "API_KEY", "secret-api-key")
+    moscow = service.discover(
+        1, 7, WordstatDiscoveryRequest(brand="Skillbox", category="дизайн", region_ids=[213])
+    )
+    russia = service.discover(
+        1, 7, WordstatDiscoveryRequest(brand="Skillbox", category="дизайн", region_ids=[])
+    )
+
+    assert service.latest(1, "Skillbox", moscow.id).region_ids == [213]
+    assert service.analytics(1, "Skillbox", moscow.id).snapshot_id == moscow.id
+    assert service.analytics(1, "Skillbox", russia.id).snapshot_id == russia.id
+    with pytest.raises(WordstatError, match="другому бренду"):
+        service.analytics(1, "Другой бренд", moscow.id)
 
 
 def test_platform_wordstat_connection_is_available_to_isolated_client() -> None:

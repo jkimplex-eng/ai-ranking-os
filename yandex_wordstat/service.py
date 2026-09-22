@@ -299,14 +299,18 @@ class WordstatService:
         # phrase (for example ``xn d1...``). It is not a buyer question.
         return re.search(r"\bxn\s+[a-z0-9]{6,}\b", query.casefold()) is None
 
-    def latest(self, organization_id: int, brand: str | None = None) -> WordstatSnapshotRead:
-        snapshot = self.repository.latest(organization_id, brand)
+    def latest(
+        self, organization_id: int, brand: str | None = None, snapshot_id: int | None = None
+    ) -> WordstatSnapshotRead:
+        snapshot = self._snapshot_for_request(organization_id, brand, snapshot_id)
         if snapshot is None:
             raise WordstatError("Исследование спроса Wordstat ещё не выполнялось")
         return self._snapshot(snapshot)
 
-    def analytics(self, organization_id: int, brand: str | None = None) -> WordstatAnalyticsRead:
-        snapshot = self.repository.latest(organization_id, brand)
+    def analytics(
+        self, organization_id: int, brand: str | None = None, snapshot_id: int | None = None
+    ) -> WordstatAnalyticsRead:
+        snapshot = self._snapshot_for_request(organization_id, brand, snapshot_id)
         if snapshot is None:
             raise WordstatError("Сначала соберите частотные запросы Wordstat")
         queries = [WordstatQueryRead.model_validate(item) for item in snapshot.queries]
@@ -438,6 +442,19 @@ class WordstatService:
                 "с этим снимком не подмешиваются в результат.",
             ],
         )
+
+    def _snapshot_for_request(
+        self, organization_id: int, brand: str | None, snapshot_id: int | None
+    ) -> WordstatDemandSnapshot | None:
+        """Resolve one immutable snapshot; never silently fall back across regions."""
+        if snapshot_id is None:
+            return self.repository.latest(organization_id, brand)
+        snapshot = self.repository.snapshot(organization_id, snapshot_id)
+        if snapshot is None:
+            return None
+        if brand and snapshot.brand.casefold() != brand.casefold():
+            raise WordstatError("Снимок Wordstat относится к другому бренду")
+        return snapshot
 
     @staticmethod
     def read(

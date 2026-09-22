@@ -84,18 +84,28 @@ def discover(payload: WordstatDiscoveryRequest, request: Request, db: DbSession)
 
 
 @router.get("/latest", response_model=WordstatSnapshotRead)
-def latest(request: Request, db: DbSession, brand: str | None = Query(default=None)):
+def latest(
+    request: Request,
+    db: DbSession,
+    brand: str | None = Query(default=None),
+    snapshot_id: int | None = Query(default=None, ge=1),
+):
     organization_id, _ = _identity(db, request)
     try:
-        return _service(db).latest(organization_id, brand)
+        return _service(db).latest(organization_id, brand, snapshot_id)
     except WordstatError as error:
         raise HTTPException(404, str(error)) from error
 
 
 @router.get("/analytics", response_model=WordstatAnalyticsRead)
-def analytics(request: Request, db: DbSession, brand: str | None = Query(default=None)):
+def analytics(
+    request: Request,
+    db: DbSession,
+    brand: str | None = Query(default=None),
+    snapshot_id: int | None = Query(default=None, ge=1),
+):
     organization_id, _ = _identity(db, request)
     try:
-        return _service(db).analytics(organization_id, brand)
+        return _service(db).analytics(organization_id, brand, snapshot_id)
     except WordstatError as error:
         raise HTTPException(404, str(error)) from error

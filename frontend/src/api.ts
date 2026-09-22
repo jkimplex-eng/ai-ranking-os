@@ -459,8 +459,8 @@ export class ApiClient {
   connectWordstat(payload: { folder_id: string; auth_type: "API_KEY" | "IAM_TOKEN"; credential: string }) { return this.request<WordstatConnection>("/integrations/yandex-wordstat/connection", { method: "PUT", body: JSON.stringify(payload) }); }
   disconnectWordstat() { return this.request<void>("/integrations/yandex-wordstat/connection", { method: "DELETE" }); }
   discoverWordstat(payload: { brand: string; category: string; seed_phrases?: string[]; region_ids: number[]; device: "all" | "desktop" | "phone" | "tablet"; limit: number }) { return this.request<WordstatSnapshot>("/integrations/yandex-wordstat/discover", { method: "POST", body: JSON.stringify(payload) }); }
-  latestWordstat(brand?: string) { return this.request<WordstatSnapshot>(`/integrations/yandex-wordstat/latest${brand ? `?brand=${encodeURIComponent(brand)}` : ""}`); }
-  wordstatAnalytics(brand?: string) { return this.request<WordstatAnalytics>(`/integrations/yandex-wordstat/analytics${brand ? `?brand=${encodeURIComponent(brand)}` : ""}`); }
+  latestWordstat(brand?: string, snapshotId?: number) { const query = new URLSearchParams(); if (brand) query.set("brand", brand); if (snapshotId) query.set("snapshot_id", String(snapshotId)); return this.request<WordstatSnapshot>(`/integrations/yandex-wordstat/latest${query.size ? `?${query}` : ""}`); }
+  wordstatAnalytics(brand?: string, snapshotId?: number) { const query = new URLSearchParams(); if (brand) query.set("brand", brand); if (snapshotId) query.set("snapshot_id", String(snapshotId)); return this.request<WordstatAnalytics>(`/integrations/yandex-wordstat/analytics${query.size ? `?${query}` : ""}`); }
   yandexIntelligence() { return this.request<YandexIntelligence>("/yandex-intelligence/dashboard"); }
   syncYandexIntelligence() { return this.request<YandexIntelligence>("/yandex-intelligence/sync", { method: "POST" }); }
   aliceLearningDashboard(brand?: string) { return this.request<AliceLearningDashboard>(`/alice-learning/dashboard${brand ? `?brand=${encodeURIComponent(brand)}` : ""}`); }
