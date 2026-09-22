@@ -117,7 +117,7 @@ class _AuditParser(HTMLParser):
 
 
 class GeoSiteAuditService:
-    VERSION = "1.1"
+    VERSION = "1.2"
     MAX_CRAWLED_PAGES = 40
     NON_HTML_SUFFIXES = (
         ".xml",
@@ -226,6 +226,39 @@ class GeoSiteAuditService:
                         ),
                     }
                 )
+            product = page.get("product_facts")
+            if isinstance(product, dict) and product.get("products", 0):
+                if not product.get("has_identifier"):
+                    missing.append(
+                        {
+                            "signal": "идентификатор товара",
+                            "action": (
+                                "Добавить подтверждённый SKU, MPN, GTIN или артикул товара; "
+                                "не подставлять идентификатор без данных производителя."
+                            ),
+                        }
+                    )
+                if not product.get("has_availability"):
+                    missing.append(
+                        {
+                            "signal": "наличие товара",
+                            "action": (
+                                "Указать фактический статус наличия в Offer/availability и "
+                                "повторить проверку карточки."
+                            ),
+                        }
+                    )
+                if not product.get("has_properties"):
+                    missing.append(
+                        {
+                            "signal": "характеристики товара",
+                            "action": (
+                                "Добавить подтверждённые характеристики в additionalProperty. "
+                                "Совместимость, OEM и модификации указывайте только если они "
+                                "подтверждены владельцем или производителем."
+                            ),
+                        }
+                    )
             if missing:
                 issues.append({"url": page.get("url"), "signals": missing})
         return issues
@@ -309,6 +342,7 @@ class GeoSiteAuditService:
                     "title": page.title or None,
                     "h1": page.h1[:2],
                     "json_ld_types": sorted(self._types(page.json_ld)),
+                    "product_facts": self._product_facts(page.json_ld),
                     "internal_links": sum(
                         urlparse(urljoin(candidate, link)).hostname == root.hostname
                         for link in page.links
@@ -316,6 +350,43 @@ class GeoSiteAuditService:
                 }
             )
         return pages, self._site_graph(parsed_pages, root.hostname or "")
+
+    @classmethod
+    def _product_facts(cls, values: list[dict]) -> dict:
+        """Return only observed product-schema facts for URL-specific actions."""
+        products = [
+            node
+            for node in cls._nodes(values)
+            if "Product" in (
+                [node.get("@type")]
+                if isinstance(node.get("@type"), str)
+                else node.get("@type", [])
+            )
+        ]
+        offers = [
+            offer
+            for product in products
+            for offer in (
+                product.get("offers", [])
+                if isinstance(product.get("offers"), list)
+                else [product.get("offers")]
+            )
+            if isinstance(offer, dict)
+        ]
+        return {
+            "products": len(products),
+            "has_identifier": any(
+                str(product.get(field) or "").strip()
+                for product in products
+                for field in ("sku", "mpn", "gtin", "gtin8", "gtin12", "gtin13", "gtin14")
+            ),
+            "has_availability": any(
+                str(offer.get("availability") or "").strip() for offer in offers
+            ),
+            "has_properties": any(
+                bool(product.get("additionalProperty")) for product in products
+            ),
+        }
 
     @staticmethod
     def _sitemap_urls(sitemap: str, root: object) -> list[str]:

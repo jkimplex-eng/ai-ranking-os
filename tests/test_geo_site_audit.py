@@ -63,7 +63,10 @@ class _SiteFetcher:
             <script type="application/ld+json">
             {"@context":"https://schema.org","@graph":[
             {"@type":"Organization","name":"Brand","sameAs":["https://t.me/brand"],
-            "email":"info@brand.example"},{"@type":"Product","name":"Сыворотка"},
+            "email":"info@brand.example"},{"@type":"Product","name":"Сыворотка",
+            "sku":"SERUM-001","additionalProperty":[{"@type":"PropertyValue",
+            "name":"Объём","value":"30 мл"}],
+            "offers":{"@type":"Offer","availability":"https://schema.org/InStock"}},
             {"@type":"FAQPage"}]}</script></head><body>
             <h1>Brand — косметика для здоровья кожи</h1>
             <a href="/about">О компании</a>
@@ -88,7 +91,7 @@ def test_geo_site_audit_is_evidence_based_and_persisted(client: TestClient) -> N
         )
 
     assert result.score == 100
-    assert result.algorithm_version == "1.1"
+    assert result.algorithm_version == "1.2"
     assert len(result.checks) == 23
     assert all(check.evidence for check in result.checks)
     assert all(check.checked_url == "https://brand.example/" for check in result.checks)
@@ -139,6 +142,31 @@ def test_geo_site_audit_page_issues_are_url_specific() -> None:
             },
         ],
     }]
+
+
+def test_geo_site_audit_flags_missing_verified_product_card_facts() -> None:
+    issues = GeoSiteAuditService._page_issues(
+        [{
+            "url": "https://brand.example/catalog/part",
+            "status": 200,
+            "title": "Деталь",
+            "h1": ["Деталь для автомобиля"],
+            "json_ld_types": ["Product"],
+            "product_facts": {
+                "products": 1,
+                "has_identifier": False,
+                "has_availability": False,
+                "has_properties": False,
+            },
+        }]
+    )
+
+    assert issues[0]["url"] == "https://brand.example/catalog/part"
+    assert [item["signal"] for item in issues[0]["signals"]] == [
+        "идентификатор товара",
+        "наличие товара",
+        "характеристики товара",
+    ]
 
 
 def test_geo_site_audit_is_documented_in_openapi(client: TestClient) -> None:
