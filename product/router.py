@@ -160,7 +160,8 @@ def clone_research_template(code: str, db: DbSession) -> ResearchTemplateRead:
 def review_wizard(payload: WizardRequest, request: Request, db: DbSession) -> WizardReview:
     try:
         principal = getattr(request.state, "principal", None)
-        user_id = int(getattr(principal, "user_id", getattr(principal, "id", 1)))
+        raw_user_id = getattr(principal, "user_id", getattr(principal, "id", None))
+        user_id = int(raw_user_id) if raw_user_id is not None else None
         return ProductPipeline(db, user_id=user_id).review(payload)
     except (ProductNotFoundError, WizardValidationError) as error:
         raise HTTPException(
@@ -175,7 +176,8 @@ def run_wizard(payload: WizardRequest, request: Request, db: DbSession) -> Wizar
     try:
         notifications = build_notification_service(db)
         principal = getattr(request.state, "principal", None)
-        user_id = int(getattr(principal, "user_id", getattr(principal, "id", 1)))
+        raw_user_id = getattr(principal, "user_id", getattr(principal, "id", None))
+        user_id = int(raw_user_id) if raw_user_id is not None else None
         research = ProductPipeline(
             db,
             build_change_detection(db, notifications),
