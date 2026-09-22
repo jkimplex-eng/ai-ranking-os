@@ -1304,7 +1304,7 @@ function GeoOpportunitiesScreen() {
   const [evidenceError, setEvidenceError] = useState("");
   const [loadErrors, setLoadErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [wordstatForm, setWordstatForm] = useState({ brand: "", category: "", region: "213", device: "all" as "all" | "desktop" | "phone" | "tablet", limit: 30 as 30 | 50 | 100 });
+  const [wordstatForm, setWordstatForm] = useState({ brand: "", category: "", seedPhrases: "", region: "213", device: "all" as "all" | "desktop" | "phone" | "tablet", limit: 30 as 30 | 50 | 100 });
   const [aliceLearning, setAliceLearning] = useState<AliceLearningDashboard>();
   const [aliceAutomation, setAliceAutomation] = useState<AliceAutomationDashboard>();
   const [researches, setResearches] = useState<ResearchItem[]>([]);
@@ -1420,7 +1420,8 @@ function GeoOpportunitiesScreen() {
     if (wordstatConnection?.connected === false) { openIntegrations(); return; }
     setBusy(true); setError(""); setOperationResult("");
     try {
-      const snapshot = await api.discoverWordstat({ brand, category: wordstatForm.category.trim(), region_ids: wordstatForm.region ? [Number(wordstatForm.region)] : [], device: wordstatForm.device, limit: wordstatForm.limit });
+      const seed_phrases = wordstatForm.seedPhrases.split("\n").map((item) => item.trim()).filter(Boolean);
+      const snapshot = await api.discoverWordstat({ brand, category: wordstatForm.category.trim(), seed_phrases, region_ids: wordstatForm.region ? [Number(wordstatForm.region)] : [], device: wordstatForm.device, limit: wordstatForm.limit });
       setWordstatSnapshot(snapshot);
       setWordstatAnalytics(await api.wordstatAnalytics(brand));
       setWordstatForm((current) => ({ ...current, brand }));
@@ -1638,6 +1639,16 @@ function GeoOpportunitiesScreen() {
           <article><span>3</span><b>Сравниваем изменения</b><p>Отслеживаем рекомендации, источники, позиции и публикации во времени.</p></article>
           <article><span>4</span><b>Предлагаем действие</b><p>Показываем, какую страницу или источник улучшить и как проверить результат.</p></article>
         </div>
+      </section>
+      <section className="analytics-card geo-site-audit">
+        <details open>
+          <summary>Уточнить ассортимент для Wordstat</summary>
+          <p>Добавьте реальные марки, модели, услуги или товарные группы — по одной на строку. Эти фразы расширяют сбор спроса в дополнение к категории.</p>
+          <label>Подтверждённые фразы ассортимента
+            <textarea aria-label="Фразы ассортимента" value={wordstatForm.seedPhrases} onChange={(event) => setWordstatForm({ ...wordstatForm, seedPhrases: event.target.value })} placeholder={"Chery Tiggo 7 Pro запчасти\nHaval Jolion запчасти\nтормозные колодки Geely Coolray"} />
+          </label>
+          <small>Добавляйте только то, что есть в ассортименте клиента. Перед запуском запросы всё равно можно отредактировать.</small>
+        </details>
       </section>
       <section className="analytics-card geo-site-audit yandex-intelligence">
         <div className="geo-audit-intro"><span className="eyebrow">ШАГ 1 · СПРОС WORDSTAT</span><h2>Какие вопросы чаще всего задают в Яндексе</h2><p>Укажите бренд, категорию и регион. Завершённое исследование для этого шага не требуется. Система получает частотные фразы через официальный Wordstat API. В следующем исследовании эти вопросы будут проверены через YandexGPT: упомянут ли бренд, рекомендован ли он, какие конкуренты и источники появились в ответе.</p><div className="geo-user-value"><b>Статус Wordstat</b><p>{loading ? "Проверяем подключение…" : loadErrors.Wordstat ? `Не удалось проверить подключение: ${loadErrors.Wordstat}` : wordstatConnection?.connected ? "Подключён — можно получать реальные данные спроса." : wordstatConnection ? "Не подключён — сначала настройте доступ в «Настройки → Интеграции»." : "Статус подключения недоступен. Повторите загрузку данных."}</p></div><label>Бренд<input value={wordstatForm.brand} onChange={(event) => setWordstatForm({ ...wordstatForm, brand: event.target.value })} placeholder="Например, Skillbox" /></label><label>Категория<input value={wordstatForm.category} onChange={(event) => setWordstatForm({ ...wordstatForm, category: event.target.value })} placeholder="Например, онлайн-образование" /></label><label>Регион<select value={wordstatForm.region} onChange={(event) => setWordstatForm({ ...wordstatForm, region: event.target.value })}><option value="">Вся Россия</option><option value="213">Москва</option><option value="2">Санкт-Петербург</option></select></label><label>Количество запросов<select value={wordstatForm.limit} onChange={(event) => setWordstatForm({ ...wordstatForm, limit: Number(event.target.value) as 30 | 50 | 100 })}><option value={30}>30 — рекомендуется</option><option value={50}>50</option><option value={100}>100</option></select></label><label>Устройства<select value={wordstatForm.device} onChange={(event) => setWordstatForm({ ...wordstatForm, device: event.target.value as "all" | "desktop" | "phone" | "tablet" })}><option value="all">Все устройства</option><option value="desktop">Компьютеры</option><option value="phone">Телефоны</option><option value="tablet">Планшеты</option></select></label><Button onClick={() => void discoverWordstat()} disabled={busy}>{busy ? "Получаем Wordstat…" : `Найти запросы для ${wordstatForm.brand.trim() || selectedBrand || "указанного бренда"}`}</Button>{wordstatConnection?.connected === false ? <small>Подключите Wordstat в «Настройки → Интеграции», затем вернитесь на этот экран.</small> : null}</div>

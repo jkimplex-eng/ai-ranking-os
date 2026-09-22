@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from provider_connections.crypto import SecretCipher
@@ -36,7 +36,7 @@ class WordstatError(ValueError):
 
 class WordstatService:
     BASE_URL = "https://searchapi.api.cloud.yandex.net"
-    VERSION = "1.2"
+    VERSION = "1.3"
     _AMBIGUOUS_CATEGORY_TOKENS = {"ai", "geo", "ии", "гео", "seo", "сео"}
     _FOOD_CREAM_TOKENS = {
         "чиз", "торт", "суп", "сливк", "творож", "сыр", "рецепт", "заварн",
@@ -125,29 +125,34 @@ class WordstatService:
             "phone": "DEVICE_PHONE",
             "tablet": "DEVICE_TABLET",
         }
-        request_payload: dict[str, object] = {
-            "phrase": payload.category.strip(),
-            "numPhrases": min(payload.limit * 3, 300),
-            "devices": [device_names[payload.device]],
-            "folderId": connection.folder_id,
-        }
-        if payload.region_ids:
-            request_payload["regions"] = [str(value) for value in payload.region_ids]
-        data = self._request(
-            credential,
-            connection.auth_type,
-            "/v2/wordstat/topRequests",
-            request_payload,
+        seeds = self._discovery_seeds(payload)
+        phrases_per_seed = min(
+            max(10, (payload.limit * 3 + len(seeds) - 1) // len(seeds)), 100
         )
         rows: list[tuple[str, int, str]] = []
-        for key, source_type in (("results", "TOP"), ("associations", "SIMILAR")):
-            for item in data.get(key, []) if isinstance(data, dict) else []:
-                if not isinstance(item, dict):
-                    continue
-                query = str(item.get("phrase", "")).strip()
-                count = int(item.get("count") or 0)
-                if query and count >= 0:
-                    rows.append((query, count, source_type))
+        for seed in seeds:
+            request_payload: dict[str, object] = {
+                "phrase": seed,
+                "numPhrases": phrases_per_seed,
+                "devices": [device_names[payload.device]],
+                "folderId": connection.folder_id,
+            }
+            if payload.region_ids:
+                request_payload["regions"] = [str(value) for value in payload.region_ids]
+            data = self._request(
+                credential,
+                connection.auth_type,
+                "/v2/wordstat/topRequests",
+                request_payload,
+            )
+            for key, source_type in (("results", "TOP"), ("associations", "SIMILAR")):
+                for item in data.get(key, []) if isinstance(data, dict) else []:
+                    if not isinstance(item, dict):
+                        continue
+                    query = str(item.get("phrase", "")).strip()
+                    count = int(item.get("count") or 0)
+                    if query and count >= 0:
+                        rows.append((query, count, source_type))
         deduplicated: dict[str, tuple[str, int, str]] = {}
         for query, count, source_type in rows:
             normalized = " ".join(query.casefold().split())
@@ -201,6 +206,8 @@ class WordstatService:
                     "Связанные фразы Wordstat автоматически отбрасываются, если в них "
                     "нет смыслового токена категории; короткие GEO/AI/SEO сами по себе "
                     "не считаются подтверждением релевантности.",
+                    "Исходные фразы: " + "; ".join(seeds) + ". Каждая фраза проверена "
+                    "в выбранном регионе и на выбранном типе устройства.",
                 ],
                 algorithm_version=self.VERSION,
                 created_by=user_id,
@@ -211,6 +218,12 @@ class WordstatService:
         connection.last_error = None
         self.repository.save(connection)
         return self._snapshot(snapshot)
+
+    @staticmethod
+    def _discovery_seeds(payload: WordstatDiscoveryRequest) -> list[str]:
+        """Keep category coverage while letting a client confirm assortment anchors."""
+        seeds = [payload.category.strip(), *payload.seed_phrases]
+        return list(dict.fromkeys(seed for seed in seeds if seed))
 
     @classmethod
     def _association_relevant(cls, query: str, category: str) -> bool:
@@ -298,15 +311,19 @@ class WordstatService:
             raise WordstatError("Сначала соберите частотные запросы Wordstat")
         queries = [WordstatQueryRead.model_validate(item) for item in snapshot.queries]
         query_keys = {item.query.casefold().strip(): item for item in queries}
-        researches = list(
-            self.db.scalars(select(Research).order_by(Research.created_at.desc()).limit(100))
+        matching_researches = list(
+            self.db.scalars(
+                select(Research)
+                .where(
+                    Research.metadata_payload["organization_id"].as_integer()
+                    == organization_id,
+                    func.lower(Research.metadata_payload["brand"].as_string())
+                    == snapshot.brand.casefold(),
+                )
+                .order_by(Research.created_at.desc())
+                .limit(100)
+            )
         )
-        matching_researches = [
-            item
-            for item in researches
-            if item.metadata_payload.get("organization_id") == organization_id
-            and str(item.metadata_payload.get("brand", "")).casefold() == snapshot.brand.casefold()
-        ]
         research_ids = [item.id for item in matching_researches]
         rows = []
         if research_ids:

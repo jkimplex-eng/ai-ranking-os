@@ -92,6 +92,9 @@ def test_connect_and_discover_use_official_search_api_contract() -> None:
     snapshot_id, queries = WordstatQuerySource(db).queries(1, "Skillbox")
     assert snapshot_id == snapshot.id
     assert queries == ["курсы дизайна", "обучение дизайну"]
+    analytics = service.analytics(1, "Skillbox")
+    assert analytics.status == "NOT_MEASURED"
+    assert analytics.checked_query_count == 0
 
 
 def test_wordstat_filters_ambiguous_association_noise() -> None:
@@ -132,7 +135,60 @@ def test_wordstat_filters_ambiguous_association_noise() -> None:
         "geo продвижение сайта",
         "услуги продвижения",
     ]
-    assert snapshot.algorithm_version == "1.2"
+    assert snapshot.algorithm_version == "1.3"
+
+
+def test_wordstat_collects_multiple_confirmed_assortment_seeds() -> None:
+    db = database()
+    requested_phrases: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        phrase = json.loads(request.content)["phrase"]
+        requested_phrases.append(phrase)
+        if phrase == "яндекс":
+            return httpx.Response(200, json={"results": []})
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"phrase": f"купить {phrase}", "count": "100"},
+                ],
+                "associations": [],
+            },
+        )
+
+    service = WordstatService(
+        db,
+        WordstatRepository(db),
+        SecretCipher("x" * 32),
+        httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    service.connect(1, 7, "folder-1", "API_KEY", "secret-api-key")
+    snapshot = service.discover(
+        1,
+        7,
+        WordstatDiscoveryRequest(
+            brand="АвтоПример",
+            category="запчасти для китайских автомобилей",
+            seed_phrases=[
+                "Chery Tiggo 7 Pro запчасти",
+                "Haval Jolion запчасти",
+                "chery tiggo 7 pro запчасти",
+            ],
+            region_ids=[213],
+            limit=30,
+        ),
+    )
+
+    assert requested_phrases == [
+        "яндекс",
+        "запчасти для китайских автомобилей",
+        "Chery Tiggo 7 Pro запчасти",
+        "Haval Jolion запчасти",
+    ]
+    assert len(snapshot.queries) == 3
+    assert any("Chery Tiggo 7 Pro запчасти" in item for item in snapshot.limitations)
+    assert snapshot.algorithm_version == "1.3"
 
 
 def test_wordstat_rejects_tokenized_punycode_query() -> None:

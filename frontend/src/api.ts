@@ -458,7 +458,7 @@ export class ApiClient {
   wordstatStatus() { return this.request<WordstatConnection>("/integrations/yandex-wordstat/status"); }
   connectWordstat(payload: { folder_id: string; auth_type: "API_KEY" | "IAM_TOKEN"; credential: string }) { return this.request<WordstatConnection>("/integrations/yandex-wordstat/connection", { method: "PUT", body: JSON.stringify(payload) }); }
   disconnectWordstat() { return this.request<void>("/integrations/yandex-wordstat/connection", { method: "DELETE" }); }
-  discoverWordstat(payload: { brand: string; category: string; region_ids: number[]; device: "all" | "desktop" | "phone" | "tablet"; limit: number }) { return this.request<WordstatSnapshot>("/integrations/yandex-wordstat/discover", { method: "POST", body: JSON.stringify(payload) }); }
+  discoverWordstat(payload: { brand: string; category: string; seed_phrases?: string[]; region_ids: number[]; device: "all" | "desktop" | "phone" | "tablet"; limit: number }) { return this.request<WordstatSnapshot>("/integrations/yandex-wordstat/discover", { method: "POST", body: JSON.stringify(payload) }); }
   latestWordstat(brand?: string) { return this.request<WordstatSnapshot>(`/integrations/yandex-wordstat/latest${brand ? `?brand=${encodeURIComponent(brand)}` : ""}`); }
   wordstatAnalytics(brand?: string) { return this.request<WordstatAnalytics>(`/integrations/yandex-wordstat/analytics${brand ? `?brand=${encodeURIComponent(brand)}` : ""}`); }
   yandexIntelligence() { return this.request<YandexIntelligence>("/yandex-intelligence/dashboard"); }

@@ -23,6 +23,7 @@ class WordstatConnectionRead(BaseModel):
 class WordstatDiscoveryRequest(BaseModel):
     brand: str = Field(min_length=1, max_length=300)
     category: str = Field(min_length=2, max_length=500)
+    seed_phrases: list[str] = Field(default_factory=list, max_length=12)
     region_ids: list[int] = Field(default_factory=list, max_length=50)
     device: str = Field(default="all", pattern=r"^(all|desktop|phone|tablet)$")
     limit: int = Field(default=30, ge=5, le=100)
@@ -31,6 +32,19 @@ class WordstatDiscoveryRequest(BaseModel):
     @classmethod
     def unique_regions(cls, values: list[int]) -> list[int]:
         return list(dict.fromkeys(value for value in values if value > 0))
+
+    @field_validator("seed_phrases")
+    @classmethod
+    def unique_seed_phrases(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            phrase = " ".join(value.split())
+            key = phrase.casefold()
+            if phrase and key not in seen:
+                normalized.append(phrase)
+                seen.add(key)
+        return normalized
 
 
 class WordstatQueryRead(BaseModel):
