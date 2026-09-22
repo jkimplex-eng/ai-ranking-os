@@ -240,7 +240,7 @@ def run_research(
                 research_task.decision_task_id,
                 worker_manager,
                 retry_base_seconds=get_settings().execution_retry_base_seconds,
-                wait_for_agent_seconds=60,
+                wait_for_agent_seconds=get_settings().research_agent_wait_seconds,
             )
             research_task.execution_id = execution.id
             if execution.state == ExecutionState.COMPLETED:
