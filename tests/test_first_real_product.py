@@ -12,6 +12,8 @@ from execution_engine import service as execution_service
 from execution_engine.worker_manager import WorkerManager
 from product.models import PromptDefinition, ResearchTemplateDefinition
 from product.service import PIPELINE, ProductPipeline
+from research.models import Research
+from research.queue import process_next
 
 engine = create_engine(
     "sqlite+pysqlite:///:memory:",
@@ -128,6 +130,19 @@ def test_skinjestique_end_to_end_wizard(client: TestClient) -> None:
     completed = client.post("/research/wizard/run", json=payload)
     assert completed.status_code == 201, completed.text
     body = completed.json()
+    assert body["research"]["status"] == "ACTIVE"
+    assert body["report"] == {}
+    with TestingSession() as db:
+        processed = process_next(db)
+        assert processed is not None
+        research = db.get(Research, body["research"]["id"])
+        assert research is not None
+        ProductPipeline(db).complete_existing(research)
+
+    persisted = client.get(body["report_url"])
+    assert persisted.status_code == 200
+    body["research"] = client.get(f"/research/{body['research']['id']}").json()
+    body["report"] = persisted.json()
     assert body["research"]["status"] == "COMPLETED", [
         item["error_message"] for item in body["report"]["responses"]
     ]
@@ -158,8 +173,6 @@ def test_skinjestique_end_to_end_wizard(client: TestClient) -> None:
     assert report["research_patterns"]["sample"]["responses"] == 20
     assert report["geo_opportunities"]
 
-    persisted = client.get(body["report_url"])
-    assert persisted.status_code == 200
     assert persisted.json()["research"]["id"] == body["research"]["id"]
 
 
@@ -220,7 +233,7 @@ def test_wizard_rejects_unknown_model(client: TestClient) -> None:
     assert response.status_code == 422
 
 
-def test_wizard_does_not_generate_report_when_research_execution_fails(
+def test_wizard_queue_is_independent_from_unrelated_execution_tasks(
     client: TestClient,
 ) -> None:
     agent = client.post("/agents", json={"name": "Busy product agent"}).json()
@@ -259,5 +272,6 @@ def test_wizard_does_not_generate_report_when_research_execution_fails(
 
     assert agent["id"] > 0
     assert task["id"] > 0
-    assert response.status_code == 409
-    assert "no report was generated" in response.json()["detail"]
+    assert response.status_code == 201
+    assert response.json()["research"]["status"] == "ACTIVE"
+    assert response.json()["report"] == {}

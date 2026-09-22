@@ -94,7 +94,7 @@ def test_compare_research_scores_and_intelligence_changes(
     left_id, left_score = _scored_research(
         client,
         title="Baseline",
-        content="Acme is not highlighted.",
+        content="Acme is not highlighted. Legacy is present.",
         entities=["Acme", "Legacy"],
         recommendations=["Use Legacy"],
         citations=[],
@@ -102,7 +102,7 @@ def test_compare_research_scores_and_intelligence_changes(
     right_id, right_score = _scored_research(
         client,
         title="Follow-up",
-        content="Acme is recommended.",
+        content="Acme is recommended. Future is present.",
         entities=["Acme", "Future"],
         recommendations=["Use Future"],
         citations=[
