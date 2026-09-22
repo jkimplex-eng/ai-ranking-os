@@ -157,6 +157,7 @@ class GeoSiteAuditService:
         sitemap_url = self._sitemap_url(origin, robots[1])
         sitemap = self._optional(sitemap_url)
         pages, graph = self._crawl_public_pages(final, parser, sitemap[1])
+        page_issues = self._page_issues(pages)
         checks = self._checks(payload.brand, final, parser, html, status, latency, robots, sitemap)
         scores: defaultdict[str, float] = defaultdict(float)
         for check in checks:
@@ -190,6 +191,7 @@ class GeoSiteAuditService:
                     ),
                     "pages": pages,
                 },
+                "page_issues": page_issues,
                 "knowledge_graph": graph,
                 "roadmap": self._readiness_roadmap(checks),
             },
@@ -197,6 +199,36 @@ class GeoSiteAuditService:
             limitation=self.LIMITATION,
         )
         return self._read(self.repository.add(audit))
+
+    @staticmethod
+    def _page_issues(pages: list[dict]) -> list[dict]:
+        """Turn scanned page facts into URL-specific, non-scored follow-up tasks."""
+        issues: list[dict] = []
+        for page in pages:
+            if page.get("status") != 200 or page.get("error"):
+                continue
+            missing: list[dict[str, str]] = []
+            if not page.get("title"):
+                missing.append(
+                    {"signal": "title", "action": "Добавить уникальный title на этой странице."}
+                )
+            if not page.get("h1"):
+                missing.append(
+                    {"signal": "h1", "action": "Добавить один описательный H1 на этой странице."}
+                )
+            if not page.get("json_ld_types"):
+                missing.append(
+                    {
+                        "signal": "JSON-LD",
+                        "action": (
+                            "Добавить подтверждённую Schema.org-разметку, "
+                            "соответствующую содержанию страницы."
+                        ),
+                    }
+                )
+            if missing:
+                issues.append({"url": page.get("url"), "signals": missing})
+        return issues
 
     def get(self, user_id: int, audit_id: int) -> SiteAuditRead:
         item = self.repository.get(user_id, audit_id)

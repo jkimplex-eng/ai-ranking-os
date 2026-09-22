@@ -96,12 +96,49 @@ def test_geo_site_audit_is_evidence_based_and_persisted(client: TestClient) -> N
     assert result.evidence["robots_status"] == 200
     assert result.evidence["crawl_scope"]["pages_scanned"] == 1
     assert result.evidence["knowledge_graph"]["nodes"]
+    assert result.evidence["page_issues"] == []
     assert result.evidence["roadmap"]["current"] == result.score
     assert "не гарантирует рекомендацию" in result.evidence["roadmap"]["condition"]
 
     stored = client.get("/geo/site-audits")
     assert stored.status_code == 200
     assert stored.json()[0]["brand"] == "Brand"
+
+
+def test_geo_site_audit_page_issues_are_url_specific() -> None:
+    issues = GeoSiteAuditService._page_issues(
+        [
+            {
+                "url": "https://brand.example/catalog",
+                "status": 200,
+                "title": None,
+                "h1": [],
+                "json_ld_types": [],
+            },
+            {
+                "url": "https://brand.example/about",
+                "status": 200,
+                "title": "О компании",
+                "h1": ["О компании"],
+                "json_ld_types": ["AboutPage"],
+            },
+            {"url": "https://brand.example/down", "status": 503, "error": "страница недоступна"},
+        ]
+    )
+    assert issues == [{
+        "url": "https://brand.example/catalog",
+        "signals": [
+            {"signal": "title", "action": "Добавить уникальный title на этой странице."},
+            {"signal": "h1", "action": "Добавить один описательный H1 на этой странице."},
+            {
+                "signal": "JSON-LD",
+                "action": (
+                    "Добавить подтверждённую Schema.org-разметку, "
+                    "соответствующую содержанию страницы."
+                ),
+            },
+        ],
+    }]
 
 
 def test_geo_site_audit_is_documented_in_openapi(client: TestClient) -> None:
