@@ -77,7 +77,10 @@ class YandexGenerativeEvidenceService:
                 brand_mentioned = verdict.status not in {"NOT_MEASURED", "NOT_MENTIONED"}
                 target_cited = bool(
                     target_domain
-                    and any(target_domain == self._domain(item["url"]) for item in sources)
+                    and any(
+                        item["used"] and target_domain == self._domain(item["url"])
+                        for item in sources
+                    )
                 )
                 observations.append(
                     {

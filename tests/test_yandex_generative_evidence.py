@@ -73,6 +73,39 @@ def test_generative_evidence_does_not_infer_a_missing_brand() -> None:
     assert result["visibility_score"] == 0.0
 
 
+def test_unselected_source_does_not_count_as_target_citation() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "message": {"content": "Другой сервис подходит для задачи."},
+                "sources": [
+                    {
+                        "url": "https://app.разуммаркета.рф/about.html",
+                        "title": "О платформе",
+                        "used": False,
+                    }
+                ],
+            },
+        )
+
+    service = YandexGenerativeEvidenceService(
+        httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    result = service.measure(
+        credential="secret",
+        auth_type="API_KEY",
+        folder_id="folder",
+        queries=["какой сервис выбрать"],
+        brand="Разум рынка",
+        website_url="https://app.разуммаркета.рф",
+    )
+
+    assert result["target_citation_count"] == 0
+    assert result["observations"][0]["target_cited"] is False
+    assert result["source_patterns"] == []
+
+
 def test_generative_evidence_does_not_count_negative_or_other_brand_recommendation() -> None:
     responses = iter(
         [
