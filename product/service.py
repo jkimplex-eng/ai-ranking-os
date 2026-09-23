@@ -55,6 +55,7 @@ from provider_recommendation.service import SmartProviderRecommendationService
 from publication_learning.service import PublicationLearningService
 from recommendation.engine import RecommendationEngine
 from recommendation.research_adapter import SqlAlchemyResearchScoreAdapter
+from research.brand_verdict import classify_brand
 from research.models import ExtractedEntity, Research, ResearchStatus, ResearchTask, Response
 from research.queue import enqueue as enqueue_research
 from research.reporting import ReportingService
@@ -846,29 +847,13 @@ class FinalReportService:
             citations_by_response[citation.response_id].append(citation)
         for recommendation in base.recommendations:
             recommendations_by_response[recommendation.response_id].append(recommendation)
-        mentioned = sum(
-            target in response.content.casefold()
-            or any(
-                target
-                in {
-                    entity.name.casefold(),
-                    entity.canonical_name.casefold(),
-                    *(alias.casefold() for alias in entity.aliases),
-                }
-                for entity in entities_by_response[response.id]
-            )
-            for response in responses
-        )
-        # ``base.responses`` contains the public ResponseRead DTO, while extracted
-        # recommendations are returned as a separate collection.  Keep report
-        # composition on that public contract instead of assuming ORM relations.
-        recommended = sum(
-            any(
-                target in item.content.casefold()
-                for item in recommendations_by_response[response.id]
-            )
-            for response in responses
-        )
+        measured = [r for r in responses if r.processing_status.value == "PROCESSED"]
+        verdicts = {r.id: classify_brand(r.content, target) for r in measured}
+        # Match research.scoring: extracted snippets are evidence, not proof.
+        mentioned_ids = [r.id for r in measured if target in r.content.casefold()]
+        recommended_ids = [r.id for r in measured if verdicts[r.id].status == "RECOMMENDED"]
+        mentioned = len(mentioned_ids)
+        recommended = len(recommended_ids)
         citation_count = len(base.citations)
         processed = sum(response.processing_status.value == "PROCESSED" for response in responses)
         unique_models = len(
@@ -882,7 +867,7 @@ class FinalReportService:
         metrics: dict[str, Any] = {
             "mention_score": {
                 "formula": "mentioned_responses / total_responses * 100",
-                "inputs": {"mentioned_responses": mentioned, "total_responses": len(responses)},
+                "inputs": {"mentioned_responses": mentioned, "total_responses": len(responses), "evidence_response_ids": mentioned_ids},
                 "normalization": "bounded 0..100",
                 "weight": SCORING_WEIGHTS["mention"],
             },
@@ -891,6 +876,7 @@ class FinalReportService:
                 "inputs": {
                     "responses_recommending_target_brand": recommended,
                     "total_responses": len(responses),
+                    "evidence_response_ids": recommended_ids,
                 },
                 "normalization": "bounded 0..100",
                 "weight": SCORING_WEIGHTS["recommendation"],
@@ -1013,6 +999,11 @@ class FinalReportService:
                 "recommendation_ids": [
                     item.id for item in recommendations_by_response[response.id]
                 ],
+                "brand_verdict": (
+                    verdicts[response.id].to_dict()
+                    if response.id in verdicts
+                    else {"status": "NOT_MEASURED", "evidence": []}
+                ),
             }
             for response in responses
         ]
@@ -1033,6 +1024,14 @@ class FinalReportService:
             "metrics": metrics,
             "prompts": prompts,
             "responses": response_evidence,
+            "recommendation_measurement": {
+                "status": "NOT_MEASURED" if not processed else ("PARTIAL" if processed < len(responses) else "MEASURED"),
+                "recommended_responses": recommended,
+                "measured_responses": processed,
+                "rate_percent": round(recommended / processed * 100, 1) if processed else None,
+                "evidence_response_ids": recommended_ids,
+                "scope": "Only successfully processed responses in this research; not a promise of visibility in Yandex search or Alice.",
+            },
             "citations": citation_evidence,
             "unsupported_metrics": ["authority", "knowledge_graph_score"],
             "sample_scope": {

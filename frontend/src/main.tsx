@@ -185,6 +185,7 @@ type ReportShape = {
     metrics: Record<string, { formula?: string; inputs: Record<string, unknown>; normalization?: string; weight?: number; version: string; status?: string }>;
     prompts: Array<{ uuid: string; response_id: number; text: string; language?: string | string[]; country?: string | string[]; provider: string; model: string; created_at: string }>;
     responses: Array<{ response_id: number; provider: string; model: string; prompt: string; raw_response: Record<string, unknown>; normalized_response: Record<string, unknown>; tokens: number; cost: number; latency_ms?: number; finished_at: string; error_type?: string; error_message?: string; entity_ids: number[]; citation_ids: number[]; recommendation_ids: number[] }>;
+    recommendation_measurement?: { status: string; recommended_responses: number; measured_responses: number; rate_percent: number | null; evidence_response_ids: number[]; scope: string };
     citations: Array<{ citation_id: number; response_id: number; url?: string; domain?: string; source?: string; title?: string; position: number }>;
     unsupported_metrics: string[];
     sample_scope?: { query_count: number; response_count: number; successful_response_count: number; failed_response_count: number; provider_model_count: number; languages: string[]; regions: string[]; limitation: string };
@@ -525,14 +526,14 @@ function metricEvidence(key: string, data: ReportShape, research: ResearchItem) 
   const value = valueOf(score, key);
   const target = String(research.metadata?.brand ?? research.title.replace(/^AI Visibility:\s*/, ""));
   const mentions = responses.filter((item) => item.content.toLocaleLowerCase().includes(target.toLocaleLowerCase())).length;
-  const recommended = Math.round(valueOf(score, "recommendation_score") / 100 * total);
+  const recommended = Number(data.explainability?.metrics?.recommendation_score?.inputs?.responses_recommending_target_brand ?? 0);
   const citations = data.sources?.length ?? 0;
   const uniqueModels = new Set(responses.map((item) => `${item.provider}/${item.model}`)).size;
   const entities = data.detected_entities ?? [];
   const averageConfidence = entities.length ? entities.reduce((sum, item) => sum + Number(item.confidence ?? 0), 0) / entities.length * 100 : 50;
   const details: Record<string, { lines: string[]; formula: string }> = {
     mention_score: { lines: [`${total} ответов моделей`, `${mentions} ответов содержат бренд`], formula: `${mentions} / ${Math.max(total, 1)} × 100 = ${value.toFixed(1)}` },
-    recommendation_score: { lines: [`${total} ответов моделей`, `${recommended} ответов содержат извлечённую рекомендацию`], formula: `${recommended} / ${Math.max(total, 1)} × 100 = ${value.toFixed(1)}` },
+    recommendation_score: { lines: [`${total} ответов моделей`, `${recommended} ответов с подтверждённой рекомендацией бренда`], formula: `${recommended} / ${Math.max(total, 1)} × 100 = ${value.toFixed(1)}` },
     citation_score: { lines: [`${total} ответов моделей`, `${citations} независимых источников`, `Максимум v1: ${total * 3} источников`], formula: `${citations} / ${Math.max(total * 3, 1)} × 100 = ${value.toFixed(1)}` },
     coverage_score: { lines: [`${uniqueModels} уникальных пар «провайдер/модель»`, `${research.total_tasks ?? total} запланированных задач`], formula: `${uniqueModels} / ${Math.max(research.total_tasks ?? total, 1)} × 100 = ${value.toFixed(1)}` },
     confidence_score: { lines: [`${processed} из ${total} ответов обработано`, `${entities.length} извлечённых сущностей`, `Средняя достоверность сущностей: ${averageConfidence.toFixed(1)}`], formula: `70% успешности обработки + 30% достоверности сущностей = ${value.toFixed(1)}` },
@@ -2586,7 +2587,7 @@ function Report({
   const evidenceResearch = (report.research ?? result.research) as ResearchItem;
   const visibilityEvidence = metricEvidence("visibility_score", report, evidenceResearch);
   const successfulResponses = report.explainability?.sample_scope?.successful_response_count ?? responses.filter((item) => !item.error_type).length;
-  const recommendedResponses = report.explainability?.responses.filter((item) => item.recommendation_ids.length > 0).length ?? 0;
+  const recommendedResponses = report.explainability?.recommendation_measurement?.recommended_responses ?? 0;
   const citedResponses = report.explainability?.responses.filter((item) => item.citation_ids.length > 0).length ?? 0;
   const planFor = (recommendation: NonNullable<ReportShape["recommendations"]>[number]) => result.actionPlan?.items.find((item) => item.recommendation.metric === recommendation.metric);
   const simulationFor = (recommendation: NonNullable<ReportShape["recommendations"]>[number]) => result.simulation?.simulations.find((item) => item.metric === recommendation.metric);
