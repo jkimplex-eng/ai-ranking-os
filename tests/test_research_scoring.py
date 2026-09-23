@@ -135,7 +135,71 @@ def test_score_is_calculated_automatically_after_all_responses(
     assert score["coverage_score"] == 100.0
     assert score["confidence_score"] == 79.0
     assert score["visibility_score"] == 50.0
-    assert score["version"] == "3.0-brand-verdict-1.3"
+    assert score["version"] == "4.0-brand-verdict-1.3"
+
+
+def test_scoring_excludes_brand_named_in_question_from_discovery_score(
+    client: TestClient,
+) -> None:
+    research_id = client.post(
+        "/research",
+        json={"title": "Signal", "metadata": {"target_entity": "Signal"}},
+    ).json()["id"]
+    branded_task = _create_task(client, research_id, "model-a")
+    discovery_task = _create_task(client, research_id, "model-b")
+    with TestingSession() as db:
+        research = db.get(Research, research_id)
+        assert research is not None
+        research.total_tasks = 2
+        db.commit()
+    for task_id, prompt, content in [
+        (branded_task, "Что делает Signal?", "Signal — приложение для сообщений."),
+        (discovery_task, "Какие сервисы помогают с GEO?", "Есть разные сервисы."),
+    ]:
+        response = client.post(
+            "/responses",
+            json={
+                "research_task_id": task_id,
+                "provider": "test",
+                "model": "model-a",
+                "prompt": prompt,
+                "content": content,
+                "normalized_response": _normalized(content),
+            },
+        )
+        assert response.status_code == 201
+    score = client.get(f"/research/{research_id}/score").json()
+    assert score["mention_score"] == 0
+    assert score["recommendation_score"] == 0
+    assert score["visibility_score"] == 0
+    assert score["coverage_score"] == 100
+
+
+def test_brand_control_only_research_has_no_discovery_score(client: TestClient) -> None:
+    research_id = client.post(
+        "/research",
+        json={"title": "Signal", "metadata": {"target_entity": "Signal"}},
+    ).json()["id"]
+    task_id = _create_task(client, research_id, "model-a")
+    with TestingSession() as db:
+        research = db.get(Research, research_id)
+        assert research is not None
+        research.total_tasks = 1
+        db.commit()
+    response = client.post(
+        "/responses",
+        json={
+            "research_task_id": task_id,
+            "provider": "test",
+            "model": "model-a",
+            "prompt": "Что делает Signal?",
+            "content": "Signal — приложение для сообщений.",
+            "normalized_response": _normalized("Signal — приложение для сообщений."),
+        },
+    )
+    assert response.status_code == 201
+    assert client.get(f"/research/{research_id}/score").status_code == 404
+    assert client.post(f"/research/{research_id}/score").status_code == 409
 
 
 def test_score_api_recalculates_same_version_without_duplicates(
@@ -163,7 +227,7 @@ def test_score_api_recalculates_same_version_without_duplicates(
     assert first.status_code == 200
     assert second.status_code == 200
     assert first.json()["id"] == second.json()["id"]
-    assert first.json()["version"] == "3.0-brand-verdict-1.3"
+    assert first.json()["version"] == "4.0-brand-verdict-1.3"
 
 
 def test_scoring_uses_the_scoped_verdict_for_negation_and_passive_recommendation(
@@ -199,7 +263,7 @@ def test_scoring_uses_the_scoped_verdict_for_negation_and_passive_recommendation
 
     score = client.get(f"/research/{research_id}/score").json()
     assert score["recommendation_score"] == 50.0
-    assert score["version"] == "3.0-brand-verdict-1.3"
+    assert score["version"] == "4.0-brand-verdict-1.3"
     with TestingSession() as db:
         scores = list(
             db.scalars(select(ResearchScore).where(ResearchScore.research_id == research_id))

@@ -113,3 +113,11 @@ def classify_brand(content: str, brand: str) -> BrandVerdict:
     else:
         status = "MENTIONED"
     return BrandVerdict(status, tuple(evidence))
+
+
+def prompt_names_brand(prompt: str, brand: str) -> bool:
+    """A prompted brand is a control observation, not spontaneous discovery."""
+    target = brand.strip()
+    return bool(
+        target and re.search(rf"(?<!\w){re.escape(target)}(?!\w)", prompt or "", re.I)
+    )

@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from research.brand_verdict import VERSION as BRAND_VERDICT_VERSION
-from research.brand_verdict import classify_brand
+from research.brand_verdict import classify_brand, prompt_names_brand
 from research.models import (
     Research,
     ResearchScore,
@@ -15,7 +15,7 @@ from research.models import (
 )
 from research.repositories import EntityNotFoundError
 
-SCORING_VERSION = f"3.0-{BRAND_VERDICT_VERSION}"
+SCORING_VERSION = f"4.0-{BRAND_VERDICT_VERSION}"
 SCORING_WEIGHTS = {
     "mention": 0.45,
     "recommendation": 0.35,
@@ -52,17 +52,29 @@ class ScoringService:
             if response.processing_status == ResponseProcessingStatus.PROCESSED
         ]
         target = self._target(research)
+        eligible = [
+            response for response in responses
+            if not prompt_names_brand(response.prompt, target)
+        ]
+        if not eligible:
+            raise ScoringNotReadyError(
+                f"Research {research_id} has no unbranded responses to score"
+            )
+        eligible_processed = [
+            response for response in eligible
+            if response.processing_status == ResponseProcessingStatus.PROCESSED
+        ]
         mention_score = _ratio(
-            sum(self._mentions(response, target) for response in processed),
-            len(responses),
+            sum(self._mentions(response, target) for response in eligible_processed),
+            len(eligible),
         )
         recommendation_score = _ratio(
-            sum(self._recommends_target(response, target) for response in processed),
-            len(responses),
+            sum(self._recommends_target(response, target) for response in eligible_processed),
+            len(eligible),
         )
         citation_score = _ratio(
-            sum(len(response.extracted_citations) for response in processed),
-            len(responses) * 3,
+            sum(len(response.extracted_citations) for response in eligible_processed),
+            len(eligible) * 3,
         )
         expected = max(research.total_tasks, len(research.tasks), 1)
         coverage_score = _ratio(len(processed), expected)
@@ -131,6 +143,9 @@ class ScoringService:
             response.processing_status == ResponseProcessingStatus.NORMALIZED
             for response in responses
         ):
+            return None
+        target = self._target(research)
+        if all(prompt_names_brand(response.prompt, target) for response in responses):
             return None
         return self.calculate(research_id)
 

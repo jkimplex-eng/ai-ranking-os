@@ -55,7 +55,7 @@ from provider_recommendation.service import SmartProviderRecommendationService
 from publication_learning.service import PublicationLearningService
 from recommendation.engine import RecommendationEngine
 from recommendation.research_adapter import SqlAlchemyResearchScoreAdapter
-from research.brand_verdict import classify_brand
+from research.brand_verdict import classify_brand, prompt_names_brand
 from research.models import ExtractedEntity, Research, ResearchStatus, ResearchTask, Response
 from research.queue import enqueue as enqueue_research
 from research.reporting import ReportingService
@@ -848,16 +848,24 @@ class FinalReportService:
         for recommendation in base.recommendations:
             recommendations_by_response[recommendation.response_id].append(recommendation)
         measured = [r for r in responses if r.processing_status.value == "PROCESSED"]
+        eligible = [r for r in responses if not prompt_names_brand(r.prompt, target)]
+        eligible_ids = {r.id for r in eligible}
+        eligible_measured = [r for r in measured if r.id in eligible_ids]
+        excluded_branded_ids = [r.id for r in responses if r.id not in eligible_ids]
         verdicts = {r.id: classify_brand(r.content, target) for r in measured}
         # Match research.scoring: extracted snippets are evidence, not proof.
-        mentioned_ids = [r.id for r in measured if target in r.content.casefold()]
-        recommended_ids = [r.id for r in measured if verdicts[r.id].status == "RECOMMENDED"]
-        option_ids = [r.id for r in measured if verdicts[r.id].status == "PROPOSED_AS_OPTION"]
+        mentioned_ids = [r.id for r in eligible_measured if target in r.content.casefold()]
+        recommended_ids = [
+            r.id for r in eligible_measured if verdicts[r.id].status == "RECOMMENDED"
+        ]
+        option_ids = [
+            r.id for r in eligible_measured if verdicts[r.id].status == "PROPOSED_AS_OPTION"
+        ]
         score_version = score.get("version") if score else None
         historical_score = bool(score_version and score_version != SCORING_VERSION)
         mentioned = len(mentioned_ids)
         recommended = len(recommended_ids)
-        citation_count = len(base.citations)
+        citation_count = sum(citation.response_id in eligible_ids for citation in base.citations)
         processed = sum(response.processing_status.value == "PROCESSED" for response in responses)
         unique_models = len(
             {
@@ -869,30 +877,33 @@ class FinalReportService:
         expected = max(research.total_tasks, len(research.tasks), 1)
         metrics: dict[str, Any] = {
             "mention_score": {
-                "formula": "mentioned_responses / total_responses * 100",
+                "formula": "mentioned_responses / unbranded_responses * 100",
                 "inputs": {
                     "mentioned_responses": mentioned,
-                    "total_responses": len(responses),
+                    "total_responses": len(eligible),
+                    "excluded_branded_response_ids": excluded_branded_ids,
                     "evidence_response_ids": mentioned_ids,
                 },
                 "normalization": "bounded 0..100",
                 "weight": SCORING_WEIGHTS["mention"],
             },
             "recommendation_score": {
-                "formula": "responses_recommending_target_brand / total_responses * 100",
+                "formula": "responses_recommending_target_brand / unbranded_responses * 100",
                 "inputs": {
                     "responses_recommending_target_brand": recommended,
-                    "total_responses": len(responses),
+                    "total_responses": len(eligible),
+                    "excluded_branded_response_ids": excluded_branded_ids,
                     "evidence_response_ids": recommended_ids,
                 },
                 "normalization": "bounded 0..100",
                 "weight": SCORING_WEIGHTS["recommendation"],
             },
             "citation_score": {
-                "formula": "extracted_citations / (total_responses * 3) * 100",
+                "formula": "extracted_citations / (unbranded_responses * 3) * 100",
                 "inputs": {
                     "extracted_citations": citation_count,
-                    "maximum_v1_citations": len(responses) * 3,
+                    "maximum_v1_citations": len(eligible) * 3,
+                    "excluded_branded_response_ids": excluded_branded_ids,
                 },
                 "normalization": "bounded 0..100",
                 "weight": SCORING_WEIGHTS["citation"],
@@ -967,7 +978,8 @@ class FinalReportService:
             },
         }
         for payload in metrics.values():
-            payload["version"] = score.get("version", SCORING_VERSION) if score else SCORING_VERSION
+            payload["version"] = SCORING_VERSION
+            payload["stored_score_version"] = score_version
         prompts = [
             {
                 "uuid": str(
@@ -1011,6 +1023,8 @@ class FinalReportService:
                     if response.id in verdicts
                     else {"status": "NOT_MEASURED", "evidence": []}
                 ),
+                "prompt_names_brand": response.id not in eligible_ids,
+                "counts_toward_visibility": response.id in eligible_ids,
             }
             for response in responses
         ]
@@ -1039,28 +1053,35 @@ class FinalReportService:
             "responses": response_evidence,
             "recommendation_measurement": {
                 "status": (
-                    "NOT_MEASURED" if not processed
-                    else "PARTIAL" if processed < len(responses)
+                    "NOT_MEASURED" if not eligible_measured
+                    else "PARTIAL" if len(eligible_measured) < len(eligible)
                     else "MEASURED"
                 ),
                 "recommended_responses": recommended,
-                "measured_responses": processed,
-                "rate_percent": round(recommended / processed * 100, 1) if processed else None,
+                "measured_responses": len(eligible_measured),
+                "rate_percent": (
+                    round(recommended / len(eligible_measured) * 100, 1)
+                    if eligible_measured else None
+                ),
                 "evidence_response_ids": recommended_ids,
                 "scope": (
-                    "Only successfully processed responses in this research; "
+                    "Only successfully processed unbranded responses in this research; "
+                    "prompts naming the target brand are diagnostic controls and excluded. "
                     "not a promise of visibility in Yandex search or Alice."
                 ),
             },
             "option_measurement": {
                 "status": (
-                    "NOT_MEASURED" if not processed
-                    else "PARTIAL" if processed < len(responses)
+                    "NOT_MEASURED" if not eligible_measured
+                    else "PARTIAL" if len(eligible_measured) < len(eligible)
                     else "MEASURED"
                 ),
                 "option_responses": len(option_ids),
-                "measured_responses": processed,
-                "rate_percent": round(len(option_ids) / processed * 100, 1) if processed else None,
+                "measured_responses": len(eligible_measured),
+                "rate_percent": (
+                    round(len(option_ids) / len(eligible_measured) * 100, 1)
+                    if eligible_measured else None
+                ),
                 "evidence_response_ids": option_ids,
                 "verdict_version": verdicts[measured[0].id].version if measured else None,
                 "limitation": (
@@ -1074,13 +1095,17 @@ class FinalReportService:
                 "query_count": len(research.metadata_payload.get("query_catalog", [])),
                 "response_count": len(responses),
                 "successful_response_count": processed,
+                "unbranded_response_count": len(eligible),
+                "successful_unbranded_response_count": len(eligible_measured),
+                "excluded_branded_response_ids": excluded_branded_ids,
                 "failed_response_count": len(responses) - processed,
                 "provider_model_count": unique_models,
                 "languages": research.metadata_payload.get("languages", []),
                 "regions": research.metadata_payload.get("regions", []),
                 "limitation": (
-                    "Результат описывает только сохранённую выборку запросов, моделей, "
-                    "языков, регионов и времени; он не означает видимость во всех ИИ."
+                    "Результат описывает только сохранённую выборку запросов без названия бренда, "
+                    "моделей, языков, регионов и времени; контрольные вопросы с названием бренда "
+                    "не входят в оценку самостоятельной видимости. Это не видимость во всех ИИ."
                 ),
             },
         }

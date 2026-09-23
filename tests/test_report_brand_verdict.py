@@ -4,10 +4,15 @@ from product.service import FinalReportService
 from research.models import ResponseProcessingStatus
 
 
-def _response(response_id: int, content: str, status=ResponseProcessingStatus.PROCESSED):
+def _response(
+    response_id: int,
+    content: str,
+    status=ResponseProcessingStatus.PROCESSED,
+    prompt="Какой бренд выбрать?",
+):
     return SimpleNamespace(
         id=response_id, content=content, processing_status=status,
-        provider="yandex", model="test", prompt="Какой бренд выбрать?",
+        provider="yandex", model="test", prompt=prompt,
         created_at=None, raw_response={}, normalized_response={},
         total_tokens=0, cost=0, latency_ms=0, finished_at=None,
         error_type=None, error_message=None,
@@ -81,5 +86,25 @@ def test_historical_score_is_not_silently_relabelled_as_current_methodology():
         }
     )
     assert evidence["methodology_version"] == "3.0-brand-verdict-1.1"
-    assert evidence["evidence_methodology_version"] == "3.0-brand-verdict-1.3"
+    assert evidence["evidence_methodology_version"] == "4.0-brand-verdict-1.3"
     assert evidence["historical_score_warning"]
+
+
+def test_report_excludes_branded_controls_from_visibility_numerator_and_denominator():
+    research = SimpleNamespace(
+        id=4, title="Signal", metadata_payload={"brand": "Signal"},
+        total_tasks=2, tasks=[],
+    )
+    base = SimpleNamespace(
+        responses=[
+            _response(1, "Signal — приложение для сообщений.", prompt="Что делает Signal?"),
+            _response(2, "Есть несколько сервисов для GEO.", prompt="Какие сервисы для GEO?"),
+        ],
+        entities=[], citations=[], recommendations=[],
+    )
+    evidence = FinalReportService._explainability(research, base, None)
+    assert evidence["metrics"]["mention_score"]["inputs"]["mentioned_responses"] == 0
+    assert evidence["metrics"]["mention_score"]["inputs"]["total_responses"] == 1
+    assert evidence["sample_scope"]["excluded_branded_response_ids"] == [1]
+    assert evidence["responses"][0]["counts_toward_visibility"] is False
+    assert evidence["responses"][1]["counts_toward_visibility"] is True

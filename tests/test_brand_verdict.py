@@ -1,6 +1,6 @@
 import pytest
 
-from research.brand_verdict import VERSION, classify_brand
+from research.brand_verdict import VERSION, classify_brand, prompt_names_brand
 
 
 @pytest.mark.parametrize(
@@ -54,3 +54,9 @@ def test_brand_verdict_is_scoped_and_conservative(text, brand, status):
     assert verdict.version == VERSION
     if status not in {"NOT_MEASURED", "NOT_MENTIONED"}:
         assert verdict.evidence
+
+
+def test_brand_named_in_prompt_is_a_control_not_spontaneous_discovery():
+    assert prompt_names_brand("Стоит ли рассматривать Signal для GEO?", "Signal")
+    assert not prompt_names_brand("Какие сервисы помогают измерить GEO-видимость?", "Signal")
+    assert not prompt_names_brand("Посоветуйте SignalPlus", "Signal")
