@@ -135,7 +135,7 @@ def test_score_is_calculated_automatically_after_all_responses(
     assert score["coverage_score"] == 100.0
     assert score["confidence_score"] == 79.0
     assert score["visibility_score"] == 50.0
-    assert score["version"] == "3.0-brand-verdict-1.2"
+    assert score["version"] == "3.0-brand-verdict-1.3"
 
 
 def test_score_api_recalculates_same_version_without_duplicates(
@@ -163,7 +163,7 @@ def test_score_api_recalculates_same_version_without_duplicates(
     assert first.status_code == 200
     assert second.status_code == 200
     assert first.json()["id"] == second.json()["id"]
-    assert first.json()["version"] == "3.0-brand-verdict-1.2"
+    assert first.json()["version"] == "3.0-brand-verdict-1.3"
 
 
 def test_scoring_uses_the_scoped_verdict_for_negation_and_passive_recommendation(
@@ -199,7 +199,7 @@ def test_scoring_uses_the_scoped_verdict_for_negation_and_passive_recommendation
 
     score = client.get(f"/research/{research_id}/score").json()
     assert score["recommendation_score"] == 50.0
-    assert score["version"] == "3.0-brand-verdict-1.2"
+    assert score["version"] == "3.0-brand-verdict-1.3"
     with TestingSession() as db:
         scores = list(
             db.scalars(select(ResearchScore).where(ResearchScore.research_id == research_id))

@@ -65,7 +65,7 @@ def test_analytics_uses_verdict_evidence_and_excludes_empty_answers():
     assert result.weighted_visibility == 33.3
     assert item.verdicts[0]["status"] == "NOT_RECOMMENDED"
     assert item.verdicts[0]["evidence"] == ("Не рекомендую Пример",)
-    assert "brand-verdict-1.2" in result.methodology_version
+    assert "brand-verdict-1.3" in result.methodology_version
     compiled = Database.statements[0].compile(
         dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
     )

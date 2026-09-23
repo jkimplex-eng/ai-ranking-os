@@ -3,7 +3,7 @@
 import re
 from dataclasses import asdict, dataclass
 
-VERSION = "brand-verdict-1.2"
+VERSION = "brand-verdict-1.3"
 
 
 @dataclass(frozen=True)
@@ -31,6 +31,7 @@ def _proposed_as_option(content: str, name: str) -> bool:
     intro = "\n".join(lines[:listed[0]])[-500:]
     if not re.search(
         r"вот\s+(?:некоторые|несколько)\s+из\s+них|"
+        r"вот\s+несколько\s+предложений\s*:|"
         r"вот\s+несколько\s+[^:\n]{0,120}"
         r"(?:платформ|сервис|ресурс|вариант|школ|курс)[^:\n]{0,120}:|"
         r"(?:вариант(?:ы|ов)?|подходящие\s+(?:сервисы|ресурсы|курсы|площадки))\s*:|"

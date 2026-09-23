@@ -81,5 +81,5 @@ def test_historical_score_is_not_silently_relabelled_as_current_methodology():
         }
     )
     assert evidence["methodology_version"] == "3.0-brand-verdict-1.1"
-    assert evidence["evidence_methodology_version"] == "3.0-brand-verdict-1.2"
+    assert evidence["evidence_methodology_version"] == "3.0-brand-verdict-1.3"
     assert evidence["historical_score_warning"]
