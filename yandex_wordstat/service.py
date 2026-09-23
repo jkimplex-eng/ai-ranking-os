@@ -358,6 +358,7 @@ class WordstatService:
             observations = grouped[key]
             mentions = 0
             recommendations = 0
+            options = 0
             competitors: set[str] = set()
             domains: set[str] = set()
             used_researches: set[int] = set()
@@ -369,6 +370,7 @@ class WordstatService:
                 verdicts.append({"response_id": response.id, **verdict.to_dict()})
                 mentions += int(mentioned)
                 recommendations += int(recommended)
+                options += int(verdict.status == "PROPOSED_AS_OPTION")
                 used_researches.add(task.research_id)
                 for url in re.findall(r"https?://[^\s)\]}>]+", response.content):
                     domain = (urlparse(url).hostname or "").casefold().removeprefix("www.")
@@ -397,6 +399,7 @@ class WordstatService:
                     response_count=response_count,
                     mention_count=mentions,
                     recommendation_count=recommendations,
+                    option_count=options,
                     mention_rate=round(mentions / response_count * 100, 1) if response_count else 0,
                     recommendation_rate=(
                         round(recommendations / response_count * 100, 1) if response_count else 0
@@ -427,7 +430,7 @@ class WordstatService:
             if checked
             else "NOT_MEASURED",
             items=items,
-            methodology_version=f"1.1/{VERDICT_VERSION}",
+            methodology_version=f"1.2/{VERDICT_VERSION}",
             limitations=[
                 "Используются консервативные текстовые правила: неоднозначные ответы "
                 "требуют проверки и не считаются явными рекомендациями. Это новая "
@@ -438,6 +441,8 @@ class WordstatService:
                 "Метрика относится только к сохранённой выборке Wordstat, региону, "
                 "периоду, снимку спроса и ответам YandexGPT. Исследования без связи "
                 "с этим снимком не подмешиваются в результат.",
+                "Предложение бренда в списке вариантов показывается отдельно и не "
+                "входит в долю явных рекомендаций.",
             ],
         )
 

@@ -852,6 +852,9 @@ class FinalReportService:
         # Match research.scoring: extracted snippets are evidence, not proof.
         mentioned_ids = [r.id for r in measured if target in r.content.casefold()]
         recommended_ids = [r.id for r in measured if verdicts[r.id].status == "RECOMMENDED"]
+        option_ids = [r.id for r in measured if verdicts[r.id].status == "PROPOSED_AS_OPTION"]
+        score_version = score.get("version") if score else None
+        historical_score = bool(score_version and score_version != SCORING_VERSION)
         mentioned = len(mentioned_ids)
         recommended = len(recommended_ids)
         citation_count = len(base.citations)
@@ -1024,7 +1027,13 @@ class FinalReportService:
             for citation in base.citations
         ]
         return {
-            "methodology_version": SCORING_VERSION,
+            "methodology_version": score_version or SCORING_VERSION,
+            "evidence_methodology_version": SCORING_VERSION,
+            "historical_score_warning": (
+                "Stored score uses an older methodology. Response verdicts shown here use the "
+                "current classifier and must not be read as a recalculation of the stored score."
+                if historical_score else None
+            ),
             "metrics": metrics,
             "prompts": prompts,
             "responses": response_evidence,
@@ -1041,6 +1050,22 @@ class FinalReportService:
                 "scope": (
                     "Only successfully processed responses in this research; "
                     "not a promise of visibility in Yandex search or Alice."
+                ),
+            },
+            "option_measurement": {
+                "status": (
+                    "NOT_MEASURED" if not processed
+                    else "PARTIAL" if processed < len(responses)
+                    else "MEASURED"
+                ),
+                "option_responses": len(option_ids),
+                "measured_responses": processed,
+                "rate_percent": round(len(option_ids) / processed * 100, 1) if processed else None,
+                "evidence_response_ids": option_ids,
+                "verdict_version": verdicts[measured[0].id].version if measured else None,
+                "limitation": (
+                    "Listed as an option, not an explicit recommendation; "
+                    "excluded from recommendation_score."
                 ),
             },
             "citations": citation_evidence,

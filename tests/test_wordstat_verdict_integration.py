@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from sqlalchemy.dialects import sqlite
 
+import recommendation.simulation.models  # noqa: F401 - register related ORM model
 from research.models import ResponseProcessingStatus
 from yandex_wordstat.service import WordstatService
 
@@ -32,7 +33,12 @@ def test_analytics_uses_verdict_evidence_and_excludes_empty_answers():
             ),
             task,
         )
-        for i, text in enumerate(["Не рекомендую Пример", "Рекомендую Пример", ""], 1)
+        for i, text in enumerate([
+            "Не рекомендую Пример",
+            "Рекомендую Пример",
+            "",
+            "Вот некоторые из них:\n1. Пример — магазин деталей\n2. Другой — магазин",
+        ], 1)
     ]
 
     class Database:
@@ -52,13 +58,14 @@ def test_analytics_uses_verdict_evidence_and_excludes_empty_answers():
     service.repository = SimpleNamespace(latest=lambda organization_id, brand: snapshot)
     result = service.analytics(7, "Пример")
     item = result.items[0]
-    assert item.response_count == 2
+    assert item.response_count == 3
     assert item.recommendation_count == 1
+    assert item.option_count == 1
     assert item.excluded_response_count == 1
-    assert result.weighted_visibility == 50
+    assert result.weighted_visibility == 33.3
     assert item.verdicts[0]["status"] == "NOT_RECOMMENDED"
     assert item.verdicts[0]["evidence"] == ("Не рекомендую Пример",)
-    assert "brand-verdict-1.1" in result.methodology_version
+    assert "brand-verdict-1.2" in result.methodology_version
     compiled = Database.statements[0].compile(
         dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
     )

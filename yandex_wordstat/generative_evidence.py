@@ -113,6 +113,10 @@ class YandexGenerativeEvidenceService:
         measured = len(observations)
         mentions = sum(bool(item["brand_mentioned"]) for item in observations)
         recommendations = sum(bool(item["brand_recommended"]) for item in observations)
+        options = sum(
+            (item.get("brand_verdict") or {}).get("status") == "PROPOSED_AS_OPTION"
+            for item in observations
+        )
         citations = sum(bool(item["target_cited"]) for item in observations)
         denominator = max(measured, 1)
         score = round(
@@ -174,6 +178,7 @@ class YandexGenerativeEvidenceService:
             "queries_failed": len(failures),
             "mention_count": mentions,
             "recommendation_count": recommendations,
+            "option_count": options,
             "recommendation_rate_percent": (
                 round(recommendations / measured * 100, 1) if measured else None
             ),
@@ -210,6 +215,8 @@ class YandexGenerativeEvidenceService:
                 "отличаться.",
                 "Метка рекомендации определяется версионированным правилом, относится только "
                 "к указанному бренду и требует просмотра исходного ответа.",
+                "Предложение бренда среди вариантов учитывается отдельно и не считается "
+                "явной рекомендацией в доле рекомендаций и взвешенном индексе.",
                 "При ошибках запросов результат частичный; при менее чем восьми ответах "
                 "выборка недостаточна для устойчивого вывода.",
             ],

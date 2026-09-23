@@ -37,3 +37,49 @@ def test_report_uses_scoring_verdict_not_generic_extraction():
     assert evidence["responses"][2]["brand_verdict"]["status"] == "NOT_MEASURED"
     assert evidence["recommendation_measurement"]["status"] == "PARTIAL"
     assert evidence["recommendation_measurement"]["rate_percent"] == 50.0
+
+
+def test_report_shows_offered_option_without_counting_explicit_recommendation():
+    research = SimpleNamespace(
+        id=2, title="Skillbox", metadata_payload={"brand": "Skillbox"},
+        total_tasks=1, tasks=[],
+    )
+    base = SimpleNamespace(
+        responses=[_response(
+            436,
+            "Вот некоторые из них:\n1. Skillbox — курсы дизайна\n"
+            "2. Netology — курсы маркетинга",
+        )],
+        entities=[], citations=[], recommendations=[],
+    )
+    evidence = FinalReportService._explainability(research, base, None)
+    assert evidence["recommendation_measurement"]["recommended_responses"] == 0
+    assert evidence["option_measurement"]["option_responses"] == 1
+    assert evidence["option_measurement"]["evidence_response_ids"] == [436]
+    assert evidence["responses"][0]["brand_verdict"]["status"] == "PROPOSED_AS_OPTION"
+
+
+def test_historical_score_is_not_silently_relabelled_as_current_methodology():
+    research = SimpleNamespace(
+        id=3, title="Skillbox", metadata_payload={"brand": "Skillbox"},
+        total_tasks=1, tasks=[],
+    )
+    base = SimpleNamespace(
+        responses=[_response(
+            436, "Вот некоторые из них:\n1. Skillbox — курсы\n2. Netology — курсы"
+        )],
+        entities=[], citations=[], recommendations=[],
+    )
+    evidence = FinalReportService._explainability(
+        research, base, {
+            "version": "3.0-brand-verdict-1.1",
+            "mention_score": 100,
+            "recommendation_score": 0,
+            "citation_score": 0,
+            "coverage_score": 100,
+            "confidence_score": 20,
+        }
+    )
+    assert evidence["methodology_version"] == "3.0-brand-verdict-1.1"
+    assert evidence["evidence_methodology_version"] == "3.0-brand-verdict-1.2"
+    assert evidence["historical_score_warning"]

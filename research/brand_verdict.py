@@ -3,7 +3,7 @@
 import re
 from dataclasses import asdict, dataclass
 
-VERSION = "brand-verdict-1.1"
+VERSION = "brand-verdict-1.2"
 
 
 @dataclass(frozen=True)
@@ -14,6 +14,38 @@ class BrandVerdict:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+def _proposed_as_option(content: str, name: str) -> bool:
+    """Detect an offered choice only when the answer supplies choice context."""
+    direct = rf"\b(?:можно|стоит)\s+(?:рассмотреть|сравнить|выбрать)\s+{name}"
+    if re.search(direct, re.sub(r"[*_`]+", "", content), re.I):
+        return True
+    lines = content.splitlines()
+    listed = [
+        index for index, line in enumerate(lines)
+        if re.match(r"^\s*(?:\d+[.)]|[-•*])\s+", line)
+    ]
+    if len(listed) < 2:
+        return False
+    intro = "\n".join(lines[:listed[0]])[-500:]
+    if not re.search(
+        r"вот\s+(?:некоторые|несколько)\s+из\s+них|"
+        r"вот\s+несколько\s+[^:\n]{0,120}"
+        r"(?:платформ|сервис|ресурс|вариант|школ|курс)[^:\n]{0,120}:|"
+        r"(?:вариант(?:ы|ов)?|подходящие\s+(?:сервисы|ресурсы|курсы|площадки))\s*:|"
+        r"(?:можно|стоит)\s+(?:рассмотреть|выбрать)\s*:",
+        intro, re.I,
+    ):
+        return False
+    for index in listed:
+        item = re.sub(r"^\s*(?:\d+[.)]|[-•*])\s+", "", lines[index])
+        item = re.sub(r"^[*_\s]+", "", item)
+        if re.match(name, item, re.I) or re.search(
+            rf"(?:платформ\w*|сервис\w*|курс\w*)\s+{name}", item, re.I
+        ):
+            return True
+    return False
 
 
 def classify_brand(content: str, brand: str) -> BrandVerdict:
@@ -29,6 +61,7 @@ def classify_brand(content: str, brand: str) -> BrandVerdict:
     if not evidence:
         return BrandVerdict("NOT_MENTIONED", ())
     positive = negative = uncertain = False
+    option = _proposed_as_option(content, name)
     for sentence in evidence:
         # Split contrast clauses: a recommendation of B must not be attributed to A.
         clauses = re.split(r",\s*(?:но|а|but)\s+", sentence, flags=re.I)
@@ -37,9 +70,13 @@ def classify_brand(content: str, brand: str) -> BrandVerdict:
                 continue
             negative_pattern = (
                 r"(?:не\s+(?:рекомендую|рекомендуем|советую|советуем)|"
-                rf"do\s+not\s+recommend|don't\s+recommend)\s+{name}"
+                rf"do\s+not\s+recommend|don't\s+recommend)\s+"
+                rf"(?:(?:магазин|платформу|сервис|курсы|курс|бренд)\s+)?{name}"
             )
-            positive_pattern = rf"(?:рекомендую|рекомендуем|советую|советуем|recommend)\s+{name}"
+            positive_pattern = (
+                rf"(?:рекомендую|рекомендуем|советую|советуем|recommend)\s+"
+                rf"(?:(?:магазин|платформу|сервис|курсы|курс|бренд)\s+)?{name}"
+            )
             reverse_pattern = (
                 rf"{name}\s+(?:(?:is|was)\s+)?(?:recommended|suggested)\b|"
                 rf"{name}\s+(?:рекомендуется|советуют|советуются)\b|"
@@ -64,12 +101,14 @@ def classify_brand(content: str, brand: str) -> BrandVerdict:
                     positive = True
             elif re.search(r"рекоменд|совету|recommend|suggest", clause, re.I):
                 uncertain = True
-    if uncertain or (positive and negative):
+    if uncertain or (positive and negative) or (option and negative):
         status = "AMBIGUOUS"
     elif negative:
         status = "NOT_RECOMMENDED"
     elif positive:
         status = "RECOMMENDED"
+    elif option:
+        status = "PROPOSED_AS_OPTION"
     else:
         status = "MENTIONED"
     return BrandVerdict(status, tuple(evidence))

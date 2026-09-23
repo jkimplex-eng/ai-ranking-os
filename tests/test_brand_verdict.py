@@ -22,7 +22,19 @@ from research.brand_verdict import VERSION, classify_brand
         ("I recommend Example", "Example", "RECOMMENDED"),
         ("Example is recommended.", "Example", "RECOMMENDED"),
         ("Example is not recommended.", "Example", "NOT_RECOMMENDED"),
-        ("Рекомендую магазин АвтоПример", "АвтоПример", "AMBIGUOUS"),
+        ("Рекомендую магазин АвтоПример", "АвтоПример", "RECOMMENDED"),
+        ("Не рекомендую магазин АвтоПример", "АвтоПример", "NOT_RECOMMENDED"),
+        ("Можно рассмотреть АвтоПример", "АвтоПример", "PROPOSED_AS_OPTION"),
+        (
+            "Существует множество ресурсов, где можно изучить дизайн. "
+            "Вот некоторые из них:\n1. Skillbox — курсы дизайна\n"
+            "2. Netology — курсы маркетинга",
+            "Skillbox",
+            "PROPOSED_AS_OPTION",
+        ),
+        ("1. АвтоПример — магазин запчастей\n2. Другой — тоже магазин", "АвтоПример", "MENTIONED"),
+        ("Компании на рынке:\n1. АвтоПример\n2. Другой", "АвтоПример", "MENTIONED"),
+        ("Рекомендую Другой. АвтоПример тоже продаёт детали", "АвтоПример", "MENTIONED"),
         ("", "АвтоПример", "NOT_MEASURED"),
         ("Рекомендую магазин", "", "NOT_MEASURED"),
     ],

@@ -78,6 +78,7 @@ class WordstatQueryAnalyticsItem(BaseModel):
     response_count: int
     mention_count: int
     recommendation_count: int
+    option_count: int = 0
     mention_rate: float
     recommendation_rate: float
     competing_brands: list[str] = Field(default_factory=list)

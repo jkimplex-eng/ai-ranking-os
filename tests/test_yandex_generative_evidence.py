@@ -74,6 +74,28 @@ def test_generative_evidence_does_not_infer_a_missing_brand() -> None:
     assert result["visibility_score"] == 0.0
 
 
+def test_generative_search_counts_offered_option_separately() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "message": {"content": (
+                "Вот некоторые из них:\n1. Skillbox — курсы дизайна\n"
+                "2. Netology — курсы маркетинга"
+            )},
+            "sources": [],
+        })
+
+    result = YandexGenerativeEvidenceService(
+        httpx.Client(transport=httpx.MockTransport(handler))
+    ).measure(
+        credential="secret", auth_type="API_KEY", folder_id="folder",
+        queries=["где изучить дизайн"], brand="Skillbox",
+    )
+    assert result["option_count"] == 1
+    assert result["recommendation_count"] == 0
+    assert result["recommendation_rate_percent"] == 0.0
+    assert result["observations"][0]["brand_verdict"]["status"] == "PROPOSED_AS_OPTION"
+
+
 def test_partial_and_empty_yandex_answers_are_not_reported_as_full_measurement() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         query = request.read().decode("utf-8")
