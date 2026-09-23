@@ -616,6 +616,11 @@ class ProductPipeline:
         """
         if evidence.get("status") != "MEASURED":
             return
+        organization_id = self._research_organization_id(research)
+        if organization_id is None:
+            # Legacy research without a verifiable owner must not create a
+            # tenant-visible publication record.
+            return
         for source in evidence.get("source_patterns", []):
             if not isinstance(source, dict):
                 continue
@@ -623,7 +628,12 @@ class ProductPipeline:
             source_evidence = source.get("evidence")
             if not domain or not isinstance(source_evidence, list):
                 continue
-            existing = self.db.scalar(select(GeoPlatform).where(GeoPlatform.domain == domain))
+            existing = self.db.scalar(
+                select(GeoPlatform).where(
+                    GeoPlatform.organization_id == organization_id,
+                    GeoPlatform.domain == domain,
+                )
+            )
             if existing is not None:
                 # Never overwrite a manually curated registry entry.  An
                 # automatically created record keeps the first research that
@@ -658,6 +668,7 @@ class ProductPipeline:
             }
             self.db.add(
                 GeoPlatform(
+                    organization_id=organization_id,
                     name=domain,
                     domain=domain,
                     platform_type="PUBLICATION",

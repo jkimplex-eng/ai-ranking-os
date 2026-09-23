@@ -22,7 +22,7 @@ def test_yandex_sources_become_observed_publication_candidates() -> None:
     db = _Db()
     pipeline = ProductPipeline(db)  # type: ignore[arg-type]
     pipeline._materialize_yandex_publication_candidates(
-        SimpleNamespace(id=42),
+        SimpleNamespace(id=42, metadata_payload={"organization_id": 7}),
         {
             "status": "MEASURED",
             "source_patterns": [
@@ -47,6 +47,7 @@ def test_yandex_sources_become_observed_publication_candidates() -> None:
     assert len(db.added) == 1
     candidate = db.added[0]
     assert candidate.source == "YANDEX_SEARCH_GENERATIVE"
+    assert candidate.organization_id == 7
     assert candidate.source_reference == "research:42"
     assert candidate.evidence["status"] == "OBSERVED"
     assert candidate.evidence["suggested_topic"] == (

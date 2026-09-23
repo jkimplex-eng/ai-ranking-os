@@ -16,9 +16,13 @@ from eis.schemas import (
 from eis.service import METHODOLOGY_VERSION, EISService
 from frozen_prompts.repository import FrozenPromptRepository
 from geo_platforms.repository import PlatformRepository
+from geo_platforms.router import require_platform_scope
 from geo_platforms.service import PlatformNotFoundError
 
-router = APIRouter(prefix="/api/v1/eis", tags=["eis"])
+router = APIRouter(
+    prefix="/api/v1/eis", tags=["eis"],
+    dependencies=[Depends(require_platform_scope)],
+)
 DbSession = Annotated[Session, Depends(get_db)]
 
 
@@ -53,7 +57,7 @@ def batch_prioritize(payload: EISBatchRequest, db: DbSession) -> EISBatchResult:
 @router.get("/{score_id}", response_model=EISRead)
 def get_eis(score_id: UUID, db: DbSession) -> EISRead:
     item = EISRepository(db).get(score_id)
-    if item is None:
+    if item is None or PlatformRepository(db).get(item.platform_id) is None:
         raise HTTPException(status_code=404, detail=f"EIS score {score_id} not found")
     return item
 
@@ -62,4 +66,6 @@ def get_eis(score_id: UUID, db: DbSession) -> EISRead:
 def eis_history(
     platform_id: UUID, db: DbSession, limit: int = Query(default=100, ge=1, le=500)
 ) -> list[EISRead]:
+    if PlatformRepository(db).get(platform_id) is None:
+        raise HTTPException(status_code=404, detail=f"Platform {platform_id} not found")
     return EISRepository(db).history(platform_id, limit)

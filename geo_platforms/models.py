@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     Float,
+    ForeignKey,
     Index,
     Integer,
     Numeric,
@@ -23,11 +24,14 @@ from backend.app.database import Base
 class GeoPlatform(Base):
     __tablename__ = "geo_platforms"
     __table_args__ = (
-        Index("uq_geo_platforms_domain", "domain", unique=True),
+        Index("uq_geo_platforms_organization_domain", "organization_id", "domain", unique=True),
         Index("ix_geo_platforms_category_language", "category", "language"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    organization_id: Mapped[int | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
     name: Mapped[str] = mapped_column(String(300), nullable=False)
     domain: Mapped[str] = mapped_column(String(255), nullable=False)
     platform_type: Mapped[str] = mapped_column(String(60), nullable=False, default="PUBLICATION")
