@@ -36,7 +36,7 @@ class WordstatError(ValueError):
 
 class WordstatService:
     BASE_URL = "https://searchapi.api.cloud.yandex.net"
-    VERSION = "1.3"
+    VERSION = "1.4"
     _AMBIGUOUS_CATEGORY_TOKENS = {"ai", "geo", "ии", "гео", "seo", "сео"}
     _FOOD_CREAM_TOKENS = {
         "чиз", "торт", "суп", "сливк", "творож", "сыр", "рецепт", "заварн",
@@ -129,7 +129,7 @@ class WordstatService:
         phrases_per_seed = min(
             max(10, (payload.limit * 3 + len(seeds) - 1) // len(seeds)), 100
         )
-        rows: list[tuple[str, int, str]] = []
+        rows: list[tuple[str, int, str, str]] = []
         for seed in seeds:
             request_payload: dict[str, object] = {
                 "phrase": seed,
@@ -152,25 +152,20 @@ class WordstatService:
                     query = str(item.get("phrase", "")).strip()
                     count = int(item.get("count") or 0)
                     if query and count >= 0:
-                        rows.append((query, count, source_type))
-        deduplicated: dict[str, tuple[str, int, str]] = {}
-        for query, count, source_type in rows:
+                        rows.append((query, count, source_type, seed))
+        deduplicated: dict[str, tuple[str, int, str, str]] = {}
+        for query, count, source_type, seed in rows:
+            if not self._query_well_formed(query) or not self._query_relevant_to_category(
+                query, payload.category, source_type, seed=seed
+            ):
+                continue
             normalized = " ".join(query.casefold().split())
             previous = deduplicated.get(normalized)
             if previous is None or count > previous[1]:
-                deduplicated[normalized] = (query, count, source_type)
+                deduplicated[normalized] = (query, count, source_type, seed)
         ordered = sorted(deduplicated.values(), key=lambda item: (-item[1], item[0]))
-        # Wordstat's `associations` are exploratory suggestions.  For short or
-        # ambiguous seeds (notably GEO) they can be popular yet completely outside
-        # the customer's market.  TOP rows already contain the requested phrase;
-        # SIMILAR rows are admitted only when they retain a meaningful category
-        # token.  This prevents frequency from outranking semantic relevance.
-        ordered = [
-            item
-            for item in ordered
-            if self._query_well_formed(item[0])
-            and self._query_relevant_to_category(item[0], payload.category, item[2])
-        ]
+        # Filter before deduplication so an irrelevant broad-category association
+        # cannot hide the same relevant phrase returned for a confirmed seed.
         brand_key = payload.brand.casefold().strip()
         unbranded = [item for item in ordered if brand_key not in item[0].casefold()]
         branded = [item for item in ordered if brand_key in item[0].casefold()]
@@ -184,7 +179,7 @@ class WordstatService:
                 branded=brand_key in query.casefold(),
                 selected_for_alice=index <= payload.limit,
             )
-            for index, (query, count, source_type) in enumerate(selected, 1)
+            for index, (query, count, source_type, _seed) in enumerate(selected, 1)
         ]
         snapshot = self.repository.save(
             WordstatDemandSnapshot(
@@ -254,7 +249,7 @@ class WordstatService:
 
     @classmethod
     def _query_relevant_to_category(
-        cls, query: str, category: str, source_type: str
+        cls, query: str, category: str, source_type: str, *, seed: str | None = None
     ) -> bool:
         """Reject high-frequency homonyms before they reach a buyer-question set.
 
@@ -264,7 +259,10 @@ class WordstatService:
         Uncertain, short fragments are omitted and can be added as a custom
         question when they are intentional.
         """
-        if source_type == "SIMILAR" and not cls._association_relevant(query, category):
+        # A confirmed assortment seed can be narrower than the broad category.
+        # Judge its associations against that seed, not only the generic category.
+        anchor = seed or category
+        if source_type == "SIMILAR" and not cls._association_relevant(query, anchor):
             return False
         tokens = re.findall(r"[a-zа-яё0-9]+", query.casefold())
         category_tokens = re.findall(r"[a-zа-яё0-9]+", category.casefold())

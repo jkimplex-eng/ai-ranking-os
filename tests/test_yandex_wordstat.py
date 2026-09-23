@@ -136,7 +136,7 @@ def test_wordstat_filters_ambiguous_association_noise() -> None:
         "geo продвижение сайта",
         "услуги продвижения",
     ]
-    assert snapshot.algorithm_version == "1.3"
+    assert snapshot.algorithm_version == "1.4"
 
 
 def test_wordstat_collects_multiple_confirmed_assortment_seeds() -> None:
@@ -189,7 +189,38 @@ def test_wordstat_collects_multiple_confirmed_assortment_seeds() -> None:
     ]
     assert len(snapshot.queries) == 3
     assert any("Chery Tiggo 7 Pro запчасти" in item for item in snapshot.limitations)
-    assert snapshot.algorithm_version == "1.3"
+    assert snapshot.algorithm_version == "1.4"
+
+
+def test_confirmed_seed_keeps_relevant_associations_outside_generic_category() -> None:
+    db = database()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        phrase = json.loads(request.content)["phrase"]
+        if phrase == "яндекс":
+            return httpx.Response(200, json={"results": []})
+        if phrase == "Haval Jolion тормозные колодки":
+            return httpx.Response(200, json={
+                "results": [],
+                "associations": [
+                    {"phrase": "тормозные колодки Haval Jolion", "count": "80"},
+                    {"phrase": "пирог с яблоками", "count": "1000"},
+                ],
+            })
+        return httpx.Response(200, json={"results": [], "associations": []})
+
+    service = WordstatService(
+        db, WordstatRepository(db), SecretCipher("x" * 32),
+        httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    service.connect(1, 7, "folder-1", "API_KEY", "secret-api-key")
+    snapshot = service.discover(
+        1, 7, WordstatDiscoveryRequest(
+            brand="АвтоПример", category="запчасти для китайских автомобилей",
+            seed_phrases=["Haval Jolion тормозные колодки"], limit=30,
+        ),
+    )
+    assert [item.query for item in snapshot.queries] == ["тормозные колодки Haval Jolion"]
 
 
 def test_wordstat_rejects_tokenized_punycode_query() -> None:
