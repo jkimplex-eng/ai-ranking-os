@@ -8,8 +8,12 @@ from backend.app.database import get_db
 from frozen_prompts.repository import FrozenPromptRepository
 from frozen_prompts.schemas import FanOutRequest, FanOutResult, PromptSetCreate, PromptSetRead
 from frozen_prompts.service import FrozenPromptService, PromptSetNotFoundError
+from geo_platforms.router import require_platform_scope
 
-router = APIRouter(prefix="/geo/prompt-sets", tags=["geo-prompt-sets"])
+router = APIRouter(
+    prefix="/geo/prompt-sets", tags=["geo-prompt-sets"],
+    dependencies=[Depends(require_platform_scope)],
+)
 DbSession = Annotated[Session, Depends(get_db)]
 
 

@@ -23,11 +23,14 @@ from backend.app.database import Base
 class FrozenPromptSet(Base):
     __tablename__ = "frozen_prompt_sets"
     __table_args__ = (
-        Index("uq_frozen_prompt_sets_code_version", "code", "version", unique=True),
-        Index("ix_frozen_prompt_sets_active", "code", "active"),
+        Index("uq_frozen_prompt_sets_organization_code_version", "organization_id", "code", "version", unique=True),
+        Index("ix_frozen_prompt_sets_active", "organization_id", "code", "active"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    organization_id: Mapped[int | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
     code: Mapped[str] = mapped_column(String(100), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     name: Mapped[str] = mapped_column(String(300), nullable=False)
