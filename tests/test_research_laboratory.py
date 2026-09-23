@@ -47,7 +47,7 @@ def _research_with_response(
         "/research-tasks",
         json={
             "research_id": research_id,
-            "query": f"Tell me about {title}",
+            "query": "Which provider would you recommend for this category?",
             "provider": "openai",
             "model": "gpt-test",
         },
@@ -59,7 +59,7 @@ def _research_with_response(
             "provider": "openai",
             "model": "gpt-test",
             "content": content,
-            "prompt": f"Tell me about {title}",
+            "prompt": "Which provider would you recommend for this category?",
             "normalized_response": {
                 "content": content,
                 "citations": [{"url": source, "title": "Independent source"}],
@@ -89,7 +89,7 @@ def test_laboratory_exposes_exact_provenance_without_model_score(client: TestCli
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["models"][0]["prompt"] == "Tell me about Acme"
+    assert payload["models"][0]["prompt"] == "Which provider would you recommend for this category?"
     assert payload["models"][0]["signals"]["mentioned"] is True
     assert payload["models"][0]["signals"]["visibility_score"] is None
     assert (

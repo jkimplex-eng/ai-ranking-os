@@ -27,7 +27,9 @@ class FrozenPromptRepository:
         )
 
     def list(self, code: str | None = None) -> list[FrozenPromptSet]:
-        statement = self._scope(select(FrozenPromptSet)).options(selectinload(FrozenPromptSet.instances))
+        statement = self._scope(select(FrozenPromptSet)).options(
+            selectinload(FrozenPromptSet.instances)
+        )
         if code:
             statement = statement.where(FrozenPromptSet.code == code)
         return list(

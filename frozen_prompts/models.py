@@ -23,7 +23,10 @@ from backend.app.database import Base
 class FrozenPromptSet(Base):
     __tablename__ = "frozen_prompt_sets"
     __table_args__ = (
-        Index("uq_frozen_prompt_sets_organization_code_version", "organization_id", "code", "version", unique=True),
+        Index(
+            "uq_frozen_prompt_sets_organization_code_version",
+            "organization_id", "code", "version", unique=True,
+        ),
         Index("ix_frozen_prompt_sets_active", "organization_id", "code", "active"),
     )
 

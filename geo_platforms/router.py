@@ -4,27 +4,30 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from backend.app.database import get_db
 from backend.app.config import get_settings
-from provider_connections.dependencies import default_organization
+from backend.app.database import get_db
 from geo_platforms.repository import PlatformRepository
 from geo_platforms.schemas import (
     DiscoveryRequest,
     DiscoveryResult,
     ImportRead,
     ImportRequest,
+    ObservedSourceCreate,
     PlatformCreate,
     PlatformRead,
     PlatformUpdate,
-    ObservedSourceCreate,
 )
 from geo_platforms.service import PlatformNotFoundError, PlatformService
+from provider_connections.dependencies import default_organization
+
 
 def require_platform_scope(request: Request, db: Annotated[Session, Depends(get_db)]) -> None:
     if not get_settings().security_enforce_auth:
         return
     principal = getattr(request.state, "principal", None)
-    user_id = getattr(principal, "user_id", getattr(principal, "owner_id", getattr(principal, "id", None)))
+    user_id = getattr(
+        principal, "user_id", getattr(principal, "owner_id", getattr(principal, "id", None))
+    )
     if user_id is None:
         raise HTTPException(401, "Authentication required")
     db.info["geo_organization_id"] = default_organization(db, int(user_id))
