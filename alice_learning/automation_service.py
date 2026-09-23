@@ -30,7 +30,7 @@ class AliceAutomationError(ValueError):
 class AliceAutomationService:
     """Automate reproducible Alice observations without claiming black-box causality."""
 
-    VERSION = "1.0"
+    VERSION = "1.1"
 
     def __init__(
         self,
@@ -105,7 +105,10 @@ class AliceAutomationService:
             ],
             methodology={
                 "version": self.VERSION,
-                "daily": "Frozen control queries; three independent repetitions by default.",
+                "daily": (
+                    "Фиксированные контрольные запросы через выбранные API или локальные модели; "
+                    "это не ответы пользовательской Алисы."
+                ),
                 "weekly": "Control plus adaptive buyer, competitor and observed-demand queries.",
                 "monthly": "Full set used as a stable long-window checkpoint.",
                 "causality": (

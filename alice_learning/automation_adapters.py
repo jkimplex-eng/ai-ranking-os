@@ -48,7 +48,7 @@ class ProductAutomationResearchAdapter:
                 entity_id=template.entity_id,
                 project_id=template.project_id,
                 domain_id=template.domain_id,
-                title=f"Автомониторинг Алисы: {request.brand}",
+                title=f"Автомониторинг API-моделей: {request.brand}",
                 description=template.description,
                 objective=template.objective,
                 metadata={
@@ -61,6 +61,8 @@ class ProductAutomationResearchAdapter:
                     "routing_profile": request.routing_profile,
                     "query_catalog": queries,
                     "automated": True,
+                    "measurement_surface": "MODEL_API",
+                    "selected_models": list(request.models),
                     "template_research_id": template.id,
                 },
             )
@@ -88,6 +90,9 @@ class ProductAutomationResearchAdapter:
             learned = 0
         self.db.refresh(result)
         responses = [response for task in result.tasks for response in task.responses]
+        observed_models = sorted({
+            (response.provider, response.model) for response in responses
+        })
         actual_cost = round(sum(float(item.cost or 0) for item in responses), 8)
         return AutomationLaunchResult(
             research_id=result.id,
@@ -95,6 +100,11 @@ class ProductAutomationResearchAdapter:
             actual_cost_usd=actual_cost,
             result={
                 "responses": len(responses),
+                "measurement_surface": "MODEL_API",
+                "observed_models": [
+                    {"provider": provider, "model": model}
+                    for provider, model in observed_models
+                ],
                 "completed_tasks": result.completed_tasks,
                 "failed_tasks": result.failed_tasks,
                 "query_map_version": result.metadata_payload.get("query_map_version"),

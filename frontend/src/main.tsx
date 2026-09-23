@@ -76,6 +76,12 @@ function researchBrand(item: ResearchItem | undefined) {
   if (!item) return "";
   return String(item.metadata?.brand ?? item.title.replace(/^AI Visibility:\s*/i, "")).trim();
 }
+function displayResearchTitle(title: string) {
+  return title.replace(/^Автомониторинг Алисы:/i, "Автомониторинг API-моделей:");
+}
+function configuredModelLabel(models: Array<{ provider: string; model: string }>) {
+  return models.length ? models.map((item) => `${item.provider}/${item.model}`).join(", ") : "модели не указаны";
+}
 const screenPaths: Record<Screen, string> = {
   home: "/",
   expert: "/expert-guide",
@@ -626,9 +632,9 @@ function RecordsScreen({ kind, onNewResearch }: { kind: RecordsKind; onNewResear
     const load = async () => {
       if (kind === "research" || kind === "history") {
         const items: ResearchItem[] = await api.listResearch();
-        return [...items].sort((a, b) => b.id - a.id).map((item) => ({ id: String(item.id), title: item.title, status: item.status, detail: `${item.progress_percent ?? 0}% · ${item.completed_tasks ?? 0}/${item.total_tasks ?? 0} задач`, meta: item.created_at ? new Date(item.created_at).toLocaleString("ru-RU") : undefined }));
+        return [...items].sort((a, b) => b.id - a.id).map((item) => ({ id: String(item.id), title: displayResearchTitle(item.title), status: item.status, detail: `${item.progress_percent ?? 0}% · ${item.completed_tasks ?? 0}/${item.total_tasks ?? 0} задач`, meta: item.created_at ? new Date(item.created_at).toLocaleString("ru-RU") : undefined }));
       }
-      if (kind === "reports") return (await api.reports()).items.map((item: ReportCatalogItem) => ({ id: String(item.research_id), title: item.title, status: item.status, detail: `AI Visibility: ${item.visibility_score?.toFixed(1) ?? "—"}`, meta: new Date(item.created_at).toLocaleString("ru-RU") }));
+      if (kind === "reports") return (await api.reports()).items.map((item: ReportCatalogItem) => ({ id: String(item.research_id), title: displayResearchTitle(item.title), status: item.status, detail: `AI Visibility: ${item.visibility_score?.toFixed(1) ?? "—"}`, meta: new Date(item.created_at).toLocaleString("ru-RU") }));
       if (kind === "recommendations") {
         const latest = [...await api.listResearch()].sort((a, b) => b.id - a.id)[0];
         if (!latest) return [];
@@ -1035,8 +1041,8 @@ function AdminConsoleScreen() {
   const sections = ["Users", "Organizations", "Research", "Reports", "Providers", "Jobs", "Feedback", "Product Analytics", "Audit", "Health", "Settings"];
   const rows = section === "Users" ? data?.users.map((item) => [item.display_name, item.email, item.status, `${item.research_count} исследований`])
     : section === "Organizations" ? data?.organizations.map((item) => [item.name, item.role, item.country ?? "GLOBAL", item.timezone])
-      : section === "Research" ? data?.research.map((item) => [item.title, item.status, `#${item.id}`])
-        : section === "Reports" ? data?.reports.map((item) => [item.title, item.status, item.visibility_score?.toFixed(1) ?? "—"])
+      : section === "Research" ? data?.research.map((item) => [displayResearchTitle(item.title), item.status, `#${item.id}`])
+        : section === "Reports" ? data?.reports.map((item) => [displayResearchTitle(item.title), item.status, item.visibility_score?.toFixed(1) ?? "—"])
           : section === "Providers" ? data?.providers.map((item) => [item.display_name, item.availability, item.free_tier ? "FREE" : "PAID"])
             : section === "Jobs" ? data?.jobs.map((item) => [`Execution #${item.id}`, item.state, `${item.attempts} попыток`])
               : section === "Feedback" ? data?.feedback.map((item) => [item.title, item.feedback_type, item.priority, item.status])
@@ -1352,7 +1358,7 @@ function GeoOpportunitiesScreen() {
       recover("GEO-аудиты", api.geoSiteAudits(), [] as GeoSiteAudit[]),
       recover<YandexIntelligence | undefined>("снимок Вебмастера", api.yandexIntelligence(), undefined),
       recover<AliceLearningDashboard | undefined>("закономерности YandexGPT API", api.aliceLearningDashboard(), undefined),
-      recover<AliceAutomationDashboard | undefined>("мониторинг YandexGPT API", api.aliceAutomationDashboard(), undefined),
+      recover<AliceAutomationDashboard | undefined>("мониторинг API-моделей", api.aliceAutomationDashboard(), undefined),
       recover<WordstatConnection | undefined>("Wordstat", api.wordstatStatus(), undefined),
       recover("исследования", api.listResearch(), [] as ResearchItem[]),
     ]);
@@ -1677,7 +1683,7 @@ function GeoOpportunitiesScreen() {
       </section>
       <section className="analytics-card geo-site-audit alice-automation">
         <div className="geo-audit-intro"><span className="eyebrow">ШАГ 3 · КОНТРОЛЬ ИЗМЕНЕНИЙ</span><h2>Следим, помогли ли ваши действия</h2><p>Система регулярно повторяет один и тот же набор вопросов. Благодаря неизменной контрольной группе видно, когда бренд начал или перестал появляться в рекомендациях и что изменилось перед этим.</p><div className="geo-user-value"><b>Сейчас выбран</b><p>{selectedBrand || "Выберите завершённое исследование выше"}. Мониторинг создаётся отдельно для каждого бренда и не смешивает результаты.</p></div>{selectedPlans.length ? null : <Button onClick={() => void enableAliceAutomation()} disabled={busy || loading || !aliceAutomation || !latestAutomationTemplate}>{busy ? "Настраиваем…" : `Включить проверку ${selectedBrand || "бренда"}`}</Button>}{!latestAutomationTemplate && !selectedPlans.length ? <small>Сначала завершите исследование этого бренда — оно станет контрольной точкой.</small> : null}</div>
-        {selectedPlans.length ? <div className="geo-audit-result">{selectedPlans.map((plan) => { const latestRun = aliceAutomation?.latest_runs.find((item) => item.plan_id === plan.id); return <article className="geo-audit-action" key={plan.id}><Badge tone={plan.is_enabled ? "success" : "neutral"}>{plan.is_enabled ? "АКТИВЕН" : "ПАУЗА"}</Badge><div><b>{plan.brand} · {plan.repetitions} прогона каждого вопроса</b><p>Канал: YandexGPT API · следующая проверка: {new Date(plan.next_run_at).toLocaleString("ru-RU")} · дневной лимит ${plan.daily_budget_usd.toFixed(2)} · месячный ${plan.monthly_budget_usd.toFixed(2)}</p><small>{latestRun ? `Последний запуск: ${latestRun.status}, ${latestRun.task_count} проверок, $${(latestRun.actual_cost_usd ?? 0).toFixed(4)}` : "Автоматических запусков ещё не было"}</small><div className="button-row"><Button onClick={() => void runAliceAutomation(plan.id)} disabled={busy || !plan.is_enabled}>Проверить сейчас</Button><button className="secondary" onClick={() => void toggleAliceAutomation(plan.id, !plan.is_enabled)} disabled={busy}>{plan.is_enabled ? "Поставить на паузу" : "Возобновить"}</button></div></div></article>; })}<p className="method-note">Закономерности считаются гипотезами по YandexGPT API. Причинный эффект публикации подтверждается только отдельным зафиксированным экспериментом до/после или с контрольной группой.</p></div> : <div className="geo-empty"><strong>{loadErrors["мониторинг YandexGPT API"] ? "Не удалось загрузить мониторинг" : loading ? "Загружаем мониторинг…" : `Для ${selectedBrand || "этого бренда"} мониторинг ещё не включён`}</strong><p>{loadErrors["мониторинг YandexGPT API"] || (loading ? "Проверяем сохранённые планы." : "Нажмите кнопку выше — система возьмёт выбранное исследование как шаблон и будет повторять именно его вопросы через YandexGPT API.")}</p></div>}
+        {selectedPlans.length ? <div className="geo-audit-result">{selectedPlans.map((plan) => { const latestRun = aliceAutomation?.latest_runs.find((item) => item.plan_id === plan.id); return <article className="geo-audit-action" key={plan.id}><Badge tone={plan.is_enabled ? "success" : "neutral"}>{plan.is_enabled ? "АКТИВЕН" : "ПАУЗА"}</Badge><div><b>{plan.brand} · {plan.repetitions} прогона каждого вопроса</b><p>Модели: {configuredModelLabel(plan.models)} · следующая проверка: {new Date(plan.next_run_at).toLocaleString("ru-RU")} · дневной лимит ${plan.daily_budget_usd.toFixed(2)} · месячный ${plan.monthly_budget_usd.toFixed(2)}</p><small>{latestRun ? `Последний запуск: ${latestRun.status}, ${latestRun.task_count} проверок, $${(latestRun.actual_cost_usd ?? 0).toFixed(4)}` : "Автоматических запусков ещё не было"}</small><div className="button-row"><Button onClick={() => void runAliceAutomation(plan.id)} disabled={busy || !plan.is_enabled}>Проверить сейчас</Button><button className="secondary" onClick={() => void toggleAliceAutomation(plan.id, !plan.is_enabled)} disabled={busy}>{plan.is_enabled ? "Поставить на паузу" : "Возобновить"}</button></div></div></article>; })}<p className="method-note">Это повторные ответы выбранных API или локальных моделей, не пользовательской Алисы. Наблюдаемые связи остаются гипотезами; причинный эффект публикации проверяется отдельным экспериментом.</p></div> : <div className="geo-empty"><strong>{loadErrors["мониторинг API-моделей"] ? "Не удалось загрузить мониторинг" : loading ? "Загружаем мониторинг…" : `Для ${selectedBrand || "этого бренда"} мониторинг ещё не включён`}</strong><p>{loadErrors["мониторинг API-моделей"] || (loading ? "Проверяем сохранённые планы." : "Нажмите кнопку выше — система возьмёт выбранное исследование как шаблон и повторит его вопросы через выбранные модели.")}</p></div>}
       </section>
       <section className="geo-layout">
         <form className="analytics-card geo-form" onSubmit={create}>
@@ -1852,7 +1858,7 @@ function Dashboard({
       <div className="page-heading">
         <div>
           <span className="eyebrow">СОСТОЯНИЕ БРЕНДА</span>
-          <h1>{research.title.replace(/^AI Visibility:\s*/, "")}</h1>
+          <h1>{displayResearchTitle(research.title.replace(/^AI Visibility:\s*/, ""))}</h1>
           <p>Исследование #{research.id} · {research.created_at ? new Date(research.created_at).toLocaleString("ru-RU") : "дата не записана"}</p>
         </div>
         <Button onClick={onStart}>Новое исследование</Button>

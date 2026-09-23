@@ -295,6 +295,7 @@ def test_automation_freezes_queries_repeats_three_times_and_records_run() -> Non
     dashboard = automation.dashboard(1)
     assert dashboard.plans[0].repetitions == 3
     assert "causality" in dashboard.methodology
+    assert "не ответы пользовательской Алисы" in dashboard.methodology["daily"]
 
 
 def test_automation_hard_budget_blocks_provider_call() -> None:
