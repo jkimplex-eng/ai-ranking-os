@@ -1459,35 +1459,14 @@ function GeoOpportunitiesScreen() {
     finally { setBusy(false); }
   };
   const registerObservedSource = async (source: NonNullable<NonNullable<ReportShape["yandex_generative_evidence"]>["source_patterns"]>[number]) => {
+    if (!selectedResearchId) { setError("Сначала выберите исследование."); return; }
     if (platforms.some((item) => item.domain.toLowerCase() === source.domain.toLowerCase())) {
       setOperationResult(`${source.domain} уже есть в вашем списке площадок.`);
       return;
     }
     setBusy(true); setError(""); setOperationResult("");
     try {
-      await api.createGeoPlatform({
-        name: source.domain,
-        domain: source.domain,
-        platform_type: "PUBLICATION",
-        category: "OBSERVED_YANDEX_SOURCE",
-        country: "RU",
-        language: "ru",
-        source: "YANDEX_SEARCH_GENERATIVE",
-        source_reference: `research:${selectedResearchId ?? "unknown"}`,
-        ai_engines: ["YANDEX_SEARCH_GENERATIVE"],
-        evidence: {
-          status: "OBSERVED",
-          research_id: selectedResearchId,
-          used_in_answers: source.used_in_answers,
-          coverage_percent: source.coverage_percent,
-          confidence: source.confidence,
-          urls: source.evidence.map((item) => item.url),
-          source_observations: source.evidence.map((item) => ({ query: item.query, url: item.url, title: item.title })),
-          suggested_topic: source.evidence[0]?.query ? `Материал, который полно отвечает на запрос: «${source.evidence[0].query}».` : "Проверить формат материалов площадки по теме исследования.",
-          publication_task: { status: "OBSERVED", owner: "", due_date: "", content_format: "Экспертная статья", publication_url: "", editorial_status: "NOT_CHECKED", editorial_rules_url: "", editorial_note: "" },
-          recorded_at: new Date().toISOString(),
-        },
-      });
+      await api.registerObservedGeoPlatform(selectedResearchId, source.domain);
       await load();
       setOperationResult(`${source.domain} добавлен в список кандидатов. Это наблюдаемый источник, а не подтверждённая рекомендация для размещения.`);
     } catch (reason) {
@@ -1616,7 +1595,12 @@ function GeoOpportunitiesScreen() {
       ? "НЕДОСТАТОЧНО РАЗНООБРАЗИЯ"
       : "НЕТ ОБУЧЕННОЙ МОДЕЛИ";
   const observedYandexSources = researchEvidence?.yandex_generative_evidence?.source_patterns ?? [];
-  const publicationCandidates = platforms.filter((item) => item.source === "YANDEX_SEARCH_GENERATIVE" && (!selectedResearchId || item.source_reference === `research:${selectedResearchId}`));
+  const publicationCandidates = platforms.filter((item) =>
+    item.source === "YANDEX_SEARCH_GENERATIVE" && (
+      !selectedResearchId || item.source_reference === `research:${selectedResearchId}` ||
+      observedYandexSources.some((source) => source.domain.toLowerCase() === item.domain.toLowerCase())
+    )
+  );
   return (
     <main className="analytics-page geo-page">
       <header className="analytics-hero">

@@ -2,9 +2,12 @@ from datetime import UTC, datetime
 from urllib.parse import urlsplit
 from uuid import UUID
 
+from backend.app.config import get_settings
 from geo_platforms.models import GeoPlatform, GeoPlatformImport
 from geo_platforms.repository import PlatformRepository
 from geo_platforms.schemas import DiscoveryRequest, ImportRequest, PlatformCreate, PlatformUpdate
+from geo_platforms.yandex_candidates import observed_candidate
+from research.models import Research
 
 
 class PlatformNotFoundError(LookupError):
@@ -29,9 +32,54 @@ class PlatformService:
         self.repository = repository
 
     def create(self, payload: PlatformCreate) -> GeoPlatform:
+        if payload.source != "MANUAL":
+            raise ValueError("Observed sources must be added from a saved research")
         if self.repository.by_domain(payload.domain):
             raise ValueError(f"Platform domain {payload.domain} already exists")
         return self.repository.save(GeoPlatform(**payload.model_dump()))
+
+    def register_observed(self, research_id: int, domain: str) -> GeoPlatform:
+        organization_id = self.repository.db.info.get("geo_organization_id")
+        user_id = self.repository.db.info.get("geo_user_id")
+        research = self.repository.db.get(Research, research_id)
+        if research is None:
+            raise PlatformNotFoundError("Research not found")
+        metadata = research.metadata_payload or {}
+        owner_org = metadata.get("organization_id")
+        if not isinstance(organization_id, int) and not get_settings().security_enforce_auth:
+            organization_id = owner_org
+        if not isinstance(organization_id, int):
+            raise PermissionError("Organization scope is required")
+        if owner_org != organization_id and not (
+            owner_org is None and metadata.get("created_by_user_id") == user_id
+        ):
+            raise PlatformNotFoundError("Research not found")
+        generative = (metadata.get("product_artifacts") or {}).get("yandex_generative_evidence") or {}
+        if (
+            generative.get("status") != "MEASURED"
+            or not str(generative.get("version") or "").startswith("yandex-generative-search-")
+        ):
+            raise ValueError("Research has no measured Yandex generative-search sources")
+        requested_domain = normalize_domain(domain)
+        for source in generative.get("source_patterns", []):
+            if not isinstance(source, dict):
+                continue
+            try:
+                matched = normalize_domain(str(source.get("domain") or "")) == requested_domain
+            except ValueError:
+                continue
+            if not matched:
+                continue
+            candidate = observed_candidate(
+                organization_id=organization_id, research_id=research_id, source=source
+            )
+            if candidate is None:
+                break
+            existing = self.repository.by_domain(candidate.domain) or self.repository.by_domain(
+                requested_domain
+            )
+            return existing or self.repository.save(candidate)
+        raise ValueError("Domain was not used in this research's Yandex answers")
 
     def update(self, platform_id: UUID, payload: PlatformUpdate) -> GeoPlatform:
         item = self._get(platform_id)

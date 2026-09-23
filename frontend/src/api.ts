@@ -475,6 +475,11 @@ export class ApiClient {
   updateAliceAutomationPlan(id: number, payload: { is_enabled?: boolean; monitoring_frequency?: "DAILY" | "WEEKLY" }) { return this.request<AliceAutomationPlan>(`/alice-learning/automation/plans/${id}`, { method: "PATCH", body: JSON.stringify(payload) }); }
   runAliceAutomationPlan(id: number, kind: "DAILY" | "WEEKLY" | "MONTHLY" = "DAILY") { return this.request<AliceAutomationRun>(`/alice-learning/automation/plans/${id}/run`, { method: "POST", body: JSON.stringify({ kind }) }); }
   geoPlatforms() { return this.request<GeoPlatform[]>("/geo/platforms"); }
+  registerObservedGeoPlatform(researchId: number, domain: string) {
+    return this.request<GeoPlatform>(`/geo/platforms/observed/${researchId}`, {
+      method: "POST", body: JSON.stringify({ domain }),
+    });
+  }
   createGeoPlatform(payload: {
     name: string; domain: string; category: string; country: string; language: string;
     platform_type?: string; source?: string; source_reference?: string; ai_engines?: string[];

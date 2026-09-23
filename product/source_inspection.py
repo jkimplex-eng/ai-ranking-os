@@ -130,7 +130,7 @@ class SourceInspectionService:
                 continue
             query = str(observation.get("query") or "")
             for source in observation.get("sources", []):
-                if not isinstance(source, dict):
+                if not isinstance(source, dict) or not source.get("used"):
                     continue
                 SourceInspectionService._add_external_source(
                     grouped,

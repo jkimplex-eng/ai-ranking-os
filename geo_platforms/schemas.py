@@ -49,6 +49,10 @@ class PlatformCreate(PlatformFields):
     pass
 
 
+class ObservedSourceCreate(BaseModel):
+    domain: str = Field(min_length=1, max_length=255)
+
+
 class PlatformUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=300)
     category: str | None = Field(default=None, min_length=1, max_length=100)

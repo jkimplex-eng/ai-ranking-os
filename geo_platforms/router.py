@@ -16,6 +16,7 @@ from geo_platforms.schemas import (
     PlatformCreate,
     PlatformRead,
     PlatformUpdate,
+    ObservedSourceCreate,
 )
 from geo_platforms.service import PlatformNotFoundError, PlatformService
 
@@ -27,6 +28,7 @@ def require_platform_scope(request: Request, db: Annotated[Session, Depends(get_
     if user_id is None:
         raise HTTPException(401, "Authentication required")
     db.info["geo_organization_id"] = default_organization(db, int(user_id))
+    db.info["geo_user_id"] = int(user_id)
 
 
 router = APIRouter(
@@ -42,6 +44,22 @@ def create_platform(payload: PlatformCreate, db: DbSession) -> PlatformRead:
         return PlatformService(PlatformRepository(db)).create(payload)
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.post("/observed/{research_id}", response_model=PlatformRead)
+def register_observed_source(
+    research_id: int, payload: ObservedSourceCreate, db: DbSession
+) -> PlatformRead:
+    try:
+        return PlatformService(PlatformRepository(db)).register_observed(
+            research_id, payload.domain
+        )
+    except PlatformNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.get("", response_model=list[PlatformRead])

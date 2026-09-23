@@ -25,6 +25,7 @@ from decision_center import service as decision_service
 from decision_center.models import AgentType
 from decision_center.schemas import AgentCreate
 from geo_platforms.models import GeoPlatform
+from geo_platforms.yandex_candidates import observed_candidate
 from graph.engine import GraphEngine
 from graph.ports import (
     EntityProvider,
@@ -624,14 +625,15 @@ class ProductPipeline:
         for source in evidence.get("source_patterns", []):
             if not isinstance(source, dict):
                 continue
-            domain = str(source.get("domain") or "").strip().casefold()
-            source_evidence = source.get("evidence")
-            if not domain or not isinstance(source_evidence, list):
+            candidate = observed_candidate(
+                organization_id=organization_id, research_id=research.id, source=source
+            )
+            if candidate is None:
                 continue
             existing = self.db.scalar(
                 select(GeoPlatform).where(
                     GeoPlatform.organization_id == organization_id,
-                    GeoPlatform.domain == domain,
+                    GeoPlatform.domain == candidate.domain,
                 )
             )
             if existing is not None:
@@ -640,68 +642,7 @@ class ProductPipeline:
                 # produced it, while the current research still exposes its
                 # own evidence in the report.
                 continue
-            first_proof = next(
-                (item for item in source_evidence if isinstance(item, dict) and item.get("query")),
-                {},
-            )
-            query = str(first_proof.get("query") or "")
-            # Keep the exact public observations with the candidate. A bare
-            # domain is insufficient evidence once the report is no longer open.
-            source_observations = [
-                {
-                    "query": str(item.get("query") or ""),
-                    "url": str(item.get("url") or ""),
-                    "title": str(item.get("title") or ""),
-                }
-                for item in source_evidence
-                if isinstance(item, dict) and item.get("url")
-            ]
-            task = {
-                "status": "OBSERVED",
-                "owner": "",
-                "due_date": "",
-                "content_format": "Экспертная статья",
-                "publication_url": "",
-                "editorial_status": "NOT_CHECKED",
-                "editorial_rules_url": "",
-                "editorial_note": "",
-            }
-            self.db.add(
-                GeoPlatform(
-                    organization_id=organization_id,
-                    name=domain,
-                    domain=domain,
-                    platform_type="PUBLICATION",
-                    category="OBSERVED_YANDEX_SOURCE",
-                    # A source used by a Russian-language Yandex answer is
-                    # not proof of its publication geography or language.
-                    country="GLOBAL",
-                    language="ALL",
-                    source="YANDEX_SEARCH_GENERATIVE",
-                    source_reference=f"research:{research.id}",
-                    ai_engines=["YANDEX_SEARCH_GENERATIVE"],
-                    evidence={
-                        "status": "OBSERVED",
-                        "research_id": research.id,
-                        "used_in_answers": source.get("used_in_answers", 0),
-                        "coverage_percent": source.get("coverage_percent", 0),
-                        "confidence": source.get("confidence", "LOW"),
-                        "urls": [
-                            str(item.get("url"))
-                            for item in source_evidence
-                            if isinstance(item, dict) and item.get("url")
-                        ],
-                        "source_observations": source_observations,
-                        "why_observed": source.get("interpretation", ""),
-                        "suggested_topic": (
-                            f"Материал, который полно отвечает на запрос: «{query}»."
-                            if query
-                            else "Проверить формат материалов площадки по теме исследования."
-                        ),
-                        "publication_task": task,
-                    },
-                )
-            )
+            self.db.add(candidate)
 
     def _research_organization_id(self, research: Research) -> int | None:
         """Resolve an organization for current and legacy research records.
