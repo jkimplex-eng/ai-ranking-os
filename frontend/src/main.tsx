@@ -213,13 +213,17 @@ type ReportShape = {
     status: string;
     queries_requested?: string[];
     queries_measured?: number;
+    queries_failed?: number;
+    failures?: Array<{ query: string; error: string }>;
     mention_count?: number;
     recommendation_count?: number;
+    recommendation_rate_percent?: number | null;
     target_citation_count?: number;
     visibility_score?: number | null;
     formula?: string;
     evidence_status?: string;
     limitations?: string[];
+    sample_scope?: { requested_queries: number; measured_answers: number; failed_queries: number; confidence_status: string; limitation: string };
     observations?: Array<{
       query: string;
       answer: string;
@@ -1618,6 +1622,7 @@ function GeoOpportunitiesScreen() {
       </section>
       <section className="analytics-card geo-site-audit">
         <div className="geo-audit-intro"><span className="eyebrow">ГЕНЕРАТИВНЫЙ ПОИСК ЯНДЕКСА</span><h2>Где стоит изучить возможность публикации или упоминания</h2><p>Это домены, которые генеративный поиск Яндекса действительно использовал в ответах выбранного исследования. Это отдельный канал, не YandexGPT API и не пользовательская Алиса. Мы не присваиваем площадкам выдуманные звёзды: показываем частоту, ссылки на наблюдения и уверенность.</p></div>
+        {(researchEvidence?.yandex_generative_evidence?.queries_failed ?? researchEvidence?.yandex_generative_evidence?.failures?.length ?? 0) > 0 ? <p className="method-note">Список источников частичный: {researchEvidence?.yandex_generative_evidence?.queries_failed ?? researchEvidence?.yandex_generative_evidence?.failures?.length ?? 0} запросов завершились ошибкой. Показаны только домены из полученных ответов.</p> : null}
         {observedYandexSources.length ? <div className="geo-audit-result"><header><div><strong>{observedYandexSources.length}</strong><span>доменов использовано в ответах</span></div><Badge tone="success">ИЗМЕРЕНО</Badge></header>{observedYandexSources.slice(0, 12).map((source) => { const added = publicationCandidates.some((item) => item.domain.toLowerCase() === source.domain.toLowerCase()); return <article className="geo-audit-action" key={source.domain}><Badge tone={source.confidence === "HIGH" ? "success" : "warning"}>{source.confidence}</Badge><div><b>{source.domain}</b><p>Использован в {source.used_in_answers} ответах · покрытие {source.coverage_percent.toFixed(1)}%</p><small>{source.interpretation}</small><details><summary>Почему площадка в списке</summary>{source.evidence.map((item) => <p key={`${item.query}:${item.url}`}><a href={item.url} target="_blank" rel="noreferrer">{item.title || item.url}</a><br />Запрос: «{item.query}»</p>)}</details><div className="button-row"><button className="secondary" disabled={busy || added} onClick={() => void registerObservedSource(source)}>{added ? "Кандидат сформирован" : "Добавить в кандидаты"}</button></div></div></article>; })}<p className="method-note">После первого измерения источники автоматически попадают в «Планы публикаций» ниже. Наличие домена в ответе доказывает использование источника в этой выборке, но не доказывает, что публикация на нём автоматически приведёт к рекомендации.</p></div> : <div className="geo-empty"><strong>{evidenceError ? "Не удалось загрузить источники" : !researchEvidence && selectedResearchId ? "Загружаем источники…" : "Площадки ещё не измерены"}</strong><p>{evidenceError || (researchEvidence?.yandex_generative_evidence?.limitations ?? []).join(" ") || "В выбранном исследовании нет измеренных источников генеративного поиска. Соберите спрос Wordstat и выполните новое исследование."}</p></div>}
         <MeasuredSources analysis={researchEvidence?.source_analysis} />
       </section>
@@ -1746,9 +1751,12 @@ function Dashboard({
     const observationAppendix = observations.length ? `<h1>Приложение: ответы генеративного поиска Яндекса</h1>${observations.map((item) => `<article><h2>${escapeHtml(item.query)}</h2><p>Упоминание бренда: ${item.brand_mentioned ? "да" : "нет"}; рекомендация: ${item.brand_recommended ? "да" : "нет"}; целевой URL процитирован: ${item.target_cited ? "да" : "нет"}</p><p>${escapeHtml(item.answer)}</p><ul>${item.sources.map((source) => `<li>${externalLink(source.url, source.title || source.url)}${source.used ? " · использован" : ""}</li>`).join("")}</ul></article>`).join("")}` : "";
     const scoreValue = valueOf(reportData.score ?? {}, "visibility_score");
     const searchEvidence = reportData.yandex_generative_evidence;
-    const searchMeasured = searchEvidence?.status === "MEASURED" && searchEvidence.visibility_score != null;
-    const scoreSummary = searchMeasured
-      ? `Генеративный поиск Яндекса: ${Number(searchEvidence.visibility_score).toFixed(1)} из 100 · ${searchEvidence.queries_measured ?? 0} проверенных запросов`
+    const measuredSearch = searchEvidence
+      && ["MEASURED", "PARTIAL"].includes(searchEvidence.status)
+      && searchEvidence.visibility_score != null ? searchEvidence : undefined;
+    const failedSearchQueries = measuredSearch?.queries_failed ?? measuredSearch?.failures?.length ?? 0;
+    const scoreSummary = measuredSearch
+      ? `Генеративный поиск Яндекса${failedSearchQueries ? " · частичный замер" : ""}: бренд рекомендован в ${measuredSearch.recommendation_count ?? 0} из ${measuredSearch.queries_measured ?? 0} полученных ответов (${(measuredSearch.recommendation_rate_percent ?? ((measuredSearch.recommendation_count ?? 0) / Math.max(measuredSearch.queries_measured ?? 0, 1) * 100)).toFixed(1)}%); ошибок: ${failedSearchQueries}`
       : reportData.score
         ? `API-модели: ${scoreValue.toFixed(1)} из 100 · генеративный поиск Яндекса не измерен`
         : "Видимость не измерена";
@@ -2586,8 +2594,11 @@ function Report({
   const brand = cleanBrand(result.research.title);
   const visibility = valueOf(score, "visibility_score");
   const yandexGenerative = report.yandex_generative_evidence;
-  const hasYandexGenerative = yandexGenerative?.status === "MEASURED" && yandexGenerative.visibility_score != null;
-  const primaryVisibility = hasYandexGenerative ? Number(yandexGenerative?.visibility_score) : visibility;
+  const hasYandexGenerative = ["MEASURED", "PARTIAL"].includes(yandexGenerative?.status ?? "") && yandexGenerative?.visibility_score != null;
+  const failedYandexQueries = yandexGenerative?.queries_failed ?? yandexGenerative?.failures?.length ?? 0;
+  const primaryVisibility = hasYandexGenerative
+    ? Number(yandexGenerative?.recommendation_rate_percent ?? ((yandexGenerative?.recommendation_count ?? 0) / Math.max(yandexGenerative?.queries_measured ?? 0, 1) * 100))
+    : visibility;
   const weakest = metricMeta.map(([label, key]) => ({ label, value: valueOf(score, key) })).sort((a, b) => a.value - b.value)[0];
   const visibilityMetric = report.trend?.metrics?.find((item) => item.metric === "visibility");
   const strengths = metricMeta
@@ -2624,12 +2635,12 @@ function Report({
             АНАЛИТИЧЕСКИЙ ОТЧЁТ · #{result.research.id}
           </span>
           <h1>{brand}</h1>
-          <p>{hasYandexGenerative ? `GEO-видимость в генеративном поиске Яндекса составляет ${primaryVisibility.toFixed(1)} из 100: бренд упомянут в ${yandexGenerative?.mention_count ?? 0} из ${yandexGenerative?.queries_measured ?? 0} ответов.` : `AI-видимость по API подключённых моделей составляет ${visibility.toFixed(1)} из 100. Генеративный поиск Яндекса пока не измерен.`}</p>
+          <p>{hasYandexGenerative ? `В генеративном поиске Яндекса бренд рекомендован в ${yandexGenerative?.recommendation_count ?? 0} из ${yandexGenerative?.queries_measured ?? 0} полученных ответов (${primaryVisibility.toFixed(1)}%). ${failedYandexQueries ? `Не удалось получить ещё ${failedYandexQueries} ответов; результат частичный.` : "Это результат только этой выборки, а не гарантия для всех запросов."}` : `AI-видимость по API подключённых моделей составляет ${visibility.toFixed(1)} из 100. Генеративный поиск Яндекса пока не измерен.`}</p>
         </div>
         <div className="report-score">
-          <span>{hasYandexGenerative ? "Генеративный поиск Яндекса" : "API-модели"}</span>
-          <strong>{primaryVisibility.toFixed(1)}</strong>
-          <em>{hasYandexGenerative ? "Реальный API-поиск с генеративным ответом" : "Вспомогательный замер"}</em>
+          <span>{hasYandexGenerative ? "Доля рекомендаций в ответах Яндекса" : "API-модели"}</span>
+          <strong>{primaryVisibility.toFixed(1)}{hasYandexGenerative ? "%" : ""}</strong>
+          <em>{hasYandexGenerative ? `${yandexGenerative?.queries_measured ?? 0} ответов · ${failedYandexQueries} ошибок · ограниченная выборка` : "Вспомогательный замер"}</em>
         </div>
       </section>
       <section className="report-plain-summary" aria-label="Краткий вывод"><article><span>Что означает {visibility.toFixed(1)}</span><h2>{visibility >= 75 ? "Бренд заметен в этой выборке, но результат не универсален" : visibility >= 50 ? "Бренд упоминается, но не всегда становится рекомендацией" : "Бренд редко появляется в исследованных ответах"}</h2><p>Проверено {successfulResponses} успешных ответов по {report.explainability?.sample_scope?.query_count ?? report.query_catalog?.length ?? 0} запросам и {models.length} моделям. Оценка относится только к этой матрице.</p></article><article><span>Главное ограничение</span><h2>{weakest.label}: {weakest.value.toFixed(1)} из 100</h2><p>{weakest.label === "Цитирование" ? `Ссылки найдены в ${citedResponses} из ${successfulResponses} ответов. Без внешних источников ИИ не подтверждает выводы о бренде.` : weakest.label === "Рекомендации" ? `Бренд рекомендован в ${recommendedResponses} из ${successfulResponses} ответов. Простого упоминания недостаточно.` : "Подробное основание и ответы перечислены ниже."}</p></article><article><span>Что делать сначала</span><h2>Открыть раздел «Где публиковаться»</h2><p>Там показаны найденные источники, дефицитные запросы, конкретный материал и способ повторной проверки результата.</p><a href="#actions">Перейти к плану действий ↓</a></article></section>
@@ -2721,7 +2732,9 @@ function Report({
         {hasYandexGenerative ? <section className="panel research-lab-section">
           <span className="section-label">ГЕНЕРАТИВНЫЙ ПОИСК ЯНДЕКСА</span>
           <h2>Что получает пользователь по запросам Wordstat</h2>
-          <p><b>{primaryVisibility.toFixed(1)} из 100</b> · упоминаний {yandexGenerative?.mention_count ?? 0} · рекомендаций {yandexGenerative?.recommendation_count ?? 0} · ссылок на сайт {yandexGenerative?.target_citation_count ?? 0}.</p>
+          <p><b>Рекомендации: {primaryVisibility.toFixed(1)}% ({yandexGenerative?.recommendation_count ?? 0} из {yandexGenerative?.queries_measured ?? 0} ответов)</b> · упоминаний {yandexGenerative?.mention_count ?? 0} · ссылок на сайт {yandexGenerative?.target_citation_count ?? 0}. Взвешенный индекс этой выборки: {Number(yandexGenerative?.visibility_score ?? 0).toFixed(1)} из 100.</p>
+          {failedYandexQueries > 0 ? <p className="method-note">Частичный замер: {failedYandexQueries} запросов завершились ошибкой и не входят в знаменатель.</p> : null}
+          {(yandexGenerative?.sample_scope?.confidence_status === "INSUFFICIENT_SAMPLE" || (yandexGenerative?.queries_measured ?? 0) < 8) ? <p className="method-note">Малая выборка: результат нельзя считать устойчивой оценкой за пределами этих вопросов.</p> : null}
           <h3>Источники, реально использованные Яндексом</h3>
           {yandexGenerative?.source_patterns?.length ? yandexGenerative.source_patterns.slice(0, 12).map((source) => <details className="evidence-details" key={source.domain}><summary>{source.domain} · использован в {source.used_in_answers} ответах · уверенность {source.confidence}</summary><p>{source.interpretation}</p><p><b>Покрытие выборки:</b> {source.coverage_percent.toFixed(1)}%</p><ul>{source.evidence.map((item) => <li key={`${item.query}:${item.url}`}><a href={item.url} target="_blank" rel="noreferrer">{item.title || source.domain}</a> · запрос «{item.query}»</li>)}</ul></details>) : <p>Использованные источники не возвращены.</p>}
           <h3>Исходные ответы</h3>

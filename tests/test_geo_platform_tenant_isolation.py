@@ -1,9 +1,8 @@
-from uuid import uuid4
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -46,7 +45,9 @@ def test_platforms_and_publication_evidence_are_isolated_by_organization() -> No
         assert [item.id for item in repository.list()] == [second.id]
 
         # Legacy rows with unknown ownership must not become visible to either client.
-        db.add(GeoPlatform(id=uuid4(), name="Legacy", domain="legacy.ru", evidence={"query": "unknown"}))
+        db.add(GeoPlatform(
+            id=uuid4(), name="Legacy", domain="legacy.ru", evidence={"query": "unknown"},
+        ))
         db.commit()
         assert [item.id for item in repository.list()] == [second.id]
         db.info["geo_organization_id"] = 1
@@ -94,7 +95,9 @@ def test_observed_candidate_uses_saved_evidence_not_client_claims() -> None:
             "source_patterns": [{
                 "domain": "example.ru", "used_in_answers": 1,
                 "evidence": [{
-                    "query": "как выбрать крем", "url": "https://example.ru/guide", "title": "Guide",
+                    "query": "как выбрать крем",
+                    "url": "https://example.ru/guide",
+                    "title": "Guide",
                 }],
             }],
         }
@@ -103,7 +106,9 @@ def test_observed_candidate_uses_saved_evidence_not_client_claims() -> None:
                 "organization_id": 1, "product_artifacts": {"yandex_generative_evidence": evidence},
             }),
             Research(id=202, title="Second", metadata_payload={
-                "organization_id": 2, "product_artifacts": {"yandex_generative_evidence": evidence},
+                "organization_id": 2, "product_artifacts": {
+                    "yandex_generative_evidence": {**evidence, "status": "PARTIAL"}
+                },
             }),
         ])
         db.commit()

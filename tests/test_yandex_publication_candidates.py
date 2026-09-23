@@ -1,7 +1,10 @@
 from types import SimpleNamespace
 
+import pytest
+
 from geo_platforms.models import GeoPlatform
 from product.service import ProductPipeline
+
 # ProductPipeline instantiates ORM entities.  Load this relationship target so
 # this focused test does not depend on imports performed by unrelated tests.
 from recommendation.simulation.models import RecommendationSimulation  # noqa: F401
@@ -18,13 +21,14 @@ class _Db:
         self.added.append(item)
 
 
-def test_yandex_sources_become_observed_publication_candidates() -> None:
+@pytest.mark.parametrize("measurement_status", ["MEASURED", "PARTIAL"])
+def test_yandex_sources_become_observed_publication_candidates(measurement_status: str) -> None:
     db = _Db()
     pipeline = ProductPipeline(db)  # type: ignore[arg-type]
     pipeline._materialize_yandex_publication_candidates(
         SimpleNamespace(id=42, metadata_payload={"organization_id": 7}),
         {
-            "status": "MEASURED",
+            "status": measurement_status,
             "source_patterns": [
                 {
                     "domain": "example.ru",

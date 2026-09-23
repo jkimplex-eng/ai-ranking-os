@@ -16,7 +16,7 @@ class YandexGenerativeEvidenceService:
     """Measure Yandex generative-search answers without calling them consumer Alice."""
 
     BASE_URL = "https://searchapi.api.cloud.yandex.net/v2/gen/search"
-    VERSION = f"yandex-generative-search-1.1-{BRAND_VERDICT_VERSION}"
+    VERSION = f"yandex-generative-search-1.2-{BRAND_VERDICT_VERSION}"
 
     def __init__(self, client: httpx.Client | None = None) -> None:
         self.client = client or httpx.Client(timeout=60)
@@ -64,6 +64,8 @@ class YandexGenerativeEvidenceService:
                 if not isinstance(payload, dict):
                     raise ValueError("Unexpected Yandex GenSearch response")
                 content = str((payload.get("message") or {}).get("content") or "")
+                if not content.strip():
+                    raise ValueError("Empty Yandex GenSearch answer")
                 sources = [
                     {
                         "url": str(item.get("url") or ""),
@@ -164,11 +166,17 @@ class YandexGenerativeEvidenceService:
         )
         return {
             "version": cls.VERSION,
-            "status": "MEASURED" if measured else "NOT_MEASURED",
+            "status": (
+                "NOT_MEASURED" if not measured else "PARTIAL" if failures else "MEASURED"
+            ),
             "queries_requested": queries,
             "queries_measured": measured,
+            "queries_failed": len(failures),
             "mention_count": mentions,
             "recommendation_count": recommendations,
+            "recommendation_rate_percent": (
+                round(recommendations / measured * 100, 1) if measured else None
+            ),
             "target_citation_count": citations,
             "visibility_score": score if measured else None,
             "formula": (
@@ -178,6 +186,21 @@ class YandexGenerativeEvidenceService:
             "observations": observations,
             "source_patterns": source_patterns,
             "failures": failures,
+            "sample_scope": {
+                "requested_queries": len(queries),
+                "measured_answers": measured,
+                "failed_queries": len(failures),
+                "confidence_status": (
+                    "NOT_MEASURED" if not measured
+                    else "INSUFFICIENT_SAMPLE" if measured < 8
+                    else "PARTIAL" if failures
+                    else "MEASURED"
+                ),
+                "limitation": (
+                    "Доля рекомендаций и индекс относятся только к успешно полученным "
+                    "ответам этой выборки, а не ко всем запросам или пользовательской Алисе."
+                ),
+            },
             "captured_at": datetime.now(UTC).isoformat(),
             "evidence_status": "OBSERVED_YANDEX_GENERATIVE_SEARCH",
             "limitations": [
@@ -187,6 +210,8 @@ class YandexGenerativeEvidenceService:
                 "отличаться.",
                 "Метка рекомендации определяется версионированным правилом, относится только "
                 "к указанному бренду и требует просмотра исходного ответа.",
+                "При ошибках запросов результат частичный; при менее чем восьми ответах "
+                "выборка недостаточна для устойчивого вывода.",
             ],
         }
 

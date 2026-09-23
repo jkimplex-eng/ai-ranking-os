@@ -40,6 +40,7 @@ def test_generative_evidence_measures_brand_and_target_citation() -> None:
     assert result["recommendation_count"] == 1
     assert result["target_citation_count"] == 1
     assert result["visibility_score"] == 100.0
+    assert result["sample_scope"]["confidence_status"] == "INSUFFICIENT_SAMPLE"
     assert result["evidence_status"] == "OBSERVED_YANDEX_GENERATIVE_SEARCH"
     assert result["observations"][0]["brand_verdict"]["status"] == "RECOMMENDED"
     assert result["source_patterns"][0]["domain"] == "app.разуммаркета.рф"
@@ -71,6 +72,46 @@ def test_generative_evidence_does_not_infer_a_missing_brand() -> None:
     assert result["recommendation_count"] == 0
     assert result["target_citation_count"] == 0
     assert result["visibility_score"] == 0.0
+
+
+def test_partial_and_empty_yandex_answers_are_not_reported_as_full_measurement() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        query = request.read().decode("utf-8")
+        if "первый" in query:
+            return httpx.Response(200, json={
+                "message": {"content": "Рекомендуем Разум рынка."},
+                "sources": [{"url": "https://example.ru/guide", "used": True}],
+            })
+        return httpx.Response(200, json={"message": {"content": "  "}})
+
+    service = YandexGenerativeEvidenceService(
+        httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    result = service.measure(
+        credential="secret", auth_type="API_KEY", folder_id="folder",
+        queries=["первый запрос", "второй запрос"], brand="Разум рынка",
+    )
+
+    assert result["status"] == "PARTIAL"
+    assert result["queries_measured"] == 1
+    assert result["queries_failed"] == 1
+    assert result["recommendation_count"] == 1
+    assert result["recommendation_rate_percent"] == 100.0
+    assert result["sample_scope"]["confidence_status"] == "INSUFFICIENT_SAMPLE"
+    assert result["sample_scope"]["requested_queries"] == 2
+    assert result["source_patterns"][0]["domain"] == "example.ru"
+    assert result["failures"][0]["error"] == "Yandex GenSearch API response could not be parsed"
+
+
+def test_all_failed_queries_are_not_a_measured_zero() -> None:
+    result = YandexGenerativeEvidenceService._report(
+        ["первый запрос"], [], [{"query": "первый запрос", "error": "timeout"}]
+    )
+    assert result["status"] == "NOT_MEASURED"
+    assert result["recommendation_rate_percent"] is None
+    assert result["visibility_score"] is None
+    assert result["sample_scope"]["confidence_status"] == "NOT_MEASURED"
+    assert result["source_patterns"] == []
 
 
 def test_unselected_source_does_not_count_as_target_citation() -> None:

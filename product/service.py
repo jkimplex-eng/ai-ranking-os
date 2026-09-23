@@ -616,7 +616,7 @@ class ProductPipeline:
         response marked it as a source.  It is intentionally an *observed
         candidate*, not a recommendation or a promise of editorial access.
         """
-        if evidence.get("status") != "MEASURED":
+        if evidence.get("status") not in {"MEASURED", "PARTIAL"}:
             return
         organization_id = self._research_organization_id(research)
         if organization_id is None:
@@ -867,7 +867,11 @@ class FinalReportService:
         metrics: dict[str, Any] = {
             "mention_score": {
                 "formula": "mentioned_responses / total_responses * 100",
-                "inputs": {"mentioned_responses": mentioned, "total_responses": len(responses), "evidence_response_ids": mentioned_ids},
+                "inputs": {
+                    "mentioned_responses": mentioned,
+                    "total_responses": len(responses),
+                    "evidence_response_ids": mentioned_ids,
+                },
                 "normalization": "bounded 0..100",
                 "weight": SCORING_WEIGHTS["mention"],
             },
@@ -1025,12 +1029,19 @@ class FinalReportService:
             "prompts": prompts,
             "responses": response_evidence,
             "recommendation_measurement": {
-                "status": "NOT_MEASURED" if not processed else ("PARTIAL" if processed < len(responses) else "MEASURED"),
+                "status": (
+                    "NOT_MEASURED" if not processed
+                    else "PARTIAL" if processed < len(responses)
+                    else "MEASURED"
+                ),
                 "recommended_responses": recommended,
                 "measured_responses": processed,
                 "rate_percent": round(recommended / processed * 100, 1) if processed else None,
                 "evidence_response_ids": recommended_ids,
-                "scope": "Only successfully processed responses in this research; not a promise of visibility in Yandex search or Alice.",
+                "scope": (
+                    "Only successfully processed responses in this research; "
+                    "not a promise of visibility in Yandex search or Alice."
+                ),
             },
             "citations": citation_evidence,
             "unsupported_metrics": ["authority", "knowledge_graph_score"],

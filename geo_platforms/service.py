@@ -54,9 +54,12 @@ class PlatformService:
             owner_org is None and metadata.get("created_by_user_id") == user_id
         ):
             raise PlatformNotFoundError("Research not found")
-        generative = (metadata.get("product_artifacts") or {}).get("yandex_generative_evidence") or {}
+        generative = (
+            (metadata.get("product_artifacts") or {}).get("yandex_generative_evidence")
+            or {}
+        )
         if (
-            generative.get("status") != "MEASURED"
+            generative.get("status") not in {"MEASURED", "PARTIAL"}
             or not str(generative.get("version") or "").startswith("yandex-generative-search-")
         ):
             raise ValueError("Research has no measured Yandex generative-search sources")
