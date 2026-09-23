@@ -275,3 +275,8 @@ def test_batch_prioritization_and_openapi_contract(client: TestClient) -> None:
     assert "location /api/v1/eis/" in nginx
     assert "proxy_pass http://backend_upstream/api/v1/eis/;" in nginx
     assert "server backend:8000 resolve;" in nginx
+    assert "location = /metrics { return 404; }" in nginx
+    prometheus = Path("deployment/production/monitoring/prometheus.yml").read_text(
+        encoding="utf-8"
+    )
+    assert 'targets: ["backend:8000"]' in prometheus
