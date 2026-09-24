@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+import time
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -25,6 +26,22 @@ def call(path: str, *, method: str = "GET", payload=None, token: str | None = No
             return response.status, json.load(response)
     except HTTPError as error:
         raise RuntimeError(f"{path}: HTTP {error.code}: {error.read().decode()}") from error
+
+
+def wait_for_research(research_id: int, token: str) -> dict:
+    deadline = time.monotonic() + int(os.environ.get("SMOKE_RESEARCH_TIMEOUT_SECONDS", "180"))
+    while True:
+        status, research = call(f"/api/research/{research_id}", token=token)
+        if status != 200:
+            raise RuntimeError(f"Research {research_id} status request returned HTTP {status}")
+        state = research.get("status")
+        if state == "COMPLETED":
+            return research
+        if state == "FAILED":
+            raise RuntimeError(f"Research {research_id} failed in the worker")
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"Research {research_id} stayed in {state} beyond smoke timeout")
+        time.sleep(2)
 
 
 def main() -> None:
@@ -71,13 +88,17 @@ def main() -> None:
     )
     assert status == 200 and review["valid"] is True
     status, result = call("/api/research/wizard/run", method="POST", payload=payload, token=token)
-    assert status == 201 and result["research"]["status"] == "COMPLETED"
-    assert result["report"]["score"]["visibility_score"] >= 0
+    assert status == 201
+    research_id = result["research"]["id"]
+    if result["research"]["status"] != "COMPLETED":
+        wait_for_research(research_id, token)
+    report_status, report = call(f"/api{result['report_url']}", token=token)
+    assert report_status == 200 and report["score"]["visibility_score"] >= 0
     print(
         json.dumps(
             {
                 "status": "PASS",
-                "research_id": result["research"]["id"],
+                "research_id": research_id,
                 "report_url": result["report_url"],
             }
         )

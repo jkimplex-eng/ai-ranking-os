@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
+from deployment.production.scripts import smoke_test
 
 
 def test_live_ready_and_request_id(monkeypatch) -> None:
@@ -27,3 +28,18 @@ def test_smoke_script_is_valid_python() -> None:
     source = Path("deployment/production/scripts/smoke_test.py").read_text(encoding="utf-8")
     compile(source, "smoke_test.py", "exec")
     assert json.loads('{"status":"PASS"}')["status"] == "PASS"
+
+
+def test_smoke_waits_for_asynchronous_research(monkeypatch) -> None:
+    states = iter(["ACTIVE", "ACTIVE", "COMPLETED"])
+    calls = []
+
+    def fake_call(path, *, token):
+        calls.append((path, token))
+        return 200, {"status": next(states)}
+
+    monkeypatch.setattr(smoke_test, "call", fake_call)
+    monkeypatch.setattr(smoke_test.time, "sleep", lambda seconds: None)
+
+    assert smoke_test.wait_for_research(42, "test-token") == {"status": "COMPLETED"}
+    assert calls == [("/api/research/42", "test-token")] * 3
