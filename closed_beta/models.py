@@ -15,6 +15,15 @@ class BetaAccessStatus(StrEnum):
     EXPIRED = "EXPIRED"
 
 
+class SubscriptionStatus(StrEnum):
+    NONE = "NONE"
+    TRIAL = "TRIAL"
+    ACTIVE = "ACTIVE"
+    PAST_DUE = "PAST_DUE"
+    PAUSED = "PAUSED"
+    CANCELED = "CANCELED"
+
+
 class BetaUserProfile(Base):
     __tablename__ = "beta_user_profiles"
 
@@ -26,6 +35,13 @@ class BetaUserProfile(Base):
     max_projects: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
     max_domains: Mapped[int] = mapped_column(Integer, nullable=False, default=25)
     max_organization_users: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    plan_code: Mapped[str] = mapped_column(String(40), nullable=False, default="trial")
+    subscription_status: Mapped[str] = mapped_column(String(20), nullable=False, default="NONE")
+    subscription_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    subscription_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    payment_provider: Mapped[str | None] = mapped_column(String(40))
+    external_customer_id: Mapped[str | None] = mapped_column(String(200))
+    external_subscription_id: Mapped[str | None] = mapped_column(String(200))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False
     )

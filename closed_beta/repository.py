@@ -19,9 +19,7 @@ class BetaRepository:
         }
 
     def profile(self, user_id: int) -> BetaUserProfile | None:
-        return self.db.scalar(
-            select(BetaUserProfile).where(BetaUserProfile.user_id == user_id)
-        )
+        return self.db.scalar(select(BetaUserProfile).where(BetaUserProfile.user_id == user_id))
 
     def save_profile(self, item: BetaUserProfile) -> BetaUserProfile:
         self.db.add(item)
@@ -39,13 +37,9 @@ class BetaRepository:
         return self.db.get(BetaInvitation, invitation_id)
 
     def invitation_by_hash(self, token_hash: str) -> BetaInvitation | None:
-        return self.db.scalar(
-            select(BetaInvitation).where(BetaInvitation.token_hash == token_hash)
-        )
+        return self.db.scalar(select(BetaInvitation).where(BetaInvitation.token_hash == token_hash))
 
     def invitations(self) -> list[BetaInvitation]:
         return list(
-            self.db.scalars(
-                select(BetaInvitation).order_by(BetaInvitation.created_at.desc())
-            )
+            self.db.scalars(select(BetaInvitation).order_by(BetaInvitation.created_at.desc()))
         )

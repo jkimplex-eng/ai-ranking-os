@@ -2,6 +2,8 @@ import httpx
 import pytest
 
 from backend.app.providers.base import GenerateRequest
+from backend.app.providers.cache import provider_cache
+from backend.app.providers.credentials import credentials
 from backend.app.providers.exceptions import ProviderError
 from backend.app.providers.factory import factory
 from backend.app.providers.transport import HTTPTransport
@@ -75,3 +77,38 @@ def test_transport_does_not_retry_authentication(monkeypatch: pytest.MonkeyPatch
     with pytest.raises(ProviderError):
         HTTPTransport(max_retries=3, retry_base_seconds=0).request("GET", "https://x", headers={})
     assert attempts == 1
+
+
+def test_yandex_health_uses_completion_endpoint_and_native_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PROVIDER_MOCK_MODE", "false")
+    credentials.set("YANDEX_API_KEY", "test-key")
+    credentials.set("YANDEX_FOLDER_ID", "test-folder")
+    provider_cache._values.clear()
+    provider = factory.create("yandex")
+    captured: dict[str, object] = {}
+
+    def request(method: str, url: str, **kwargs):
+        captured.update(method=method, url=url, **kwargs)
+        return {
+            "result": {
+                "alternatives": [
+                    {"message": {"role": "assistant", "text": "ok"}, "status": "FINAL"}
+                ],
+                "usage": {"inputTextTokens": "1", "completionTokens": "1"},
+            }
+        }
+
+    monkeypatch.setattr(provider._transport, "request", request)
+    try:
+        assert provider.health()["available"] is True
+        assert captured["method"] == "POST"
+        assert str(captured["url"]).endswith("/completion")
+        payload = captured["json"]
+        assert payload["modelUri"] == "gpt://test-folder/yandexgpt/latest"
+        assert payload["messages"] == [{"role": "user", "text": "ping"}]
+    finally:
+        credentials.clear("YANDEX_API_KEY")
+        credentials.clear("YANDEX_FOLDER_ID")
+        provider_cache._values.clear()

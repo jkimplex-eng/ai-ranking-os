@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     log_level: str = "INFO"
     execution_retry_base_seconds: float = Field(default=0.1, ge=0)
+    research_agent_wait_seconds: float = Field(default=0, ge=0, le=300)
+    research_stale_seconds: int = Field(default=900, ge=60, le=86_400)
     build_sha: str = "development"
     release_channel: str = "production"
     auth_jwt_secret: str = "development-only-change-me"
@@ -40,6 +42,19 @@ class Settings(BaseSettings):
     admin_email: str | None = None
     admin_password: str | None = None
     admin_display_name: str = "AI Ranking OS Administrator"
+    provider_secret_key: str | None = None
+    wordstat_platform_organization_id: int | None = None
+    yandex_webmaster_client_id: str | None = None
+    yandex_webmaster_client_secret: str | None = None
+    yandex_webmaster_redirect_uri: str = (
+        "https://app.разуммаркета.рф/api/integrations/yandex-webmaster/callback"
+    )
+    tbank_mode: str = "test"
+    tbank_terminal_key: str | None = None
+    tbank_password: str | None = None
+    tbank_notification_url: str = "https://app.разуммаркета.рф/api/billing/tbank/notification"
+    tbank_success_url: str = "https://app.разуммаркета.рф/billing/success"
+    tbank_fail_url: str = "https://app.разуммаркета.рф/billing/fail"
 
 
 @lru_cache

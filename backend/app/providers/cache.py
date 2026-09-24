@@ -43,6 +43,10 @@ class TTLCache:
                 expires_at=monotonic() + (ttl_seconds or self.ttl_seconds),
             )
 
+    def delete(self, key: str) -> None:
+        with self._lock:
+            self._values.pop(key, None)
+
 
 prompt_cache = TTLCache()
 provider_cache = TTLCache(ttl_seconds=60)

@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from research.brand_verdict import VERSION as BRAND_VERDICT_VERSION
+from research.brand_verdict import classify_brand, prompt_names_brand
 from research.models import (
     Research,
     ResearchScore,
@@ -13,13 +15,13 @@ from research.models import (
 )
 from research.repositories import EntityNotFoundError
 
-SCORING_VERSION = "1.0"
+SCORING_VERSION = f"4.0-{BRAND_VERDICT_VERSION}"
 SCORING_WEIGHTS = {
-    "mention": 0.35,
-    "recommendation": 0.20,
-    "citation": 0.15,
-    "coverage": 0.20,
-    "confidence": 0.10,
+    "mention": 0.45,
+    "recommendation": 0.35,
+    "citation": 0.20,
+    "coverage": 0.0,
+    "confidence": 0.0,
 }
 
 
@@ -37,16 +39,12 @@ class ScoringService:
             raise EntityNotFoundError(f"Research {research_id} not found")
         responses = self._responses(research_id)
         if not responses:
-            raise ScoringNotReadyError(
-                f"Research {research_id} has no responses to score"
-            )
+            raise ScoringNotReadyError(f"Research {research_id} has no responses to score")
         if any(
             response.processing_status == ResponseProcessingStatus.NORMALIZED
             for response in responses
         ):
-            raise ScoringNotReadyError(
-                f"Research {research_id} still has unprocessed responses"
-            )
+            raise ScoringNotReadyError(f"Research {research_id} still has unprocessed responses")
 
         processed = [
             response
@@ -54,41 +52,42 @@ class ScoringService:
             if response.processing_status == ResponseProcessingStatus.PROCESSED
         ]
         target = self._target(research)
+        eligible = [
+            response for response in responses
+            if not prompt_names_brand(response.prompt, target)
+        ]
+        if not eligible:
+            raise ScoringNotReadyError(
+                f"Research {research_id} has no unbranded responses to score"
+            )
+        eligible_processed = [
+            response for response in eligible
+            if response.processing_status == ResponseProcessingStatus.PROCESSED
+        ]
         mention_score = _ratio(
-            sum(self._mentions(response, target) for response in processed),
-            len(responses),
+            sum(self._mentions(response, target) for response in eligible_processed),
+            len(eligible),
         )
         recommendation_score = _ratio(
-            sum(bool(response.extracted_recommendations) for response in processed),
-            len(responses),
+            sum(self._recommends_target(response, target) for response in eligible_processed),
+            len(eligible),
         )
         citation_score = _ratio(
-            sum(len(response.extracted_citations) for response in processed),
-            len(responses) * 3,
+            sum(len(response.extracted_citations) for response in eligible_processed),
+            len(eligible) * 3,
         )
         expected = max(research.total_tasks, len(research.tasks), 1)
-        coverage_score = _ratio(
-            len(
-                {
-                    (response.provider.casefold(), response.model.casefold())
-                    for response in processed
-                }
-            ),
-            expected,
-        )
+        coverage_score = _ratio(len(processed), expected)
         entity_confidences = [
-            entity.confidence
-            for response in processed
-            for entity in response.extracted_entities
+            entity.confidence for response in processed for entity in response.extracted_entities
         ]
         entity_confidence = (
-            statistics.fmean(entity_confidences) * 100
-            if entity_confidences
-            else 50.0
+            statistics.fmean(entity_confidences) * 100 if entity_confidences else 50.0
         )
         processing_success = _ratio(len(processed), len(responses))
+        sample_factor = min(1.0, len(processed) / 8)
         confidence_score = _bounded(
-            processing_success * 0.7 + entity_confidence * 0.3
+            processing_success * 0.5 + entity_confidence * 0.3 + sample_factor * 100 * 0.2
         )
         visibility_score = _bounded(
             mention_score * SCORING_WEIGHTS["mention"]
@@ -130,9 +129,7 @@ class ScoringService:
             .order_by(ResearchScore.calculated_at.desc())
         )
         if score is None:
-            raise EntityNotFoundError(
-                f"Score for Research {research_id} not found"
-            )
+            raise EntityNotFoundError(f"Score for Research {research_id} not found")
         return score
 
     def calculate_if_ready(self, research_id: int) -> ResearchScore | None:
@@ -146,6 +143,9 @@ class ScoringService:
             response.processing_status == ResponseProcessingStatus.NORMALIZED
             for response in responses
         ):
+            return None
+        target = self._target(research)
+        if all(prompt_names_brand(response.prompt, target) for response in responses):
             return None
         return self.calculate(research_id)
 
@@ -175,17 +175,25 @@ class ScoringService:
 
     @staticmethod
     def _mentions(response: Response, target: str) -> bool:
-        if target in response.content.casefold():
-            return True
-        return any(
-            target
-            in {
-                entity.name.casefold(),
-                entity.canonical_name.casefold(),
-                *(alias.casefold() for alias in entity.aliases),
-            }
-            for entity in response.extracted_entities
-        )
+        # The answer text is the measurement surface. Extracted entities can be
+        # enriched from request metadata and therefore cannot independently prove
+        # that the model mentioned the target.
+        return target in response.content.casefold()
+
+    @staticmethod
+    def _recommends_target(response: Response, target: str) -> bool:
+        """Use the same scoped, conservative verdict as Wordstat analytics.
+
+        Generic extraction snippets are useful for a reader, but they must not
+        decide the measured recommendation rate.  The verdict checks the target
+        brand in its own sentence/clause and rejects negated or uncertain cases.
+        """
+        return classify_brand(response.content, target).status == "RECOMMENDED"
+
+
+def response_recommends_target(response: Response, target: str) -> bool:
+    """Public scoring predicate reused by explainability/report composition."""
+    return ScoringService._recommends_target(response, target.casefold())
 
 
 def _ratio(numerator: int, denominator: int) -> float:

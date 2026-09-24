@@ -1,0 +1,596 @@
+from __future__ import annotations
+
+import re
+from datetime import UTC, datetime
+from urllib.parse import urlparse
+
+import httpx
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from provider_connections.crypto import SecretCipher
+from research.brand_verdict import VERSION as VERDICT_VERSION
+from research.brand_verdict import classify_brand
+from research.models import (
+    ExtractedCitation,
+    ExtractedEntity,
+    Research,
+    ResearchTask,
+    Response,
+    ResponseProcessingStatus,
+)
+from yandex_wordstat.models import WordstatConnection, WordstatDemandSnapshot
+from yandex_wordstat.repository import WordstatRepository
+from yandex_wordstat.schemas import (
+    WordstatAnalyticsRead,
+    WordstatConnectionRead,
+    WordstatDiscoveryRequest,
+    WordstatQueryAnalyticsItem,
+    WordstatQueryRead,
+    WordstatSnapshotRead,
+)
+
+
+class WordstatError(ValueError):
+    pass
+
+
+class WordstatService:
+    BASE_URL = "https://searchapi.api.cloud.yandex.net"
+    VERSION = "1.5"
+    _AMBIGUOUS_CATEGORY_TOKENS = {"ai", "geo", "ии", "гео", "seo", "сео"}
+    _ASSOCIATION_STOPWORDS = {
+        "как", "где", "что", "это", "для", "под", "при", "или", "без",
+        "над", "про", "через", "сайт", "сайта",
+    }
+    _FOOD_CREAM_TOKENS = {
+        "чиз", "торт", "суп", "сливк", "творож", "сыр", "рецепт", "заварн",
+        "десерт", "кулинар", "пирож", "кекс", "бисквит", "маскарпон",
+    }
+    _COSMETIC_CREAM_TOKENS = {
+        "тональ", "увлаж", "питатель", "лиц", "рук", "тел", "волос", "кож",
+        "глаз", "век", "ног", "spf", "санскрин", "защит", "ночн", "дневн",
+        "матир", "антивозраст", "омолаж", "bb", "cc", "уход", "макияж",
+        "сух", "чувствител", "проблемн", "акне", "пигмент",
+    }
+    _LOW_SIGNAL_CREAM_TOKENS = {"ли", "можно", "какой", "хороший", "домашн", "со", "мл"}
+
+    def __init__(
+        self,
+        db: Session,
+        repository: WordstatRepository,
+        cipher: SecretCipher,
+        client: httpx.Client | None = None,
+        platform_organization_id: int | None = None,
+    ) -> None:
+        self.db = db
+        self.repository = repository
+        self.cipher = cipher
+        self.client = client or httpx.Client(timeout=30)
+        self.platform_organization_id = platform_organization_id
+
+    def connect(
+        self,
+        organization_id: int,
+        user_id: int,
+        folder_id: str,
+        auth_type: str,
+        credential: str,
+    ) -> WordstatConnectionRead:
+        self._request(
+            credential,
+            auth_type,
+            "/v2/wordstat/topRequests",
+            {
+                "phrase": "яндекс",
+                "numPhrases": 1,
+                "regions": ["213"],
+                "devices": ["DEVICE_ALL"],
+                "folderId": folder_id.strip(),
+            },
+        )
+        now = datetime.now(UTC)
+        connection = self.repository.connection(organization_id)
+        if connection is None:
+            connection = WordstatConnection(
+                organization_id=organization_id,
+                folder_id=folder_id.strip(),
+                auth_type=auth_type,
+                credential_ciphertext=self.cipher.encrypt(credential.strip()),
+                created_by=user_id,
+            )
+        else:
+            connection.folder_id = folder_id.strip()
+            connection.auth_type = auth_type
+            connection.credential_ciphertext = self.cipher.encrypt(credential.strip())
+        connection.status = "CONNECTED"
+        connection.last_checked_at = now
+        connection.last_success_at = now
+        connection.last_error = None
+        return self.read(self.repository.save(connection))
+
+    def status(self, organization_id: int) -> WordstatConnectionRead:
+        connection, managed = self.repository.effective_connection(
+            organization_id, self.platform_organization_id
+        )
+        return self.read(connection, managed_by_platform=managed)
+
+    def disconnect(self, organization_id: int) -> None:
+        connection = self.repository.connection(organization_id)
+        if connection:
+            self.repository.delete(connection)
+
+    def discover(
+        self, organization_id: int, user_id: int, payload: WordstatDiscoveryRequest
+    ) -> WordstatSnapshotRead:
+        connection, credential = self._connection(organization_id)
+        device_names = {
+            "all": "DEVICE_ALL",
+            "desktop": "DEVICE_DESKTOP",
+            "phone": "DEVICE_PHONE",
+            "tablet": "DEVICE_TABLET",
+        }
+        seeds = self._discovery_seeds(payload)
+        phrases_per_seed = min(
+            max(10, (payload.limit * 3 + len(seeds) - 1) // len(seeds)), 100
+        )
+        rows: list[tuple[str, int, str, str]] = []
+        for seed in seeds:
+            request_payload: dict[str, object] = {
+                "phrase": seed,
+                "numPhrases": phrases_per_seed,
+                "devices": [device_names[payload.device]],
+                "folderId": connection.folder_id,
+            }
+            if payload.region_ids:
+                request_payload["regions"] = [str(value) for value in payload.region_ids]
+            data = self._request(
+                credential,
+                connection.auth_type,
+                "/v2/wordstat/topRequests",
+                request_payload,
+            )
+            for key, source_type in (("results", "TOP"), ("associations", "SIMILAR")):
+                for item in data.get(key, []) if isinstance(data, dict) else []:
+                    if not isinstance(item, dict):
+                        continue
+                    query = str(item.get("phrase", "")).strip()
+                    count = int(item.get("count") or 0)
+                    if query and count >= 0:
+                        rows.append((query, count, source_type, seed))
+        deduplicated: dict[str, tuple[str, int, str, str]] = {}
+        for query, count, source_type, seed in rows:
+            if not self._query_well_formed(query) or not self._query_relevant_to_category(
+                query, payload.category, source_type, seed=seed
+            ):
+                continue
+            normalized = " ".join(query.casefold().split())
+            previous = deduplicated.get(normalized)
+            if previous is None or count > previous[1]:
+                deduplicated[normalized] = (query, count, source_type, seed)
+        ordered = sorted(deduplicated.values(), key=lambda item: (-item[1], item[0]))
+        # Filter before deduplication so an irrelevant broad-category association
+        # cannot hide the same relevant phrase returned for a confirmed seed.
+        brand_key = payload.brand.casefold().strip()
+        unbranded = [item for item in ordered if brand_key not in item[0].casefold()]
+        branded = [item for item in ordered if brand_key in item[0].casefold()]
+        selected = [*unbranded[: payload.limit], *branded[:2]]
+        queries = [
+            WordstatQueryRead(
+                query=query,
+                frequency=count,
+                demand_rank=index,
+                source_type=source_type,
+                branded=brand_key in query.casefold(),
+                selected_for_alice=index <= payload.limit,
+            )
+            for index, (query, count, source_type, _seed) in enumerate(selected, 1)
+        ]
+        snapshot = self.repository.save(
+            WordstatDemandSnapshot(
+                organization_id=organization_id,
+                brand=payload.brand.strip(),
+                category=payload.category.strip(),
+                region_ids=payload.region_ids,
+                device=payload.device,
+                status="READY" if queries else "EMPTY",
+                queries=[item.model_dump(mode="json") for item in queries],
+                raw_count=len(rows),
+                limitations=[
+                    "Частотность Wordstat отражает запросы к Яндекс Поиску за период API, "
+                    "а не число запросов к Алисе.",
+                    "Проверка Алисы выполняется отдельно через подключённый YandexGPT; "
+                    "публичный интерфейс Алисы может отличаться.",
+                    "Совпадение частотности и рекомендации является наблюдением, "
+                    "а не доказательством причинного влияния.",
+                    "Связанные фразы Wordstat автоматически отбрасываются, если они "
+                    "не совпадают минимум по двум смысловым словам исходной фразы "
+                    "(или по одному для однословной фразы); короткие GEO/AI/SEO "
+                    "сами по себе не подтверждают релевантность.",
+                    "Исходные фразы: " + "; ".join(seeds) + ". Каждая фраза проверена "
+                    "в выбранном регионе и на выбранном типе устройства.",
+                ],
+                algorithm_version=self.VERSION,
+                created_by=user_id,
+            )
+        )
+        connection.last_checked_at = datetime.now(UTC)
+        connection.last_success_at = connection.last_checked_at
+        connection.last_error = None
+        self.repository.save(connection)
+        return self._snapshot(snapshot)
+
+    @staticmethod
+    def _discovery_seeds(payload: WordstatDiscoveryRequest) -> list[str]:
+        """Keep category coverage while letting a client confirm assortment anchors."""
+        seeds = [payload.category.strip(), *payload.seed_phrases]
+        return list(dict.fromkeys(seed for seed in seeds if seed))
+
+    @classmethod
+    def _association_relevant(cls, query: str, category: str) -> bool:
+        def tokens(value: str) -> list[str]:
+            return re.findall(r"[a-zа-яё0-9]+", value.casefold())
+
+        query_tokens = tokens(query)
+        category_tokens = [
+            token
+            for token in tokens(category)
+            if len(token) >= 3
+            and token not in cls._AMBIGUOUS_CATEGORY_TOKENS
+            and token not in cls._ASSOCIATION_STOPWORDS
+        ]
+        if not category_tokens:
+            return False
+
+        def same_lexeme(left: str, right: str) -> bool:
+            # Seven characters separate «продвижение» from «продвинутый», while
+            # five are enough for shorter inflections such as дизайн/дизайну.
+            desired_length = 7 if min(len(left), len(right)) >= 8 else 5
+            prefix_length = min(desired_length, len(left), len(right))
+            return prefix_length >= 3 and left[:prefix_length] == right[:prefix_length]
+
+        matched_query_indexes: set[int] = set()
+        matched_category_tokens = 0
+        for category_token in dict.fromkeys(category_tokens):
+            for index, query_token in enumerate(query_tokens):
+                if index not in matched_query_indexes and same_lexeme(category_token, query_token):
+                    matched_query_indexes.add(index)
+                    matched_category_tokens += 1
+                    break
+        # A generic word like «нейросеть» or «ответы» alone does not make
+        # an association relevant to a multi-concept customer intent.
+        return matched_category_tokens >= min(2, len(set(category_tokens)))
+
+    @classmethod
+    def _query_relevant_to_category(
+        cls, query: str, category: str, source_type: str, *, seed: str | None = None
+    ) -> bool:
+        """Reject high-frequency homonyms before they reach a buyer-question set.
+
+        Wordstat TOP is a popularity list, not a classification guarantee. In
+        particular, a seed like ``кремы`` mixes cosmetics with cooking. A
+        cosmetic brand must never spend an AI check on ``крем чиз`` or a recipe.
+        Uncertain, short fragments are omitted and can be added as a custom
+        question when they are intentional.
+        """
+        # A confirmed assortment seed can be narrower than the broad category.
+        # Judge its associations against that seed, not only the generic category.
+        anchor = seed or category
+        if source_type == "SIMILAR" and not cls._association_relevant(query, anchor):
+            return False
+        tokens = re.findall(r"[a-zа-яё0-9]+", query.casefold())
+        category_tokens = re.findall(r"[a-zа-яё0-9]+", category.casefold())
+        is_cream_market = any(token.startswith("крем") for token in category_tokens)
+        if not is_cream_market:
+            # TOP phrases are also popularity results, not proof that the
+            # whole buyer intent matches the seed (e.g. real estate vs AI).
+            return cls._association_relevant(query, anchor)
+        if any(
+            any(token.startswith(food) for food in cls._FOOD_CREAM_TOKENS)
+            for token in tokens
+        ):
+            return False
+        cosmetic_signal = any(
+            any(token.startswith(signal) for signal in cls._COSMETIC_CREAM_TOKENS)
+            for token in tokens
+        )
+        if cosmetic_signal:
+            return True
+        meaningful = [
+            token
+            for token in tokens
+            if token not in {"для", "и", "в", "на", "с", "по", "от", "к", "из"}
+            and not token.startswith("крем")
+        ]
+        return len(meaningful) >= 2 and not all(
+            any(token.startswith(low) for low in cls._LOW_SIGNAL_CREAM_TOKENS)
+            for token in meaningful
+        )
+
+    @staticmethod
+    def _query_well_formed(query: str) -> bool:
+        # Wordstat occasionally tokenizes an IDN hostname into an unusable search
+        # phrase (for example ``xn d1...``). It is not a buyer question.
+        return re.search(r"\bxn\s+[a-z0-9]{6,}\b", query.casefold()) is None
+
+    def latest(
+        self, organization_id: int, brand: str | None = None, snapshot_id: int | None = None
+    ) -> WordstatSnapshotRead:
+        snapshot = self._snapshot_for_request(organization_id, brand, snapshot_id)
+        if snapshot is None:
+            raise WordstatError("Исследование спроса Wordstat ещё не выполнялось")
+        return self._snapshot(snapshot)
+
+    def analytics(
+        self, organization_id: int, brand: str | None = None, snapshot_id: int | None = None
+    ) -> WordstatAnalyticsRead:
+        snapshot = self._snapshot_for_request(organization_id, brand, snapshot_id)
+        if snapshot is None:
+            raise WordstatError("Сначала соберите частотные запросы Wordstat")
+        queries = [WordstatQueryRead.model_validate(item) for item in snapshot.queries]
+        query_keys = {item.query.casefold().strip(): item for item in queries}
+        matching_researches = list(
+            self.db.scalars(
+                select(Research)
+                .where(
+                    Research.metadata_payload["organization_id"].as_integer()
+                    == organization_id,
+                    func.lower(Research.metadata_payload["brand"].as_string())
+                    == snapshot.brand.casefold(),
+                    Research.metadata_payload["yandex_wordstat_snapshot_id"].as_integer()
+                    == snapshot.id,
+                )
+                .order_by(Research.created_at.desc())
+                .limit(100)
+            )
+        )
+        research_ids = [item.id for item in matching_researches]
+        rows = []
+        if research_ids:
+            rows = self.db.execute(
+                select(Response, ResearchTask)
+                .join(ResearchTask, Response.research_task_id == ResearchTask.id)
+                .where(
+                    ResearchTask.research_id.in_(research_ids),
+                    Response.provider.in_(["yandex", "yandexgpt"]),
+                )
+            ).all()
+        citation_domains_by_response: dict[int, set[str]] = {}
+        response_ids = [response.id for response, _task in rows]
+        if response_ids:
+            citations = self.db.execute(
+                select(ExtractedCitation.response_id, ExtractedCitation.url).where(
+                    ExtractedCitation.response_id.in_(response_ids)
+                )
+            ).all()
+            for response_id, url in citations:
+                parsed = urlparse(url or "")
+                if parsed.scheme not in {"http", "https"}:
+                    continue
+                domain = (parsed.hostname or "").casefold().removeprefix("www.")
+                if domain:
+                    citation_domains_by_response.setdefault(response_id, set()).add(domain)
+        grouped: dict[str, list[tuple[Response, ResearchTask]]] = {key: [] for key in query_keys}
+        excluded = dict.fromkeys(query_keys, 0)
+        for response, task in rows:
+            key = " ".join(task.query.casefold().split())
+            if key in grouped:
+                if (
+                    response.processing_status != ResponseProcessingStatus.PROCESSED
+                    or not response.content.strip()
+                ):
+                    excluded[key] += 1
+                    continue
+                grouped[key].append((response, task))
+        items = []
+        numerator = 0.0
+        denominator = 0.0
+        for key, query in query_keys.items():
+            observations = grouped[key]
+            mentions = 0
+            recommendations = 0
+            options = 0
+            competitors: set[str] = set()
+            domains: set[str] = set()
+            used_researches: set[int] = set()
+            verdicts = []
+            for response, task in observations:
+                verdict = classify_brand(response.content, snapshot.brand)
+                mentioned = verdict.status not in {"NOT_MEASURED", "NOT_MENTIONED"}
+                recommended = verdict.status == "RECOMMENDED"
+                verdicts.append({"response_id": response.id, **verdict.to_dict()})
+                mentions += int(mentioned)
+                recommendations += int(recommended)
+                options += int(verdict.status == "PROPOSED_AS_OPTION")
+                used_researches.add(task.research_id)
+                domains.update(citation_domains_by_response.get(response.id, ()))
+                entity_rows = self.db.scalars(
+                    select(ExtractedEntity).where(
+                        ExtractedEntity.response_id == response.id,
+                        ExtractedEntity.entity_type == "BRAND",
+                    )
+                )
+                competitors.update(
+                    entity.canonical_name
+                    for entity in entity_rows
+                    if entity.canonical_name.casefold() != snapshot.brand.casefold()
+                )
+            response_count = len(observations)
+            if response_count:
+                denominator += query.frequency
+                numerator += query.frequency * (recommendations / response_count)
+            items.append(
+                WordstatQueryAnalyticsItem(
+                    query=query.query,
+                    frequency=query.frequency,
+                    demand_rank=query.demand_rank,
+                    response_count=response_count,
+                    mention_count=mentions,
+                    recommendation_count=recommendations,
+                    option_count=options,
+                    mention_rate=round(mentions / response_count * 100, 1) if response_count else 0,
+                    recommendation_rate=(
+                        round(recommendations / response_count * 100, 1) if response_count else 0
+                    ),
+                    competing_brands=sorted(competitors),
+                    citation_domains=sorted(domains),
+                    evidence_status="MEASURED" if response_count else "NOT_MEASURED",
+                    research_ids=sorted(used_researches),
+                    verdicts=verdicts,
+                    ambiguous_count=sum(v["status"] == "AMBIGUOUS" for v in verdicts),
+                    excluded_response_count=excluded[key],
+                )
+            )
+        checked = sum(item.response_count > 0 for item in items)
+        return WordstatAnalyticsRead(
+            snapshot_id=snapshot.id,
+            brand=snapshot.brand,
+            category=snapshot.category,
+            query_count=len(items),
+            checked_query_count=checked,
+            total_frequency=sum(item.frequency for item in queries),
+            weighted_visibility=round(numerator / denominator * 100, 1) if denominator else None,
+            numerator=round(numerator, 4),
+            denominator=round(denominator, 4),
+            status="MEASURED"
+            if checked == len(items) and items
+            else "PARTIAL"
+            if checked
+            else "NOT_MEASURED",
+            items=items,
+            methodology_version=f"1.2/{VERDICT_VERSION}",
+            limitations=[
+                "Используются консервативные текстовые правила: неоднозначные ответы "
+                "требуют проверки и не считаются явными рекомендациями. Это новая "
+                "аналитика, а не пересчёт исторических баллов исследования.",
+                "Взвешенная видимость = сумма(частотность × доля рекомендаций бренда) / "
+                "сумма частотностей проверенных запросов.",
+                "Непроверенные запросы не входят в знаменатель и явно помечены NOT_MEASURED.",
+                "Метрика относится только к сохранённой выборке Wordstat, региону, "
+                "периоду, снимку спроса и ответам YandexGPT. Исследования без связи "
+                "с этим снимком не подмешиваются в результат.",
+                "Предложение бренда в списке вариантов показывается отдельно и не "
+                "входит в долю явных рекомендаций.",
+            ],
+        )
+
+    def _snapshot_for_request(
+        self, organization_id: int, brand: str | None, snapshot_id: int | None
+    ) -> WordstatDemandSnapshot | None:
+        """Resolve one immutable snapshot; never silently fall back across regions."""
+        if snapshot_id is None:
+            return self.repository.latest(organization_id, brand)
+        snapshot = self.repository.snapshot(organization_id, snapshot_id)
+        if snapshot is None:
+            return None
+        if brand and snapshot.brand.casefold() != brand.casefold():
+            raise WordstatError("Снимок Wordstat относится к другому бренду")
+        return snapshot
+
+    @staticmethod
+    def read(
+        connection: WordstatConnection | None, *, managed_by_platform: bool = False
+    ) -> WordstatConnectionRead:
+        if connection is None:
+            return WordstatConnectionRead(connected=False, status="NOT_CONFIGURED")
+        return WordstatConnectionRead(
+            connected=connection.status == "CONNECTED",
+            status=connection.status,
+            folder_id=None if managed_by_platform else connection.folder_id,
+            auth_type=None if managed_by_platform else connection.auth_type,
+            last_checked_at=connection.last_checked_at,
+            last_success_at=connection.last_success_at,
+            last_error=connection.last_error,
+            managed_by_platform=managed_by_platform,
+        )
+
+    def _connection(self, organization_id: int) -> tuple[WordstatConnection, str]:
+        connection, _ = self.repository.effective_connection(
+            organization_id, self.platform_organization_id
+        )
+        if connection is None:
+            raise WordstatError("Сначала подключите API Яндекс Wordstat в настройках")
+        try:
+            credential = self.cipher.decrypt(connection.credential_ciphertext)
+        except ValueError as error:
+            raise WordstatError("Сохранённый токен Wordstat не удалось расшифровать") from error
+        return connection, credential
+
+    def _request(
+        self,
+        credential: str,
+        auth_type: str,
+        path: str,
+        payload: dict[str, object] | None = None,
+    ) -> dict:
+        try:
+            response = self.client.request(
+                "POST",
+                self.BASE_URL + path,
+                headers={
+                    "Authorization": (
+                        f"Api-key {credential}"
+                        if auth_type == "API_KEY"
+                        else f"Bearer {credential}"
+                    ),
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+        except httpx.HTTPError as error:
+            raise WordstatError("Не удалось соединиться с API Яндекс Wordstat") from error
+        if response.status_code == 401:
+            raise WordstatError("Яндекс отклонил API-ключ или IAM-токен Wordstat")
+        if response.status_code == 403:
+            raise WordstatError(
+                "Нет доступа к Wordstat: проверьте роль search-api.webSearch.user, "
+                "область API-ключа yc.search-api.execute и идентификатор каталога."
+            )
+        if response.status_code == 429:
+            raise WordstatError("Исчерпана персональная квота Wordstat; повторите позже")
+        if response.status_code >= 400:
+            raise WordstatError(f"Wordstat API вернул HTTP {response.status_code}")
+        data = response.json()
+        return data if isinstance(data, dict) else {"items": data}
+
+    @staticmethod
+    def _snapshot(item: WordstatDemandSnapshot) -> WordstatSnapshotRead:
+        return WordstatSnapshotRead(
+            id=item.id,
+            organization_id=item.organization_id,
+            brand=item.brand,
+            category=item.category,
+            region_ids=item.region_ids,
+            device=item.device,
+            status=item.status,
+            queries=[WordstatQueryRead.model_validate(value) for value in item.queries],
+            raw_count=item.raw_count,
+            limitations=item.limitations,
+            algorithm_version=item.algorithm_version,
+            created_at=item.created_at,
+        )
+
+
+class WordstatQuerySource:
+    """Read-only port for adding observed demand to the Research Wizard."""
+
+    def __init__(self, db: Session) -> None:
+        self.repository = WordstatRepository(db)
+
+    def queries(self, organization_id: int, brand: str, limit: int = 12) -> tuple[int, list[str]]:
+        snapshot = self.repository.latest(organization_id, brand)
+        if snapshot is None:
+            return 0, []
+        rows = [WordstatQueryRead.model_validate(item) for item in snapshot.queries]
+        # Old snapshots keep their historical evidence, but their SIMILAR
+        # phrases were accepted on a single generic token. Never promote
+        # those phrases into a new automated research after the rule changed.
+        legacy_associations = snapshot.algorithm_version in {
+            "1.0", "1.1", "1.2", "1.3", "1.4",
+        }
+        selected = [
+            item.query for item in rows
+            if item.selected_for_alice and not item.branded
+            and not (legacy_associations and item.source_type == "SIMILAR")
+        ]
+        return snapshot.id, selected[:limit]

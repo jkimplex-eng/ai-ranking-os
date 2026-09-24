@@ -9,14 +9,38 @@ from closed_beta.schemas import (
     BetaUserRead,
     BetaUserUpdate,
     InvitationAccept,
+    InvitationAcceptByToken,
     InvitationAccepted,
     InvitationCreate,
     InvitationCreated,
     InvitationRead,
+    SubscriptionUpdate,
+    TariffRead,
 )
 from closed_beta.service import BetaAdminError, BetaNotFoundError
 
 router = APIRouter(tags=["closed-beta"])
+
+
+@router.get("/admin/billing/tariffs", response_model=list[TariffRead])
+def list_tariffs(service: BetaServiceDependency, _admin_id: BetaAdminId) -> list[TariffRead]:
+    return service.tariffs()
+
+
+@router.patch("/admin/billing/subscriptions/{user_id}", response_model=BetaUserRead)
+def update_subscription(
+    user_id: int,
+    payload: SubscriptionUpdate,
+    request: Request,
+    service: BetaServiceDependency,
+    admin_id: BetaAdminId,
+) -> BetaUserRead:
+    try:
+        return service.update_subscription(user_id, payload, str(admin_id), _correlation(request))
+    except BetaNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except BetaAdminError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 def _correlation(request: Request) -> str:
@@ -28,9 +52,7 @@ def list_beta_users(
     service: BetaServiceDependency,
     _admin_id: BetaAdminId,
     search: str | None = Query(default=None, max_length=200),
-    beta_status: Annotated[
-        BetaAccessStatus | None, Query(alias="status")
-    ] = None,
+    beta_status: Annotated[BetaAccessStatus | None, Query(alias="status")] = None,
     active: bool | None = None,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
@@ -87,9 +109,7 @@ def revoke_invitation(
     admin_id: BetaAdminId,
 ) -> InvitationRead:
     try:
-        return service.revoke_invitation(
-            invitation_id, str(admin_id), _correlation(request)
-        )
+        return service.revoke_invitation(invitation_id, str(admin_id), _correlation(request))
     except BetaNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
@@ -105,16 +125,24 @@ def resend_invitation(
     admin_id: BetaAdminId,
 ) -> InvitationCreated:
     try:
-        return service.resend_invitation(
-            invitation_id, str(admin_id), _correlation(request)
-        )
+        return service.resend_invitation(invitation_id, str(admin_id), _correlation(request))
     except BetaNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
-@router.post(
-    "/beta/invitations/{token}/accept", response_model=InvitationAccepted
-)
+@router.post("/beta/invitations/accept", response_model=InvitationAccepted)
+def accept_invitation_from_body(
+    payload: InvitationAcceptByToken, service: BetaServiceDependency
+) -> InvitationAccepted:
+    try:
+        return service.accept(payload.token, payload)
+    except (BetaNotFoundError, ValueError) as error:
+        raise HTTPException(status_code=404, detail="Invitation is unavailable") from error
+
+
+# Compatibility for already-open client pages. The edge suppresses access
+# logs for this path so its token cannot be written to request-URI logs.
+@router.post("/beta/invitations/{token}/accept", response_model=InvitationAccepted)
 def accept_invitation(
     token: str, payload: InvitationAccept, service: BetaServiceDependency
 ) -> InvitationAccepted:

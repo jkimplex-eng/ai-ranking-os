@@ -21,9 +21,9 @@ def build_graph(payload: GraphBuildRequest, db: DbSession) -> GraphSnapshotRead:
 
 
 @router.get("", response_model=GraphSnapshotRead)
-def get_latest_graph(db: DbSession) -> GraphSnapshotRead:
+def get_latest_graph(db: DbSession, research_id: int | None = None) -> GraphSnapshotRead:
     try:
-        return build_graph_engine(db).latest()
+        return build_graph_engine(db).latest(research_id)
     except GraphSnapshotNotFoundError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
 
@@ -34,4 +34,3 @@ def get_graph_snapshot(snapshot_id: int, db: DbSession) -> GraphSnapshotRead:
         return build_graph_engine(db).get(snapshot_id)
     except GraphSnapshotNotFoundError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
-

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from contextlib import suppress
 from typing import Any
+from urllib.parse import urlparse
 from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import select
@@ -11,6 +13,7 @@ from analytics.repository import SqlAlchemyAnalyticsRepository
 from analytics.schemas import AnalyticsFilter, AnalyticsQuery, FilterOperator, Statistic
 from analytics.service import AnalyticsService
 from backend.app.analytics_source import PlatformAnalyticsDataSource
+from backend.app.config import get_settings
 from backend.app.llm_router.ports import ProviderState
 from backend.app.llm_router.registry import ModelRepository, RegistryNotFoundError, ensure_seeded
 from backend.app.providers.readiness import RuntimeProviderReadiness
@@ -21,6 +24,8 @@ from change_detection.ports import ChangeDetectorPort
 from decision_center import service as decision_service
 from decision_center.models import AgentType
 from decision_center.schemas import AgentCreate
+from geo_platforms.models import GeoPlatform
+from geo_platforms.yandex_candidates import observed_candidate
 from graph.engine import GraphEngine
 from graph.ports import (
     EntityProvider,
@@ -33,18 +38,37 @@ from insights.repository import SqlAlchemyInsightRepository
 from insights.schemas import InsightRequest
 from insights.service import InsightService
 from notification_center.ports import NotificationPort
+from product.brand_intelligence import brand_intelligence_engine
+from product.geography import geography_label
 from product.repository import ProductNotFoundError, PromptRepository, ResearchTemplateRepository
+from product.research_intelligence import (
+    CompetitiveInfluenceEngine,
+    GeoOpportunityPlanner,
+    QueryMapBuilder,
+    ResearchPatternAnalyzer,
+)
 from product.schemas import WizardRequest, WizardReview
+from provider_connections.crypto import SecretCipher
+from provider_connections.dependencies import default_organization
 from provider_recommendation.research_adapter import SqlAlchemyResearchUsageSource
 from provider_recommendation.service import SmartProviderRecommendationService
+from publication_learning.service import PublicationLearningService
 from recommendation.engine import RecommendationEngine
 from recommendation.research_adapter import SqlAlchemyResearchScoreAdapter
+from research.brand_verdict import classify_brand, prompt_names_brand
 from research.models import ExtractedEntity, Research, ResearchStatus, ResearchTask, Response
+from research.queue import enqueue as enqueue_research
 from research.reporting import ReportingService
 from research.repositories import ResearchRepository
-from research.schemas import ResearchCreate, ResearchRunRequest
+from research.schemas import ResearchCreate, ResearchEnqueueRequest, ResearchRunRequest
+from research.scoring import SCORING_VERSION, SCORING_WEIGHTS
 from research.service import run_research
 from trend.research_adapter import build_trend_engine
+from yandex_intelligence.service import YandexIntelligenceQuerySource
+from yandex_wordstat.generative_evidence import YandexGenerativeEvidenceService
+from yandex_wordstat.repository import WordstatRepository
+from yandex_wordstat.search_evidence import YandexSearchEvidenceService
+from yandex_wordstat.service import WordstatQuerySource
 
 
 class WizardValidationError(ValueError):
@@ -117,14 +141,28 @@ class ProductPipeline:
         db: Session,
         change_detector: ChangeDetectorPort | None = None,
         notifications: NotificationPort | None = None,
+        user_id: int | None = None,
     ) -> None:
         self.db = db
         self.prompts = PromptService(db)
         self.templates = ResearchTemplateRepository(db)
         self.change_detector = change_detector
         self.notifications = notifications
+        self.user_id = user_id
 
     def review(self, payload: WizardRequest) -> WizardReview:
+        brand_profile = (
+            payload.brand_profile
+            if get_settings().app_env.casefold() != "production" and payload.brand_profile
+            else brand_intelligence_engine.analyze(
+                brand=payload.brand, website_url=payload.website_url
+            )
+        )
+        competitor_profiles = [
+            brand_intelligence_engine.analyze(brand=item["name"], website_url=item["website_url"])
+            for item in payload.competitors
+            if item.get("name") and item.get("website_url")
+        ]
         template = self.templates.get(payload.research_template_code)
         values = self._values(payload)
         prompt = self.prompts.render(
@@ -140,12 +178,17 @@ class ProductPipeline:
                 model = models.get(item.model)
             except RegistryNotFoundError as error:
                 raise WizardValidationError(
-                    f"Unsupported provider/model: {item.provider}/{item.model}"
+                    f"Модель {item.provider}/{item.model} не поддерживается"
                 ) from error
             if model.provider != item.provider or "chat" not in model.capabilities:
-                raise WizardValidationError(f"Model {item.model} does not support chat")
+                raise WizardValidationError(
+                    f"Модель {item.model} не поддерживает текстовые запросы"
+                )
             if RuntimeProviderReadiness(self.db).state(item.provider) != ProviderState.READY:
-                raise WizardValidationError(f"Provider {item.provider} is unavailable")
+                raise WizardValidationError(
+                    f"Провайдер {item.provider} сейчас не подключён. "
+                    "Выберите модель со статусом «Подключена»."
+                )
             selected.append(f"{item.provider}/{item.model}")
             prompt_tokens = max(1, len(prompt) // 4)
             estimated_cost += (
@@ -155,6 +198,71 @@ class ProductPipeline:
             estimated_time = max(estimated_time, model.latency_ms)
         if not selected:
             selected = [payload.routing_profile]
+        query_catalog = self._query_catalog(
+            payload,
+            brand_profile,
+            [*competitor_profiles, *payload.competitors],
+        )
+        yandex_snapshot_id, yandex_queries = self._yandex_queries(payload)
+        wordstat_snapshot_id, wordstat_queries = self._wordstat_queries(payload)
+        existing = {item["text"].casefold() for item in query_catalog}
+        for index, text in enumerate(yandex_queries):
+            if text.casefold() in existing:
+                continue
+            query_catalog.append(
+                {
+                    "id": str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            f"yandex-webmaster:{yandex_snapshot_id}:{text}",
+                        )
+                    ),
+                    "cluster": "yandex_webmaster_observed",
+                    "intent": "observed_search_demand",
+                    "text": text,
+                    "buyer_stage": "observed",
+                    "brand_mode": (
+                        "branded" if payload.brand.casefold() in text.casefold() else "unbranded"
+                    ),
+                    "rationale": "Реальный запрос выбранного сайта из Яндекс Вебмастера",
+                    "source_snapshot_id": str(yandex_snapshot_id),
+                    "source_rank": str(index + 1),
+                }
+            )
+        for index, raw_text in enumerate(wordstat_queries):
+            text = self._wordstat_buyer_question(raw_text, payload.research_profile)
+            if text.casefold() in existing:
+                continue
+            existing.add(text.casefold())
+            query_catalog.append(
+                {
+                    "id": str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            f"yandex-wordstat:{wordstat_snapshot_id}:{text}",
+                        )
+                    ),
+                    "cluster": "yandex_wordstat_observed",
+                    "intent": "observed_search_demand",
+                    "text": text,
+                    "buyer_stage": "observed",
+                    "brand_mode": (
+                        "branded" if payload.brand.casefold() in text.casefold() else "unbranded"
+                    ),
+                    "rationale": (
+                        "Вопрос составлен по релевантному частотному запросу "
+                        "официального Yandex Wordstat API"
+                    ),
+                    "source_snapshot_id": str(wordstat_snapshot_id),
+                    "source_rank": str(index + 1),
+                }
+            )
+        if not payload.custom_queries:
+            query_catalog = self._prioritize_observed_queries(
+                query_catalog, limit=payload.query_limit
+            )
+        estimated_cost *= len(query_catalog)
+        estimated_time *= len(query_catalog)
         return WizardReview(
             valid=True,
             title=f"{template.title}: {payload.brand}",
@@ -166,10 +274,42 @@ class ProductPipeline:
             estimated_cost_usd=round(estimated_cost, 8),
             estimated_time_ms=estimated_time,
             selected_models=selected,
+            query_catalog=query_catalog,
+            task_count=len(query_catalog) * max(len(payload.models), 1),
+            brand_profile=brand_profile,
+            competitor_profiles=competitor_profiles,
         )
 
-    def run(self, payload: WizardRequest) -> Research:
+    @staticmethod
+    def _prioritize_observed_queries(
+        query_catalog: list[dict[str, str]], *, limit: int
+    ) -> list[dict[str, str]]:
+        priorities = {
+            "yandex_wordstat_observed": 0,
+            "yandex_webmaster_observed": 1,
+        }
+        ordered = sorted(
+            enumerate(query_catalog),
+            key=lambda row: (priorities.get(row[1].get("cluster", ""), 2), row[0]),
+        )
+        result: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for _, item in ordered:
+            key = item["text"].casefold().strip()
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(item)
+            if len(result) >= limit:
+                break
+        return result
+
+    def _create_research(self, payload: WizardRequest) -> tuple[Research, WizardReview]:
         review = self.review(payload)
+        organization_id = None
+        if self.user_id is not None:
+            with suppress(ValueError):
+                organization_id = default_organization(self.db, self.user_id)
         entity_id = payload.entity_id or uuid5(
             NAMESPACE_URL, f"ai-ranking-os:{payload.brand.casefold()}"
         )
@@ -179,27 +319,70 @@ class ProductPipeline:
                 title=review.title,
                 objective=review.prompt,
                 metadata={
+                    "organization_id": organization_id,
+                    "created_by_user_id": self.user_id,
                     "brand": payload.brand,
+                    "website_url": payload.website_url,
+                    "brand_profile": review.brand_profile.model_dump(mode="json"),
+                    "manual_competitors": payload.competitors,
+                    "competitor_profiles": [
+                        item.model_dump(mode="json") for item in review.competitor_profiles
+                    ],
                     "target_entity": payload.brand,
                     "languages": payload.languages,
                     "regions": payload.regions,
                     "prompt_code": payload.prompt_code,
                     "research_template_code": payload.research_template_code,
+                    "research_scope": payload.research_scope,
+                    "research_profile": payload.research_profile,
+                    "routing_profile": payload.routing_profile,
+                    "selected_models": [item.model_dump() for item in payload.models],
                     "pipeline": review.pipeline,
+                    "query_catalog": review.query_catalog,
+                    "query_map_version": QueryMapBuilder.VERSION,
+                    "yandex_intelligence_snapshot_id": next(
+                        (
+                            int(item["source_snapshot_id"])
+                            for item in review.query_catalog
+                            if item.get("source_snapshot_id")
+                            and item.get("cluster") == "yandex_webmaster_observed"
+                        ),
+                        None,
+                    ),
+                    "yandex_wordstat_snapshot_id": next(
+                        (
+                            int(item["source_snapshot_id"])
+                            for item in review.query_catalog
+                            if item.get("source_snapshot_id")
+                            and item.get("cluster") == "yandex_wordstat_observed"
+                        ),
+                        None,
+                    ),
                 },
             )
         )
-        agents = decision_service.list_agents(self.db)
-        if not any(
-            agent.is_enabled
-            and agent.agent_type == AgentType.CODEX
-            and agent.specialization is None
-            for agent in agents
-        ):
-            decision_service.create_agent(
-                self.db,
-                AgentCreate(name=f"product-research-runner-{len(agents) + 1}"),
-            )
+        self.ensure_research_runner()
+        return research, review
+
+    def enqueue(self, payload: WizardRequest) -> Research:
+        """Create a research and hand its long-running work to the worker queue."""
+        research, review = self._create_research(payload)
+        enqueue_research(
+            self.db,
+            ResearchEnqueueRequest(
+                research_id=research.id,
+                models=payload.models,
+                routing_profile=payload.routing_profile,
+                query=review.prompt,
+                queries=review.query_catalog,
+            ),
+        )
+        self.db.refresh(research)
+        return research
+
+    def run(self, payload: WizardRequest) -> Research:
+        """Run synchronously for internal callers and backward-compatible tests."""
+        research, review = self._create_research(payload)
         research = run_research(
             self.db,
             research.id,
@@ -207,6 +390,7 @@ class ProductPipeline:
                 models=payload.models,
                 routing_profile=payload.routing_profile,
                 query=review.prompt,
+                queries=review.query_catalog,
             ),
         )
         if research.status == ResearchStatus.COMPLETED:
@@ -222,8 +406,28 @@ class ProductPipeline:
         self.db.refresh(research)
         return research
 
+    def complete_existing(self, research: Research) -> None:
+        """Complete the public product pipeline for an externally orchestrated research."""
+        if research.status != ResearchStatus.COMPLETED:
+            raise WizardValidationError("Only completed research can enter the product pipeline")
+        self._complete_product_pipeline(research)
+
+    def ensure_research_runner(self) -> None:
+        """Idempotently provision the generic execution agent used by product research."""
+        agents = decision_service.list_agents(self.db)
+        if not any(
+            agent.is_enabled
+            and agent.agent_type == AgentType.CODEX
+            and agent.specialization is None
+            for agent in agents
+        ):
+            decision_service.create_agent(
+                self.db,
+                AgentCreate(name=f"product-research-runner-{len(agents) + 1}"),
+            )
+
     def _complete_product_pipeline(self, research: Research) -> None:
-        artifacts: dict[str, Any] = {}
+        artifacts: dict[str, Any] = dict(research.metadata_payload.get("product_artifacts", {}))
         recommendations = RecommendationEngine(
             self.db, SqlAlchemyResearchScoreAdapter(self.db)
         ).generate(research.id)
@@ -271,8 +475,52 @@ class ProductPipeline:
         artifacts["provider_recommendations"] = [
             item.model_dump(mode="json") for item in provider_advice
         ]
+        search_queries = [
+            item["text"]
+            for item in research.metadata_payload.get("query_catalog", [])
+            if item.get("cluster") == "yandex_wordstat_observed" and item.get("text")
+        ]
+        if not search_queries:
+            organization_id = self._research_organization_id(research)
+            snapshot_id = research.metadata_payload.get("yandex_wordstat_snapshot_id")
+            snapshot = None
+            if isinstance(organization_id, int) and isinstance(snapshot_id, int):
+                snapshot = WordstatRepository(self.db).snapshot(organization_id, snapshot_id)
+            if snapshot is None and isinstance(organization_id, int):
+                snapshot = WordstatRepository(self.db).latest(
+                    organization_id,
+                    str(research.metadata_payload.get("brand") or "").strip() or None,
+                )
+            if snapshot is not None and snapshot.status == "READY":
+                search_queries = [
+                    str(item.get("query", "")).strip()
+                    for item in snapshot.queries
+                    if item.get("selected_for_alice") and item.get("query")
+                ]
+        previous_search = artifacts.get("yandex_search_evidence", {})
+        selected_search_queries = YandexSearchEvidenceService.select_queries(search_queries)
+        if previous_search.get("queries_requested") != selected_search_queries:
+            artifacts["yandex_search_evidence"] = self._yandex_search_evidence(
+                research, search_queries
+            )
+        previous_generative = artifacts.get("yandex_generative_evidence", {})
+        selected_generative_queries = YandexGenerativeEvidenceService.prepare_queries(
+            search_queries
+        )
+        if (
+            previous_generative.get("version") != YandexGenerativeEvidenceService.VERSION
+            or previous_generative.get("queries_requested") != selected_generative_queries
+            or "source_patterns" not in previous_generative
+        ):
+            artifacts["yandex_generative_evidence"] = self._yandex_generative_evidence(
+                research, search_queries
+            )
+        self._materialize_yandex_publication_candidates(
+            research, artifacts.get("yandex_generative_evidence", {})
+        )
         research.metadata_payload = {**research.metadata_payload, "product_artifacts": artifacts}
         self.db.commit()
+        PublicationLearningService(self.db).evaluate_followup(research.id)
         if self.change_detector is not None:
             self.change_detector.detect(research.id)
         if self.notifications is not None:
@@ -284,14 +532,215 @@ class ProductPipeline:
                 resource_id=str(research.id),
             )
 
+    def _yandex_search_evidence(self, research: Research, queries: list[str]) -> dict[str, Any]:
+        organization_id = self._research_organization_id(research)
+        if not isinstance(organization_id, int) or not queries:
+            return {
+                "version": YandexSearchEvidenceService.VERSION,
+                "status": "NOT_MEASURED",
+                "resources": [],
+                "limitations": [
+                    "Нет организации или сохранённых запросов Wordstat для поискового замера."
+                ],
+            }
+        settings = get_settings()
+        connection, _ = WordstatRepository(self.db).effective_connection(
+            organization_id, settings.wordstat_platform_organization_id
+        )
+        if connection is None:
+            return {
+                "version": YandexSearchEvidenceService.VERSION,
+                "status": "NOT_MEASURED",
+                "resources": [],
+                "limitations": ["Yandex Search API не подключён."],
+            }
+        try:
+            credential = SecretCipher(
+                settings.provider_secret_key or settings.auth_jwt_secret
+            ).decrypt(connection.credential_ciphertext)
+        except ValueError:
+            return {
+                "version": YandexSearchEvidenceService.VERSION,
+                "status": "NOT_MEASURED",
+                "resources": [],
+                "limitations": ["Сохранённый ключ Yandex Search API не удалось расшифровать."],
+            }
+        return YandexSearchEvidenceService().discover(
+            credential=credential,
+            auth_type=connection.auth_type,
+            folder_id=connection.folder_id,
+            queries=queries,
+            region_id=225,
+        )
+
+    def _yandex_generative_evidence(self, research: Research, queries: list[str]) -> dict[str, Any]:
+        unavailable = {
+            "version": YandexGenerativeEvidenceService.VERSION,
+            "status": "NOT_MEASURED",
+            "visibility_score": None,
+            "observations": [],
+        }
+        organization_id = self._research_organization_id(research)
+        if not isinstance(organization_id, int) or not queries:
+            return {**unavailable, "limitations": ["Нет запросов Wordstat для замера."]}
+        settings = get_settings()
+        connection, _ = WordstatRepository(self.db).effective_connection(
+            organization_id, settings.wordstat_platform_organization_id
+        )
+        if connection is None:
+            return {**unavailable, "limitations": ["Yandex Search API не подключён."]}
+        try:
+            credential = SecretCipher(
+                settings.provider_secret_key or settings.auth_jwt_secret
+            ).decrypt(connection.credential_ciphertext)
+        except ValueError:
+            return {
+                **unavailable,
+                "limitations": ["Ключ Yandex Search API не удалось расшифровать."],
+            }
+        return YandexGenerativeEvidenceService().measure(
+            credential=credential,
+            auth_type=connection.auth_type,
+            folder_id=connection.folder_id,
+            queries=queries,
+            brand=str(research.metadata_payload.get("brand") or research.entity_id),
+            website_url=research.metadata_payload.get("website_url"),
+        )
+
+    def _materialize_yandex_publication_candidates(
+        self, research: Research, evidence: dict[str, Any]
+    ) -> None:
+        """Turn observed Yandex sources into a usable publication backlog.
+
+        A domain appears here only when the official Yandex generative-search
+        response marked it as a source.  It is intentionally an *observed
+        candidate*, not a recommendation or a promise of editorial access.
+        """
+        if evidence.get("status") not in {"MEASURED", "PARTIAL"}:
+            return
+        organization_id = self._research_organization_id(research)
+        if organization_id is None:
+            # Legacy research without a verifiable owner must not create a
+            # tenant-visible publication record.
+            return
+        for source in evidence.get("source_patterns", []):
+            if not isinstance(source, dict):
+                continue
+            candidate = observed_candidate(
+                organization_id=organization_id, research_id=research.id, source=source
+            )
+            if candidate is None:
+                continue
+            existing = self.db.scalar(
+                select(GeoPlatform).where(
+                    GeoPlatform.organization_id == organization_id,
+                    GeoPlatform.domain == candidate.domain,
+                )
+            )
+            if existing is not None:
+                # Never overwrite a manually curated registry entry.  An
+                # automatically created record keeps the first research that
+                # produced it, while the current research still exposes its
+                # own evidence in the report.
+                continue
+            self.db.add(candidate)
+
+    def _research_organization_id(self, research: Research) -> int | None:
+        """Resolve an organization for current and legacy research records.
+
+        Early product research records could be created before the workspace id
+        was persisted.  Their author is still present, so resolving the author's
+        default workspace preserves access isolation while allowing completed
+        research to use the integrations the author already connected.
+        """
+        organization_id = research.metadata_payload.get("organization_id")
+        if isinstance(organization_id, int):
+            return organization_id
+        author_id = research.metadata_payload.get("created_by_user_id")
+        if not isinstance(author_id, int):
+            return None
+        with suppress(ValueError):
+            return default_organization(self.db, author_id)
+        return None
+
     @staticmethod
     def _values(payload: WizardRequest) -> dict[str, str]:
         return {
             "brand": payload.brand,
             "language": ", ".join(payload.languages),
-            "region": ", ".join(payload.regions),
+            "region": ", ".join(geography_label(item) for item in payload.regions),
+            "research_profile": payload.research_profile,
             **payload.variables,
         }
+
+    @staticmethod
+    def _query_catalog(
+        payload: WizardRequest,
+        brand_profile: dict[str, Any] | None = None,
+        competitor_profiles: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, str]]:
+        if payload.custom_queries:
+            return [
+                {
+                    "id": str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            f"ai-ranking-custom-query:{payload.brand}:{payload.regions[0]}:{text}",
+                        )
+                    ),
+                    "cluster": "custom_buyer_query",
+                    "intent": "recommendation",
+                    "text": text,
+                    "buyer_stage": "user_defined",
+                    "brand_mode": (
+                        "branded" if payload.brand.casefold() in text.casefold() else "unbranded"
+                    ),
+                }
+                for text in payload.custom_queries
+            ]
+        return [
+            item.as_dict()
+            for item in QueryMapBuilder().build(
+                brand=payload.brand,
+                language=payload.languages[0],
+                region=payload.regions[0],
+                profile=payload.research_profile,
+                variables=payload.variables,
+                brand_profile=brand_profile or payload.brand_profile,
+                competitor_profiles=competitor_profiles,
+            )
+        ]
+
+    def _yandex_queries(self, payload: WizardRequest) -> tuple[int, list[str]]:
+        if self.user_id is None or payload.custom_queries:
+            return 0, []
+        try:
+            organization_id = default_organization(self.db, self.user_id)
+        except ValueError:
+            return 0, []
+        return YandexIntelligenceQuerySource(self.db).queries(
+            organization_id, payload.website_url, limit=8
+        )
+
+    def _wordstat_queries(self, payload: WizardRequest) -> tuple[int, list[str]]:
+        if self.user_id is None or payload.custom_queries:
+            return 0, []
+        try:
+            organization_id = default_organization(self.db, self.user_id)
+        except ValueError:
+            return 0, []
+        return WordstatQuerySource(self.db).queries(
+            organization_id, payload.brand, limit=payload.query_limit
+        )
+
+    @staticmethod
+    def _wordstat_buyer_question(query: str, research_profile: str) -> str:
+        """Turn a verified demand phrase into a question safe for an AI run."""
+        phrase = " ".join(query.strip().split()).rstrip("?.!")
+        lower = phrase.casefold()
+        if research_profile == "BEAUTY" or "крем" in lower:
+            return f"Какой {phrase} выбрать и на что обратить внимание?"
+        return f"Как выбрать {phrase} и какие варианты стоит сравнить?"
 
 
 class FinalReportService:
@@ -317,6 +766,32 @@ class FinalReportService:
             stats["tokens"] += response.total_tokens
             stats["cost"] = round(float(stats["cost"]) + response.cost, 8)
         score = base.score.model_dump(mode="json") if base.score else None
+        explainability = self._explainability(research, base, score)
+        query_catalog = research.metadata_payload.get("query_catalog", [])
+        patterns = ResearchPatternAnalyzer().analyze(
+            brand=str(research.metadata_payload.get("brand", research.title)),
+            responses=[item.model_dump(mode="json") for item in responses],
+            entities=[item.model_dump(mode="json") for item in base.entities],
+            citations=[item.model_dump(mode="json") for item in base.citations],
+            query_catalog=query_catalog,
+            manual_competitors=research.metadata_payload.get("manual_competitors", []),
+        )
+        opportunities = GeoOpportunityPlanner().build(
+            patterns, target_website=str(research.metadata_payload.get("website_url") or "")
+        )
+        from product.source_evidence import source_evidence
+
+        source_analysis = source_evidence(patterns)
+        competitive_influence = CompetitiveInfluenceEngine().compare(
+            target_profile=research.metadata_payload.get("brand_profile", {}),
+            competitor_profiles=research.metadata_payload.get("competitor_profiles", []),
+            patterns=patterns,
+        )
+        publication_learning = (
+            PublicationLearningService(self.db).summary(research.entity_id)
+            if research.entity_id
+            else None
+        )
         return {
             "executive_summary": self._summary(research, score),
             "research": base.research.model_dump(mode="json"),
@@ -335,6 +810,304 @@ class FinalReportService:
             "token_usage": sum(item.total_tokens for item in responses),
             "cost": round(sum(item.cost for item in responses), 8),
             "execution_time_ms": sum(item.latency_ms or 0 for item in responses),
+            "explainability": explainability,
+            "query_catalog": query_catalog,
+            "research_patterns": patterns,
+            "geo_opportunities": opportunities,
+            "source_analysis": source_analysis,
+            "competitive_influence": competitive_influence,
+            "publication_learning": publication_learning,
+            "yandex_search_evidence": artifacts.get("yandex_search_evidence"),
+            "yandex_generative_evidence": artifacts.get("yandex_generative_evidence"),
+            "publication_opportunities": (
+                artifacts.get("yandex_search_evidence", {}).get("resources", [])[:10]
+            ),
+        }
+
+    @staticmethod
+    def _explainability(
+        research: Research, base: Any, score: dict[str, Any] | None
+    ) -> dict[str, Any]:
+        responses = base.responses
+        target = next(
+            (
+                str(research.metadata_payload[key]).strip().casefold()
+                for key in ("target_entity", "entity", "brand")
+                if isinstance(research.metadata_payload.get(key), str)
+                and str(research.metadata_payload[key]).strip()
+            ),
+            research.title.strip().casefold(),
+        )
+        entities_by_response: dict[int, list[Any]] = defaultdict(list)
+        citations_by_response: dict[int, list[Any]] = defaultdict(list)
+        recommendations_by_response: dict[int, list[Any]] = defaultdict(list)
+        for entity in base.entities:
+            entities_by_response[entity.response_id].append(entity)
+        for citation in base.citations:
+            citations_by_response[citation.response_id].append(citation)
+        for recommendation in base.recommendations:
+            recommendations_by_response[recommendation.response_id].append(recommendation)
+        measured = [r for r in responses if r.processing_status.value == "PROCESSED"]
+        eligible = [r for r in responses if not prompt_names_brand(r.prompt, target)]
+        eligible_ids = {r.id for r in eligible}
+        eligible_measured = [r for r in measured if r.id in eligible_ids]
+        excluded_branded_ids = [r.id for r in responses if r.id not in eligible_ids]
+        verdicts = {r.id: classify_brand(r.content, target) for r in measured}
+        # Match research.scoring: extracted snippets are evidence, not proof.
+        mentioned_ids = [r.id for r in eligible_measured if target in r.content.casefold()]
+        recommended_ids = [
+            r.id for r in eligible_measured if verdicts[r.id].status == "RECOMMENDED"
+        ]
+        option_ids = [
+            r.id for r in eligible_measured if verdicts[r.id].status == "PROPOSED_AS_OPTION"
+        ]
+        score_version = score.get("version") if score else None
+        historical_score = bool(score_version and score_version != SCORING_VERSION)
+        mentioned = len(mentioned_ids)
+        recommended = len(recommended_ids)
+        citation_count = sum(citation.response_id in eligible_ids for citation in base.citations)
+        processed = sum(response.processing_status.value == "PROCESSED" for response in responses)
+        unique_models = len(
+            {
+                (response.provider.casefold(), response.model.casefold())
+                for response in responses
+                if response.processing_status.value == "PROCESSED"
+            }
+        )
+        expected = max(research.total_tasks, len(research.tasks), 1)
+        metrics: dict[str, Any] = {
+            "mention_score": {
+                "formula": "mentioned_responses / unbranded_responses * 100",
+                "inputs": {
+                    "mentioned_responses": mentioned,
+                    "total_responses": len(eligible),
+                    "excluded_branded_response_ids": excluded_branded_ids,
+                    "evidence_response_ids": mentioned_ids,
+                },
+                "normalization": "bounded 0..100",
+                "weight": SCORING_WEIGHTS["mention"],
+            },
+            "recommendation_score": {
+                "formula": "responses_recommending_target_brand / unbranded_responses * 100",
+                "inputs": {
+                    "responses_recommending_target_brand": recommended,
+                    "total_responses": len(eligible),
+                    "excluded_branded_response_ids": excluded_branded_ids,
+                    "evidence_response_ids": recommended_ids,
+                },
+                "normalization": "bounded 0..100",
+                "weight": SCORING_WEIGHTS["recommendation"],
+            },
+            "citation_score": {
+                "formula": "extracted_citations / (unbranded_responses * 3) * 100",
+                "inputs": {
+                    "extracted_citations": citation_count,
+                    "maximum_v1_citations": len(eligible) * 3,
+                    "excluded_branded_response_ids": excluded_branded_ids,
+                },
+                "normalization": "bounded 0..100",
+                "weight": SCORING_WEIGHTS["citation"],
+            },
+            "coverage_score": {
+                "formula": "processed_responses / expected_query_model_tasks * 100",
+                "inputs": {
+                    "processed_responses": processed,
+                    "expected_tasks": expected,
+                },
+                "normalization": "bounded 0..100",
+                "weight": SCORING_WEIGHTS["coverage"],
+            },
+            "confidence_score": {
+                "formula": (
+                    "processing_success * 50% + mean_entity_confidence * 30% + "
+                    "sample_sufficiency(min(processed/8, 1)) * 20%"
+                ),
+                "inputs": {
+                    "processed_responses": processed,
+                    "total_responses": len(responses),
+                    "entity_confidences": [entity.confidence for entity in base.entities],
+                    "minimum_reliable_sample_v1_1": 8,
+                },
+                "normalization": "bounded 0..100",
+                "weight": SCORING_WEIGHTS["confidence"],
+            },
+            "visibility_score": {
+                "formula": (
+                    "mention*0.45 + recommendation*0.35 + citation*0.20; "
+                    "coverage and confidence describe measurement quality and do not add visibility"
+                ),
+                "inputs": {
+                    "research_id": research.id,
+                    **(
+                        {
+                            key: score[key]
+                            for key in (
+                                "mention_score",
+                                "recommendation_score",
+                                "citation_score",
+                                "coverage_score",
+                                "confidence_score",
+                            )
+                        }
+                        if score
+                        else {}
+                    ),
+                },
+                "normalization": "presence-only weighted sum bounded 0..100",
+                "weight": 1.0,
+            },
+            "benchmark": {
+                "formula": "population comparison; unavailable for fewer than two entities",
+                "inputs": {},
+                "normalization": "rank and percentile",
+                "weight": None,
+            },
+            "authority": {
+                "formula": None,
+                "inputs": {},
+                "normalization": None,
+                "weight": None,
+                "status": "NOT_CALCULATED_IN_SCORING_V1",
+            },
+            "knowledge_graph_score": {
+                "formula": None,
+                "inputs": {},
+                "normalization": None,
+                "weight": None,
+                "status": "NOT_CALCULATED_IN_SCORING_V1",
+            },
+        }
+        for payload in metrics.values():
+            payload["version"] = SCORING_VERSION
+            payload["stored_score_version"] = score_version
+        prompts = [
+            {
+                "uuid": str(
+                    uuid5(NAMESPACE_URL, f"research:{research.id}:response:{response.id}:prompt")
+                ),
+                "response_id": response.id,
+                "text": response.prompt,
+                "language": research.metadata_payload.get(
+                    "languages", research.metadata_payload.get("language")
+                ),
+                "country": research.metadata_payload.get(
+                    "regions", research.metadata_payload.get("region")
+                ),
+                "provider": response.provider,
+                "model": response.model,
+                "created_at": response.created_at,
+            }
+            for response in responses
+        ]
+        response_evidence = [
+            {
+                "response_id": response.id,
+                "provider": response.provider,
+                "model": response.model,
+                "prompt": response.prompt,
+                "raw_response": response.raw_response,
+                "normalized_response": response.normalized_response,
+                "tokens": response.total_tokens,
+                "cost": response.cost,
+                "latency_ms": response.latency_ms,
+                "finished_at": response.finished_at,
+                "error_type": response.error_type,
+                "error_message": response.error_message,
+                "entity_ids": [item.id for item in entities_by_response[response.id]],
+                "citation_ids": [item.id for item in citations_by_response[response.id]],
+                "recommendation_ids": [
+                    item.id for item in recommendations_by_response[response.id]
+                ],
+                "brand_verdict": (
+                    verdicts[response.id].to_dict()
+                    if response.id in verdicts
+                    else {"status": "NOT_MEASURED", "evidence": []}
+                ),
+                "prompt_names_brand": response.id not in eligible_ids,
+                "counts_toward_visibility": response.id in eligible_ids,
+            }
+            for response in responses
+        ]
+        citation_evidence = [
+            {
+                "citation_id": citation.id,
+                "response_id": citation.response_id,
+                "url": citation.url,
+                "domain": urlparse(citation.url).netloc.casefold() if citation.url else None,
+                "source": citation.source,
+                "title": citation.title,
+                "position": citation.position,
+            }
+            for citation in base.citations
+        ]
+        return {
+            "methodology_version": score_version or SCORING_VERSION,
+            "evidence_methodology_version": SCORING_VERSION,
+            "historical_score_warning": (
+                "Stored score uses an older methodology. Response verdicts shown here use the "
+                "current classifier and must not be read as a recalculation of the stored score."
+                if historical_score else None
+            ),
+            "metrics": metrics,
+            "prompts": prompts,
+            "responses": response_evidence,
+            "recommendation_measurement": {
+                "status": (
+                    "NOT_MEASURED" if not eligible_measured
+                    else "PARTIAL" if len(eligible_measured) < len(eligible)
+                    else "MEASURED"
+                ),
+                "recommended_responses": recommended,
+                "measured_responses": len(eligible_measured),
+                "rate_percent": (
+                    round(recommended / len(eligible_measured) * 100, 1)
+                    if eligible_measured else None
+                ),
+                "evidence_response_ids": recommended_ids,
+                "scope": (
+                    "Only successfully processed unbranded responses in this research; "
+                    "prompts naming the target brand are diagnostic controls and excluded. "
+                    "not a promise of visibility in Yandex search or Alice."
+                ),
+            },
+            "option_measurement": {
+                "status": (
+                    "NOT_MEASURED" if not eligible_measured
+                    else "PARTIAL" if len(eligible_measured) < len(eligible)
+                    else "MEASURED"
+                ),
+                "option_responses": len(option_ids),
+                "measured_responses": len(eligible_measured),
+                "rate_percent": (
+                    round(len(option_ids) / len(eligible_measured) * 100, 1)
+                    if eligible_measured else None
+                ),
+                "evidence_response_ids": option_ids,
+                "verdict_version": verdicts[measured[0].id].version if measured else None,
+                "limitation": (
+                    "Listed as an option, not an explicit recommendation; "
+                    "excluded from recommendation_score."
+                ),
+            },
+            "citations": citation_evidence,
+            "unsupported_metrics": ["authority", "knowledge_graph_score"],
+            "sample_scope": {
+                "query_count": len(research.metadata_payload.get("query_catalog", [])),
+                "response_count": len(responses),
+                "successful_response_count": processed,
+                "unbranded_response_count": len(eligible),
+                "successful_unbranded_response_count": len(eligible_measured),
+                "excluded_branded_response_ids": excluded_branded_ids,
+                "failed_response_count": len(responses) - processed,
+                "provider_model_count": unique_models,
+                "languages": research.metadata_payload.get("languages", []),
+                "regions": research.metadata_payload.get("regions", []),
+                "limitation": (
+                    "Результат описывает только сохранённую выборку запросов без названия бренда, "
+                    "моделей, языков, регионов и времени; контрольные вопросы с названием бренда "
+                    "не входят в оценку самостоятельной видимости. Это не видимость во всех ИИ."
+                ),
+            },
         }
 
     @staticmethod
@@ -342,6 +1115,7 @@ class FinalReportService:
         if not score:
             return f"Research {research.title} completed without a visibility score."
         return (
-            f"{research.title} achieved AI Visibility {score['visibility_score']}/100 "
-            f"using scoring algorithm {score['version']}."
+            f"AI-видимость «{research.metadata_payload.get('brand', research.title)}» — "
+            f"{score['visibility_score']}/100 в рамках сохранённой выборки. "
+            "Это не означает видимость во всех ИИ."
         )

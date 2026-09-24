@@ -229,6 +229,7 @@ def validate_pipeline(query: str = "Compare OpenAI and Qwen with sources") -> di
     configured_providers = {provider.name: provider for provider in factory.all()}
     provider_ok = set(configured_providers) == {
         "openai",
+        "openrouter",
         "anthropic",
         "gemini",
         "deepseek",

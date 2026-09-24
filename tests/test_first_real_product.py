@@ -11,7 +11,9 @@ from backend.app.main import app
 from execution_engine import service as execution_service
 from execution_engine.worker_manager import WorkerManager
 from product.models import PromptDefinition, ResearchTemplateDefinition
-from product.service import PIPELINE
+from product.service import PIPELINE, ProductPipeline
+from research.models import Research
+from research.queue import process_next
 
 engine = create_engine(
     "sqlite+pysqlite:///:memory:",
@@ -87,35 +89,90 @@ def test_prompt_lifecycle_and_template_api(client: TestClient) -> None:
     assert templates.json()[0]["pipeline"] == PIPELINE
 
 
+def test_wordstat_phrase_is_rendered_as_a_buyer_question() -> None:
+    assert (
+        ProductPipeline._wordstat_buyer_question("увлажняющий крем", "BEAUTY")
+        == "Какой увлажняющий крем выбрать и на что обратить внимание?"
+    )
+
+
 def test_skinjestique_end_to_end_wizard(client: TestClient) -> None:
     payload = {
         "brand": "Skinjestique",
+        "website_url": "https://skinjestique.example",
+        "brand_profile": {
+            "version": "1.0",
+            "brand": "Skinjestique",
+            "website_url": "https://skinjestique.example",
+            "pages_analyzed": 1,
+            "evidence_urls": ["https://skinjestique.example"],
+            "description": "Beauty brand",
+            "categories": [],
+            "products": [],
+            "attributes": [],
+            "confidence": 0.5,
+            "limitations": [],
+        },
         "models": [{"provider": "openai", "model": "gpt-4o-mini"}],
         "languages": ["en"],
         "regions": ["GLOBAL"],
         "prompt_code": "ai-visibility",
         "research_template_code": "ai-visibility",
+        "research_scope": "SELECTED",
+        "research_profile": "BEAUTY",
     }
     review = client.post("/research/wizard/review", json=payload)
     assert review.status_code == 200
     assert review.json()["valid"] is True
+    assert len(review.json()["query_catalog"]) == 20
+    assert review.json()["task_count"] == 20
 
     completed = client.post("/research/wizard/run", json=payload)
     assert completed.status_code == 201, completed.text
     body = completed.json()
+    assert body["research"]["status"] == "ACTIVE"
+    assert body["report"] == {}
+    with TestingSession() as db:
+        processed = process_next(db)
+        assert processed is not None
+        research = db.get(Research, body["research"]["id"])
+        assert research is not None
+        ProductPipeline(db).complete_existing(research)
+
+    persisted = client.get(body["report_url"])
+    assert persisted.status_code == 200
+    body["research"] = client.get(f"/research/{body['research']['id']}").json()
+    body["report"] = persisted.json()
     assert body["research"]["status"] == "COMPLETED", [
         item["error_message"] for item in body["report"]["responses"]
+    ]
+    assert body["research"]["metadata"]["research_scope"] == "SELECTED"
+    assert body["research"]["metadata"]["research_profile"] == "BEAUTY"
+    assert body["research"]["metadata"]["selected_models"] == [
+        {"provider": "openai", "model": "gpt-4o-mini"}
     ]
     report = body["report"]
     assert report["score"]["visibility_score"] >= 0
     assert report["detected_entities"]
     assert report["sources"]
     assert report["knowledge_graph_summary"]["node_count"] >= 1
-    assert report["provider_statistics"]["openai"]["responses"] == 1
+    assert report["provider_statistics"]["openai"]["responses"] == 20
     assert report["token_usage"] > 0
+    explanation = report["explainability"]
+    assert explanation["methodology_version"] == "4.0-brand-verdict-1.3"
+    assert explanation["metrics"]["visibility_score"]["formula"]
+    assert (
+        explanation["metrics"]["visibility_score"]["inputs"]["research_id"]
+        == body["research"]["id"]
+    )
+    assert explanation["prompts"][0]["text"] == report["responses"][0]["prompt"]
+    assert explanation["responses"][0]["raw_response"] == report["responses"][0]["raw_response"]
+    assert explanation["unsupported_metrics"] == ["authority", "knowledge_graph_score"]
+    assert explanation["citations"][0]["response_id"] == report["responses"][0]["id"]
+    assert explanation["sample_scope"]["query_count"] == 20
+    assert report["research_patterns"]["sample"]["responses"] == 20
+    assert report["geo_opportunities"]
 
-    persisted = client.get(body["report_url"])
-    assert persisted.status_code == 200
     assert persisted.json()["research"]["id"] == body["research"]["id"]
 
 
@@ -124,6 +181,20 @@ def test_wizard_uses_english_prompt_as_language_fallback(client: TestClient) -> 
         "/research/wizard/review",
         json={
             "brand": "Skinjestique",
+            "website_url": "https://skinjestique.example",
+            "brand_profile": {
+                "version": "1.0",
+                "brand": "Skinjestique",
+                "website_url": "https://skinjestique.example",
+                "pages_analyzed": 1,
+                "evidence_urls": [],
+                "description": "",
+                "categories": [],
+                "products": [],
+                "attributes": [],
+                "confidence": 0.4,
+                "limitations": [],
+            },
             "models": [{"provider": "anthropic", "model": "claude-3-5-sonnet"}],
             "languages": ["ru"],
             "regions": ["GLOBAL"],
@@ -142,13 +213,27 @@ def test_wizard_rejects_unknown_model(client: TestClient) -> None:
         "/research/wizard/review",
         json={
             "brand": "Skinjestique",
+            "website_url": "https://skinjestique.example",
+            "brand_profile": {
+                "version": "1.0",
+                "brand": "Skinjestique",
+                "website_url": "https://skinjestique.example",
+                "pages_analyzed": 1,
+                "evidence_urls": [],
+                "description": "",
+                "categories": [],
+                "products": [],
+                "attributes": [],
+                "confidence": 0.4,
+                "limitations": [],
+            },
             "models": [{"provider": "openai", "model": "missing"}],
         },
     )
     assert response.status_code == 422
 
 
-def test_wizard_does_not_generate_report_when_research_execution_fails(
+def test_wizard_queue_is_independent_from_unrelated_execution_tasks(
     client: TestClient,
 ) -> None:
     agent = client.post("/agents", json={"name": "Busy product agent"}).json()
@@ -163,6 +248,20 @@ def test_wizard_does_not_generate_report_when_research_execution_fails(
         "/research/wizard/run",
         json={
             "brand": "Skinjestique",
+            "website_url": "https://skinjestique.example",
+            "brand_profile": {
+                "version": "1.0",
+                "brand": "Skinjestique",
+                "website_url": "https://skinjestique.example",
+                "pages_analyzed": 1,
+                "evidence_urls": [],
+                "description": "",
+                "categories": [],
+                "products": [],
+                "attributes": [],
+                "confidence": 0.4,
+                "limitations": [],
+            },
             "models": [{"provider": "openai", "model": "gpt-4o-mini"}],
             "languages": ["en"],
             "regions": ["GLOBAL"],
@@ -173,5 +272,6 @@ def test_wizard_does_not_generate_report_when_research_execution_fails(
 
     assert agent["id"] > 0
     assert task["id"] > 0
-    assert response.status_code == 409
-    assert "no report was generated" in response.json()["detail"]
+    assert response.status_code == 201
+    assert response.json()["research"]["status"] == "ACTIVE"
+    assert response.json()["report"] == {}

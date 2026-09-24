@@ -1,0 +1,479 @@
+import json
+
+import httpx
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+import authentication.models  # noqa: F401
+import decision_center.models  # noqa: F401
+import execution_engine.models  # noqa: F401
+import recommendation.simulation.models  # noqa: F401
+import recommendation.templates.models  # noqa: F401
+import workspace.models  # noqa: F401
+from backend.app.database import Base
+from organization_workspace.models import Organization
+from provider_connections.crypto import SecretCipher
+from research.models import (
+    ExtractedCitation,
+    Research,
+    ResearchTask,
+    Response,
+    ResponseProcessingStatus,
+)
+from yandex_wordstat.models import WordstatConnection, WordstatDemandSnapshot
+from yandex_wordstat.repository import WordstatRepository
+from yandex_wordstat.schemas import WordstatDiscoveryRequest
+from yandex_wordstat.service import WordstatError, WordstatQuerySource, WordstatService
+
+
+def database() -> Session:
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = Session(engine)
+    db.add(Organization(id=1, name="Test", slug="test"))
+    db.commit()
+    return db
+
+
+def client(requests: list[httpx.Request]) -> httpx.Client:
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if json.loads(request.content)["phrase"] == "яндекс":
+            return httpx.Response(200, json={"results": []})
+        return httpx.Response(
+            200,
+            json={
+                "totalCount": "1000",
+                "results": [
+                    {"phrase": "курсы дизайна", "count": "900"},
+                    {"phrase": "Skillbox дизайн", "count": "100"},
+                ],
+                "associations": [{"phrase": "обучение дизайну", "count": "500"}],
+            },
+        )
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def test_connect_and_discover_use_official_search_api_contract() -> None:
+    db = database()
+    requests: list[httpx.Request] = []
+    service = WordstatService(
+        db,
+        WordstatRepository(db),
+        SecretCipher("x" * 32),
+        client(requests),
+    )
+
+    connection = service.connect(1, 7, "folder-1", "API_KEY", "secret-api-key")
+    snapshot = service.discover(
+        1,
+        7,
+        WordstatDiscoveryRequest(
+            brand="Skillbox",
+            category="дизайн",
+            region_ids=[213],
+            device="all",
+            limit=5,
+        ),
+    )
+
+    assert connection.connected is True
+    assert requests[-1].url.path == "/v2/wordstat/topRequests"
+    assert requests[-1].headers["Authorization"] == "Api-key secret-api-key"
+    assert json.loads(requests[-1].content) == {
+        "phrase": "дизайн",
+        "numPhrases": 15,
+        "devices": ["DEVICE_ALL"],
+        "folderId": "folder-1",
+        "regions": ["213"],
+    }
+    assert [item.query for item in snapshot.queries] == [
+        "курсы дизайна",
+        "обучение дизайну",
+        "Skillbox дизайн",
+    ]
+    stored = db.query(WordstatConnection).one()
+    assert "secret-api-key" not in stored.credential_ciphertext
+
+    snapshot_id, queries = WordstatQuerySource(db).queries(1, "Skillbox")
+    assert snapshot_id == snapshot.id
+    assert queries == ["курсы дизайна", "обучение дизайну"]
+    analytics = service.analytics(1, "Skillbox")
+    assert analytics.status == "NOT_MEASURED"
+    assert analytics.checked_query_count == 0
+
+
+def test_wordstat_filters_ambiguous_association_noise() -> None:
+    db = database()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "results": [{"phrase": "geo продвижение сайта", "count": "253"}],
+                "associations": [
+                    {"phrase": "гео история", "count": "1912"},
+                    {"phrase": "реклама и связи с общественностью", "count": "2594"},
+                    {"phrase": "туториал продвинутого игрока", "count": "361"},
+                    {"phrase": "услуги продвижения", "count": "120"},
+                ],
+            },
+        )
+
+    service = WordstatService(
+        db,
+        WordstatRepository(db),
+        SecretCipher("x" * 32),
+        httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    service.connect(1, 7, "folder-1", "API_KEY", "secret-api-key")
+    snapshot = service.discover(
+        1,
+        7,
+        WordstatDiscoveryRequest(
+            brand="AI Ranking OS",
+            category="GEO-продвижение",
+            limit=30,
+        ),
+    )
+
+    assert [item.query for item in snapshot.queries] == [
+        "geo продвижение сайта",
+        "услуги продвижения",
+    ]
+    assert snapshot.algorithm_version == "1.5"
+
+
+def test_wordstat_collects_multiple_confirmed_assortment_seeds() -> None:
+    db = database()
+    requested_phrases: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        phrase = json.loads(request.content)["phrase"]
+        requested_phrases.append(phrase)
+        if phrase == "яндекс":
+            return httpx.Response(200, json={"results": []})
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"phrase": f"купить {phrase}", "count": "100"},
+                ],
+                "associations": [],
+            },
+        )
+
+    service = WordstatService(
+        db,
+        WordstatRepository(db),
+        SecretCipher("x" * 32),
+        httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    service.connect(1, 7, "folder-1", "API_KEY", "secret-api-key")
+    snapshot = service.discover(
+        1,
+        7,
+        WordstatDiscoveryRequest(
+            brand="АвтоПример",
+            category="запчасти для китайских автомобилей",
+            seed_phrases=[
+                "Chery Tiggo 7 Pro запчасти",
+                "Haval Jolion запчасти",
+                "chery tiggo 7 pro запчасти",
+            ],
+            region_ids=[213],
+            limit=30,
+        ),
+    )
+
+    assert requested_phrases == [
+        "яндекс",
+        "запчасти для китайских автомобилей",
+        "Chery Tiggo 7 Pro запчасти",
+        "Haval Jolion запчасти",
+    ]
+    assert len(snapshot.queries) == 3
+    assert any("Chery Tiggo 7 Pro запчасти" in item for item in snapshot.limitations)
+    assert snapshot.algorithm_version == "1.5"
+
+
+def test_confirmed_seed_keeps_relevant_associations_outside_generic_category() -> None:
+    db = database()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        phrase = json.loads(request.content)["phrase"]
+        if phrase == "яндекс":
+            return httpx.Response(200, json={"results": []})
+        if phrase == "Haval Jolion тормозные колодки":
+            return httpx.Response(200, json={
+                "results": [],
+                "associations": [
+                    {"phrase": "тормозные колодки Haval Jolion", "count": "80"},
+                    {"phrase": "пирог с яблоками", "count": "1000"},
+                ],
+            })
+        return httpx.Response(200, json={"results": [], "associations": []})
+
+    service = WordstatService(
+        db, WordstatRepository(db), SecretCipher("x" * 32),
+        httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    service.connect(1, 7, "folder-1", "API_KEY", "secret-api-key")
+    snapshot = service.discover(
+        1, 7, WordstatDiscoveryRequest(
+            brand="АвтоПример", category="запчасти для китайских автомобилей",
+            seed_phrases=["Haval Jolion тормозные колодки"], limit=30,
+        ),
+    )
+    assert [item.query for item in snapshot.queries] == ["тормозные колодки Haval Jolion"]
+
+
+def test_wordstat_rejects_tokenized_punycode_query() -> None:
+    assert WordstatService._query_well_formed("geo продвижение xn d1abiikjcedki") is False
+    assert WordstatService._query_well_formed("geo продвижение сайта") is True
+
+
+def test_wordstat_rejects_food_and_fragment_noise_for_cream_category() -> None:
+    relevant = WordstatService._query_relevant_to_category
+
+    assert relevant("тональный крем", "Кремы", "TOP") is True
+    assert relevant("увлажняющий крем для лица", "Кремы", "TOP") is True
+    assert relevant("крем для рук", "Кремы", "TOP") is True
+    assert relevant("крем чиз", "Кремы", "TOP") is False
+    assert relevant("крем для торта", "Кремы", "TOP") is False
+    assert relevant("рецепт крема", "Кремы", "TOP") is False
+    assert relevant("можно кремом", "Кремы", "TOP") is False
+    assert relevant("ли крем", "Кремы", "TOP") is False
+
+
+def test_similar_queries_require_two_distinct_intent_terms() -> None:
+    relevant = WordstatService._query_relevant_to_category
+    category = "оптимизация сайта под нейросети"
+
+    assert relevant("оптимизация коммерческих сайтов под нейросети", category, "SIMILAR")
+    assert relevant(
+        "как попасть в ответы нейросетей", category, "SIMILAR",
+        seed="как попасть в ответы нейросетей",
+    )
+    assert not relevant("создать картинку с помощью нейросети онлайн", category, "SIMILAR")
+    assert not relevant("qwen нейросеть официальный", category, "SIMILAR")
+    assert not relevant("seo оптимизатор", category, "SIMILAR")
+    assert not relevant(
+        "на какие вопросы отвечает причастный оборот", category, "SIMILAR",
+        seed="как попасть в ответы нейросетей",
+    )
+
+
+def test_top_queries_require_the_full_topic_not_just_a_generic_word() -> None:
+    relevant = WordstatService._query_relevant_to_category
+    category = "продвижение в нейросетях"
+
+    assert relevant("продвижение в нейросетях", category, "TOP")
+    assert relevant("продвижение бренда в нейросетях", category, "TOP")
+    assert not relevant("агентство по продвижению недвижимости", category, "TOP")
+    assert not relevant("бесплатная нейросеть для картинок", category, "TOP")
+
+
+def test_wordstat_does_not_send_generic_similar_noise_to_research() -> None:
+    db = database()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        phrase = json.loads(request.content)["phrase"]
+        if phrase == "яндекс":
+            return httpx.Response(200, json={"results": []})
+        if phrase == "оптимизация сайта под нейросети":
+            return httpx.Response(200, json={
+                "results": [
+                    {"phrase": "оптимизация сайта под нейросети", "count": "130"},
+                ],
+                "associations": [
+                    {"phrase": "qwen нейросеть официальный", "count": "2702"},
+                    {"phrase": "создать картинку с помощью нейросети", "count": "775"},
+                    {"phrase": "оптимизация коммерческих сайтов под нейросети", "count": "48"},
+                ],
+            })
+        return httpx.Response(200, json={"results": [], "associations": []})
+
+    service = WordstatService(
+        db, WordstatRepository(db), SecretCipher("x" * 32),
+        httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    service.connect(1, 7, "folder-1", "API_KEY", "secret-api-key")
+    snapshot = service.discover(
+        1, 7, WordstatDiscoveryRequest(
+            brand="Signal", category="оптимизация сайта под нейросети", limit=30,
+        ),
+    )
+
+    assert [item.query for item in snapshot.queries] == [
+        "оптимизация сайта под нейросети",
+        "оптимизация коммерческих сайтов под нейросети",
+    ]
+    assert WordstatQuerySource(db).queries(1, "Signal")[1] == [
+        "оптимизация сайта под нейросети",
+        "оптимизация коммерческих сайтов под нейросети",
+    ]
+
+
+def test_legacy_snapshot_associations_stay_visible_but_not_auto_selected() -> None:
+    db = database()
+    snapshot = WordstatDemandSnapshot(
+        organization_id=1,
+        brand="Signal",
+        category="оптимизация сайта под нейросети",
+        region_ids=[213],
+        device="all",
+        status="READY",
+        queries=[
+            {
+                "query": phrase, "frequency": 100, "demand_rank": rank,
+                "source_type": source_type, "branded": False,
+                "selected_for_alice": True,
+            }
+            for rank, (phrase, source_type) in enumerate([
+                ("оптимизация сайта под нейросети", "TOP"),
+                ("qwen нейросеть официальный", "SIMILAR"),
+            ], 1)
+        ],
+        raw_count=2,
+        limitations=[],
+        algorithm_version="1.4",
+        created_by=7,
+    )
+    db.add(snapshot)
+    db.commit()
+
+    assert len(snapshot.queries) == 2
+    assert WordstatQuerySource(db).queries(1, "Signal") == (
+        snapshot.id, ["оптимизация сайта под нейросети"],
+    )
+
+
+def test_wordstat_endpoints_are_documented_in_openapi() -> None:
+    from backend.app.main import app
+
+    paths = app.openapi()["paths"]
+    assert "/integrations/yandex-wordstat/connection" in paths
+    assert "/integrations/yandex-wordstat/discover" in paths
+    assert "/integrations/yandex-wordstat/analytics" in paths
+
+
+def test_wordstat_accepts_all_query_sizes_offered_by_the_ui() -> None:
+    for limit in (30, 50, 100):
+        payload = WordstatDiscoveryRequest(
+            brand="AI Ranking OS",
+            category="GEO продвижение",
+            limit=limit,
+        )
+        assert payload.limit == limit
+
+
+def test_wordstat_analytics_stays_bound_to_the_selected_regional_snapshot() -> None:
+    db = database()
+    requests: list[httpx.Request] = []
+    service = WordstatService(
+        db,
+        WordstatRepository(db),
+        SecretCipher("x" * 32),
+        client(requests),
+    )
+    service.connect(1, 7, "folder-1", "API_KEY", "secret-api-key")
+    moscow = service.discover(
+        1, 7, WordstatDiscoveryRequest(brand="Skillbox", category="дизайн", region_ids=[213])
+    )
+    russia = service.discover(
+        1, 7, WordstatDiscoveryRequest(brand="Skillbox", category="дизайн", region_ids=[])
+    )
+
+    assert service.latest(1, "Skillbox", moscow.id).region_ids == [213]
+    assert service.analytics(1, "Skillbox", moscow.id).snapshot_id == moscow.id
+    assert service.analytics(1, "Skillbox", russia.id).snapshot_id == russia.id
+    with pytest.raises(WordstatError, match="другому бренду"):
+        service.analytics(1, "Другой бренд", moscow.id)
+
+
+def test_wordstat_analytics_only_lists_cited_source_domains() -> None:
+    db = database()
+    snapshot = WordstatDemandSnapshot(
+        organization_id=1,
+        brand="Signal",
+        category="видимость сайта в нейросетях",
+        region_ids=[213],
+        device="all",
+        status="READY",
+        queries=[{
+            "query": "видимость сайта в нейросетях",
+            "frequency": 100,
+            "demand_rank": 1,
+            "source_type": "TOP",
+            "branded": False,
+            "selected_for_alice": True,
+        }],
+        raw_count=1,
+        limitations=[],
+        algorithm_version="1.5",
+        created_by=7,
+    )
+    db.add(snapshot)
+    db.flush()
+    research = Research(
+        title="Signal measurement",
+        metadata_payload={
+            "organization_id": 1,
+            "brand": "Signal",
+            "yandex_wordstat_snapshot_id": snapshot.id,
+        },
+    )
+    task = ResearchTask(query="видимость сайта в нейросетях")
+    response = Response(
+        provider="yandex",
+        model="search",
+        content="Signal упомянут. Пример ссылки: https://not-cited.example/article",
+        processing_status=ResponseProcessingStatus.PROCESSED,
+    )
+    response.extracted_citations.append(
+        ExtractedCitation(url="https://www.cited.example/article", position=1)
+    )
+    task.responses.append(response)
+    research.tasks.append(task)
+    db.add(research)
+    db.commit()
+
+    result = WordstatService(
+        db, WordstatRepository(db), SecretCipher("x" * 32)
+    ).analytics(1, "Signal", snapshot.id)
+
+    assert result.checked_query_count == 1
+    assert result.items[0].citation_domains == ["cited.example"]
+
+
+def test_platform_wordstat_connection_is_available_to_isolated_client() -> None:
+    db = database()
+    db.add(Organization(id=2, name="Platform", slug="platform"))
+    db.commit()
+    requests: list[httpx.Request] = []
+    service = WordstatService(
+        db,
+        WordstatRepository(db),
+        SecretCipher("x" * 32),
+        client(requests),
+        platform_organization_id=2,
+    )
+    service.connect(2, 7, "platform-folder", "API_KEY", "platform-secret-key")
+
+    status = service.status(1)
+    snapshot = service.discover(
+        1,
+        8,
+        WordstatDiscoveryRequest(brand="Клиент", category="дизайн", limit=5),
+    )
+
+    assert status.connected is True
+    assert status.managed_by_platform is True
+    assert status.folder_id is None
+    assert snapshot.organization_id == 1
+    assert json.loads(requests[-1].content)["folderId"] == "platform-folder"
+    assert WordstatRepository(db).snapshot(1, snapshot.id) is not None
+    assert WordstatRepository(db).snapshot(2, snapshot.id) is None

@@ -644,8 +644,12 @@ def test_closed_beta_invitation_access_limits_search_and_audit(client: TestClien
     ).status_code == 404
 
     accepted = client.post(
-        f"/beta/invitations/{resent.json()['token']}/accept",
-        json={"display_name": "Beta Analyst", "password": "strong-password"},
+        "/beta/invitations/accept",
+        json={
+            "token": resent.json()["token"],
+            "display_name": "Beta Analyst",
+            "password": "strong-password",
+        },
     )
     assert accepted.status_code == 200
     user_id = accepted.json()["user_id"]
@@ -692,6 +696,18 @@ def test_closed_beta_invitation_access_limits_search_and_audit(client: TestClien
         f"/beta/invitations/{revoked['token']}/accept",
         json={"display_name": "Revoked", "password": "strong-password"},
     ).status_code == 404
+
+
+def test_public_registration_is_not_available_without_an_invitation(client: TestClient) -> None:
+    response = client.post(
+        "/beta/register",
+        json={
+            "email": "new-customer@example.com",
+            "display_name": "New Customer",
+            "password": "strong-password",
+        },
+    )
+    assert response.status_code == 404
 
 
 def test_feedback_center_triage_bulk_history_and_attachment_metadata(

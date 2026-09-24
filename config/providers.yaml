@@ -296,6 +296,19 @@ providers:
         context_window: 131072
         max_output_tokens: 32768
         capabilities: [chat, streaming, function_calling, json_mode, tool_use]
+  - name: openrouter
+    region: GLOBAL
+    protocol: openai
+    base_url: https://openrouter.ai/api/v1
+    credential: OPENROUTER_API_KEY
+    enabled: true
+    mock: false
+    rate_limits: {rpm: 20, tpm: 60000, concurrent_requests: 2, retry_budget: 1}
+    models:
+      - id: openrouter/free
+        context_window: 32768
+        max_output_tokens: 4096
+        capabilities: [chat, streaming, json_mode]
   - name: github
     region: GLOBAL
     protocol: openai

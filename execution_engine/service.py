@@ -124,27 +124,7 @@ def _select_task(db: Session, task_id: int) -> Task:
 
 
 def _select_agent(db: Session, task: Task, manager: WorkerManager) -> Agent:
-    cutoff = _now() - timedelta(seconds=float(os.getenv("EXECUTION_STALE_SECONDS", "900")))
-    stale = list(
-        db.scalars(
-            select(Execution).where(
-                Execution.state.in_(ACTIVE_STATES),
-                Execution.started_at.is_not(None),
-                Execution.started_at < cutoff,
-            )
-        )
-    )
-    for execution in stale:
-        execution.state = ExecutionState.FAILED
-        execution.error = "Execution expired after worker interruption"
-        _finish(execution)
-        stale_task = db.get(Task, execution.task_id)
-        if stale_task is not None:
-            stale_task.status = TaskStatus.BLOCKED
-            stale_task.owner_id = None
-        _log(db, execution, "STALE_EXECUTION_RECOVERED", {"cutoff": cutoff.isoformat()})
-    if stale:
-        db.commit()
+    recover_stale_executions(db)
     active_task = exists().where(
         Task.owner_id == Agent.id,
         Task.status == TaskStatus.IN_PROGRESS,
@@ -173,6 +153,40 @@ def _select_agent(db: Session, task: Task, manager: WorkerManager) -> Agent:
     if agent is None:
         raise NoAgentAvailableError("No compatible free agent is available")
     return agent
+
+
+def recover_stale_executions(
+    db: Session,
+    *,
+    stale_after_seconds: float | None = None,
+) -> int:
+    """Fail executions orphaned by an interrupted worker without waiting for new work."""
+    cutoff = _now() - timedelta(
+        seconds=stale_after_seconds
+        if stale_after_seconds is not None
+        else float(os.getenv("EXECUTION_STALE_SECONDS", "900"))
+    )
+    stale = list(
+        db.scalars(
+            select(Execution).where(
+                Execution.state.in_(ACTIVE_STATES),
+                Execution.started_at.is_not(None),
+                Execution.started_at < cutoff,
+            )
+        )
+    )
+    for execution in stale:
+        execution.state = ExecutionState.FAILED
+        execution.error = "Execution expired after worker interruption"
+        _finish(execution)
+        stale_task = db.get(Task, execution.task_id)
+        if stale_task is not None:
+            stale_task.status = TaskStatus.BLOCKED
+            stale_task.owner_id = None
+        _log(db, execution, "STALE_EXECUTION_RECOVERED", {"cutoff": cutoff.isoformat()})
+    if stale:
+        db.commit()
+    return len(stale)
 
 
 def schedule_execution(
@@ -361,8 +375,20 @@ def start_task_execution(
     *,
     retry_base_seconds: float,
     sleep: Callable[[float], None] = time.sleep,
+    wait_for_agent_seconds: float = 0,
 ) -> Execution:
-    execution, task, agent = schedule_task_execution(db, task_id, manager)
+    deadline = time.monotonic() + wait_for_agent_seconds
+    while True:
+        try:
+            execution, task, agent = schedule_task_execution(db, task_id, manager)
+            break
+        except NoAgentAvailableError:
+            # Release task locks before waiting for another research to finish.
+            db.rollback()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise
+            sleep(min(1.0, remaining))
     return run_execution(
         db,
         execution,

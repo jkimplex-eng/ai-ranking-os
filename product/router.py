@@ -1,11 +1,12 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
 from change_detection.dependencies import build_change_detection
 from notification_center.dependencies import build_notification_service
+from product.brand_intelligence import BrandDiscoveryError, brand_intelligence_engine
 from product.repository import (
     ProductConflictError,
     ProductNotFoundError,
@@ -13,6 +14,8 @@ from product.repository import (
     ResearchTemplateRepository,
 )
 from product.schemas import (
+    BrandProfileRead,
+    BrandProfileRequest,
     PromptCreate,
     PromptRead,
     PromptUpdate,
@@ -24,11 +27,25 @@ from product.schemas import (
     WizardRunResult,
 )
 from product.service import FinalReportService, ProductPipeline, WizardValidationError
+from product.source_inspection import SourceInspectionError, SourceInspectionService
+from research.access import require_research_access
 from research.models import ResearchStatus
 from research.schemas import ResearchRead
 
-router = APIRouter(tags=["product"])
+router = APIRouter(tags=["product"], dependencies=[Depends(require_research_access)])
 DbSession = Annotated[Session, Depends(get_db)]
+
+
+@router.post("/research/wizard/brand-profile", response_model=BrandProfileRead)
+def build_brand_profile(payload: BrandProfileRequest) -> BrandProfileRead:
+    try:
+        return BrandProfileRead.model_validate(
+            brand_intelligence_engine.analyze(brand=payload.brand, website_url=payload.website_url)
+        )
+    except BrandDiscoveryError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
+        ) from error
 
 
 @router.get("/prompts", response_model=list[PromptRead])
@@ -140,9 +157,12 @@ def clone_research_template(code: str, db: DbSession) -> ResearchTemplateRead:
 
 
 @router.post("/research/wizard/review", response_model=WizardReview)
-def review_wizard(payload: WizardRequest, db: DbSession) -> WizardReview:
+def review_wizard(payload: WizardRequest, request: Request, db: DbSession) -> WizardReview:
     try:
-        return ProductPipeline(db).review(payload)
+        principal = getattr(request.state, "principal", None)
+        raw_user_id = getattr(principal, "user_id", getattr(principal, "id", None))
+        user_id = int(raw_user_id) if raw_user_id is not None else None
+        return ProductPipeline(db, user_id=user_id).review(payload)
     except (ProductNotFoundError, WizardValidationError) as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
@@ -152,20 +172,23 @@ def review_wizard(payload: WizardRequest, db: DbSession) -> WizardReview:
 @router.post(
     "/research/wizard/run", response_model=WizardRunResult, status_code=status.HTTP_201_CREATED
 )
-def run_wizard(payload: WizardRequest, db: DbSession) -> WizardRunResult:
+def run_wizard(payload: WizardRequest, request: Request, db: DbSession) -> WizardRunResult:
     try:
         notifications = build_notification_service(db)
+        principal = getattr(request.state, "principal", None)
+        raw_user_id = getattr(principal, "user_id", getattr(principal, "id", None))
+        user_id = int(raw_user_id) if raw_user_id is not None else None
         research = ProductPipeline(
             db,
             build_change_detection(db, notifications),
             notifications,
-        ).run(payload)
-        if research.status != ResearchStatus.COMPLETED:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Research {research.id} failed; no report was generated",
-            )
-        report = FinalReportService(db).get(research.id)
+            user_id,
+        ).enqueue(payload)
+        report = (
+            FinalReportService(db).get(research.id)
+            if research.status == ResearchStatus.COMPLETED
+            else {}
+        )
         return WizardRunResult(
             research=ResearchRead.model_validate(research),
             report_url=f"/research/{research.id}/final-report",
@@ -183,3 +206,13 @@ def final_report(research_id: int, db: DbSession) -> dict:
         return FinalReportService(db).get(research_id)
     except (ProductNotFoundError, LookupError) as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
+
+@router.post("/research/{research_id}/sources/inspect", response_model=dict)
+def inspect_research_sources(research_id: int, db: DbSession) -> dict:
+    try:
+        return SourceInspectionService(db).inspect(research_id)
+    except (ProductNotFoundError, SourceInspectionError) as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
+        ) from error
