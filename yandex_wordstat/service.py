@@ -36,8 +36,12 @@ class WordstatError(ValueError):
 
 class WordstatService:
     BASE_URL = "https://searchapi.api.cloud.yandex.net"
-    VERSION = "1.4"
+    VERSION = "1.5"
     _AMBIGUOUS_CATEGORY_TOKENS = {"ai", "geo", "ии", "гео", "seo", "сео"}
+    _ASSOCIATION_STOPWORDS = {
+        "как", "где", "что", "это", "для", "под", "при", "или", "без",
+        "над", "про", "через", "сайт", "сайта",
+    }
     _FOOD_CREAM_TOKENS = {
         "чиз", "торт", "суп", "сливк", "творож", "сыр", "рецепт", "заварн",
         "десерт", "кулинар", "пирож", "кекс", "бисквит", "маскарпон",
@@ -198,9 +202,10 @@ class WordstatService:
                     "публичный интерфейс Алисы может отличаться.",
                     "Совпадение частотности и рекомендации является наблюдением, "
                     "а не доказательством причинного влияния.",
-                    "Связанные фразы Wordstat автоматически отбрасываются, если в них "
-                    "нет смыслового токена категории; короткие GEO/AI/SEO сами по себе "
-                    "не считаются подтверждением релевантности.",
+                    "Связанные фразы Wordstat автоматически отбрасываются, если они "
+                    "не совпадают минимум по двум смысловым словам исходной фразы "
+                    "(или по одному для однословной фразы); короткие GEO/AI/SEO "
+                    "сами по себе не подтверждают релевантность.",
                     "Исходные фразы: " + "; ".join(seeds) + ". Каждая фраза проверена "
                     "в выбранном регионе и на выбранном типе устройства.",
                 ],
@@ -229,7 +234,9 @@ class WordstatService:
         category_tokens = [
             token
             for token in tokens(category)
-            if len(token) >= 3 and token not in cls._AMBIGUOUS_CATEGORY_TOKENS
+            if len(token) >= 3
+            and token not in cls._AMBIGUOUS_CATEGORY_TOKENS
+            and token not in cls._ASSOCIATION_STOPWORDS
         ]
         if not category_tokens:
             return False
@@ -241,11 +248,17 @@ class WordstatService:
             prefix_length = min(desired_length, len(left), len(right))
             return prefix_length >= 3 and left[:prefix_length] == right[:prefix_length]
 
-        return any(
-            same_lexeme(category_token, query_token)
-            for category_token in category_tokens
-            for query_token in query_tokens
-        )
+        matched_query_indexes: set[int] = set()
+        matched_category_tokens = 0
+        for category_token in dict.fromkeys(category_tokens):
+            for index, query_token in enumerate(query_tokens):
+                if index not in matched_query_indexes and same_lexeme(category_token, query_token):
+                    matched_query_indexes.add(index)
+                    matched_category_tokens += 1
+                    break
+        # A generic word like «нейросеть» or «ответы» alone does not make
+        # an association relevant to a multi-concept customer intent.
+        return matched_category_tokens >= min(2, len(set(category_tokens)))
 
     @classmethod
     def _query_relevant_to_category(

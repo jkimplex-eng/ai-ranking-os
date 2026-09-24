@@ -136,7 +136,7 @@ def test_wordstat_filters_ambiguous_association_noise() -> None:
         "geo продвижение сайта",
         "услуги продвижения",
     ]
-    assert snapshot.algorithm_version == "1.4"
+    assert snapshot.algorithm_version == "1.5"
 
 
 def test_wordstat_collects_multiple_confirmed_assortment_seeds() -> None:
@@ -189,7 +189,7 @@ def test_wordstat_collects_multiple_confirmed_assortment_seeds() -> None:
     ]
     assert len(snapshot.queries) == 3
     assert any("Chery Tiggo 7 Pro запчасти" in item for item in snapshot.limitations)
-    assert snapshot.algorithm_version == "1.4"
+    assert snapshot.algorithm_version == "1.5"
 
 
 def test_confirmed_seed_keeps_relevant_associations_outside_generic_category() -> None:
@@ -239,6 +239,65 @@ def test_wordstat_rejects_food_and_fragment_noise_for_cream_category() -> None:
     assert relevant("рецепт крема", "Кремы", "TOP") is False
     assert relevant("можно кремом", "Кремы", "TOP") is False
     assert relevant("ли крем", "Кремы", "TOP") is False
+
+
+def test_similar_queries_require_two_distinct_intent_terms() -> None:
+    relevant = WordstatService._query_relevant_to_category
+    category = "оптимизация сайта под нейросети"
+
+    assert relevant("оптимизация коммерческих сайтов под нейросети", category, "SIMILAR")
+    assert relevant(
+        "как попасть в ответы нейросетей", category, "SIMILAR",
+        seed="как попасть в ответы нейросетей",
+    )
+    assert not relevant("создать картинку с помощью нейросети онлайн", category, "SIMILAR")
+    assert not relevant("qwen нейросеть официальный", category, "SIMILAR")
+    assert not relevant("seo оптимизатор", category, "SIMILAR")
+    assert not relevant(
+        "на какие вопросы отвечает причастный оборот", category, "SIMILAR",
+        seed="как попасть в ответы нейросетей",
+    )
+
+
+def test_wordstat_does_not_send_generic_similar_noise_to_research() -> None:
+    db = database()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        phrase = json.loads(request.content)["phrase"]
+        if phrase == "яндекс":
+            return httpx.Response(200, json={"results": []})
+        if phrase == "оптимизация сайта под нейросети":
+            return httpx.Response(200, json={
+                "results": [
+                    {"phrase": "оптимизация сайта под нейросети", "count": "130"},
+                ],
+                "associations": [
+                    {"phrase": "qwen нейросеть официальный", "count": "2702"},
+                    {"phrase": "создать картинку с помощью нейросети", "count": "775"},
+                    {"phrase": "оптимизация коммерческих сайтов под нейросети", "count": "48"},
+                ],
+            })
+        return httpx.Response(200, json={"results": [], "associations": []})
+
+    service = WordstatService(
+        db, WordstatRepository(db), SecretCipher("x" * 32),
+        httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    service.connect(1, 7, "folder-1", "API_KEY", "secret-api-key")
+    snapshot = service.discover(
+        1, 7, WordstatDiscoveryRequest(
+            brand="Signal", category="оптимизация сайта под нейросети", limit=30,
+        ),
+    )
+
+    assert [item.query for item in snapshot.queries] == [
+        "оптимизация сайта под нейросети",
+        "оптимизация коммерческих сайтов под нейросети",
+    ]
+    assert WordstatQuerySource(db).queries(1, "Signal")[1] == [
+        "оптимизация сайта под нейросети",
+        "оптимизация коммерческих сайтов под нейросети",
+    ]
 
 
 def test_wordstat_endpoints_are_documented_in_openapi() -> None:
