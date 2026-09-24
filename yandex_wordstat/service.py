@@ -12,6 +12,7 @@ from provider_connections.crypto import SecretCipher
 from research.brand_verdict import VERSION as VERDICT_VERSION
 from research.brand_verdict import classify_brand
 from research.models import (
+    ExtractedCitation,
     ExtractedEntity,
     Research,
     ResearchTask,
@@ -354,6 +355,21 @@ class WordstatService:
                     Response.provider.in_(["yandex", "yandexgpt"]),
                 )
             ).all()
+        citation_domains_by_response: dict[int, set[str]] = {}
+        response_ids = [response.id for response, _task in rows]
+        if response_ids:
+            citations = self.db.execute(
+                select(ExtractedCitation.response_id, ExtractedCitation.url).where(
+                    ExtractedCitation.response_id.in_(response_ids)
+                )
+            ).all()
+            for response_id, url in citations:
+                parsed = urlparse(url or "")
+                if parsed.scheme not in {"http", "https"}:
+                    continue
+                domain = (parsed.hostname or "").casefold().removeprefix("www.")
+                if domain:
+                    citation_domains_by_response.setdefault(response_id, set()).add(domain)
         grouped: dict[str, list[tuple[Response, ResearchTask]]] = {key: [] for key in query_keys}
         excluded = dict.fromkeys(query_keys, 0)
         for response, task in rows:
@@ -387,10 +403,7 @@ class WordstatService:
                 recommendations += int(recommended)
                 options += int(verdict.status == "PROPOSED_AS_OPTION")
                 used_researches.add(task.research_id)
-                for url in re.findall(r"https?://[^\s)\]}>]+", response.content):
-                    domain = (urlparse(url).hostname or "").casefold().removeprefix("www.")
-                    if domain:
-                        domains.add(domain)
+                domains.update(citation_domains_by_response.get(response.id, ()))
                 entity_rows = self.db.scalars(
                     select(ExtractedEntity).where(
                         ExtractedEntity.response_id == response.id,

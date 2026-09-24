@@ -14,6 +14,13 @@ import workspace.models  # noqa: F401
 from backend.app.database import Base
 from organization_workspace.models import Organization
 from provider_connections.crypto import SecretCipher
+from research.models import (
+    ExtractedCitation,
+    Research,
+    ResearchTask,
+    Response,
+    ResponseProcessingStatus,
+)
 from yandex_wordstat.models import WordstatConnection, WordstatDemandSnapshot
 from yandex_wordstat.repository import WordstatRepository
 from yandex_wordstat.schemas import WordstatDiscoveryRequest
@@ -385,6 +392,61 @@ def test_wordstat_analytics_stays_bound_to_the_selected_regional_snapshot() -> N
     assert service.analytics(1, "Skillbox", russia.id).snapshot_id == russia.id
     with pytest.raises(WordstatError, match="другому бренду"):
         service.analytics(1, "Другой бренд", moscow.id)
+
+
+def test_wordstat_analytics_only_lists_cited_source_domains() -> None:
+    db = database()
+    snapshot = WordstatDemandSnapshot(
+        organization_id=1,
+        brand="Signal",
+        category="видимость сайта в нейросетях",
+        region_ids=[213],
+        device="all",
+        status="READY",
+        queries=[{
+            "query": "видимость сайта в нейросетях",
+            "frequency": 100,
+            "demand_rank": 1,
+            "source_type": "TOP",
+            "branded": False,
+            "selected_for_alice": True,
+        }],
+        raw_count=1,
+        limitations=[],
+        algorithm_version="1.5",
+        created_by=7,
+    )
+    db.add(snapshot)
+    db.flush()
+    research = Research(
+        title="Signal measurement",
+        metadata_payload={
+            "organization_id": 1,
+            "brand": "Signal",
+            "yandex_wordstat_snapshot_id": snapshot.id,
+        },
+    )
+    task = ResearchTask(query="видимость сайта в нейросетях")
+    response = Response(
+        provider="yandex",
+        model="search",
+        content="Signal упомянут. Пример ссылки: https://not-cited.example/article",
+        processing_status=ResponseProcessingStatus.PROCESSED,
+    )
+    response.extracted_citations.append(
+        ExtractedCitation(url="https://www.cited.example/article", position=1)
+    )
+    task.responses.append(response)
+    research.tasks.append(task)
+    db.add(research)
+    db.commit()
+
+    result = WordstatService(
+        db, WordstatRepository(db), SecretCipher("x" * 32)
+    ).analytics(1, "Signal", snapshot.id)
+
+    assert result.checked_query_count == 1
+    assert result.items[0].citation_domains == ["cited.example"]
 
 
 def test_platform_wordstat_connection_is_available_to_isolated_client() -> None:
