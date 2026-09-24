@@ -92,6 +92,10 @@ class InvitationAccept(BaseModel):
     password: str = Field(min_length=8, max_length=1024)
 
 
+class InvitationAcceptByToken(InvitationAccept):
+    token: str = Field(min_length=20, max_length=200)
+
+
 class InvitationAccepted(BaseModel):
     user_id: int
     email: str

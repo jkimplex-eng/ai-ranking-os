@@ -373,7 +373,7 @@ export class ApiClient {
     return this.request<{token: string; expires_at: string}>("/admin/beta/invitations", {method: "POST", body: JSON.stringify({email})});
   }
   acceptClientInvitation(token: string, display_name: string, password: string) {
-    return this.request<{email: string}>(`/beta/invitations/${encodeURIComponent(token)}/accept`, {method: "POST", body: JSON.stringify({display_name, password})});
+    return this.request<{email: string}>("/beta/invitations/accept", {method: "POST", body: JSON.stringify({token, display_name, password})});
   }
   adminFeedback() { return this.request<AdminFeedback[]>("/admin/feedback"); }
   adminAudit() { return this.request<{ items: AdminAudit[]; total: number }>("/audit/events?page_size=20"); }

@@ -200,11 +200,17 @@ async def observe_http(request: Request, call_next):
         response = await call_next(request)
     except Exception:
         try:
+            failed_route = getattr(request.scope.get("route"), "path", request.url.path)
+            if (
+                request.url.path.startswith("/beta/invitations/")
+                and request.url.path.endswith("/accept")
+            ):
+                failed_route = "/beta/invitations/{token}/accept"
             with SessionLocal() as analytics_db:
                 ProductAnalyticsService(ProductAnalyticsRepository(analytics_db)).record(
                     request_event(
                         method=request.method,
-                        route=request.url.path,
+                        route=failed_route,
                         status=500,
                         latency_ms=(perf_counter() - started) * 1000,
                         user_id=None,

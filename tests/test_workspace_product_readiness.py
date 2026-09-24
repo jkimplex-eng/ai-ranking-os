@@ -644,8 +644,12 @@ def test_closed_beta_invitation_access_limits_search_and_audit(client: TestClien
     ).status_code == 404
 
     accepted = client.post(
-        f"/beta/invitations/{resent.json()['token']}/accept",
-        json={"display_name": "Beta Analyst", "password": "strong-password"},
+        "/beta/invitations/accept",
+        json={
+            "token": resent.json()["token"],
+            "display_name": "Beta Analyst",
+            "password": "strong-password",
+        },
     )
     assert accepted.status_code == 200
     user_id = accepted.json()["user_id"]

@@ -277,7 +277,7 @@ class ClosedBetaService:
         )
         read = self._invite_read(invite)
         return InvitationCreated(
-            **read.model_dump(), token=token, accept_path=f"/beta/invitations/{token}/accept"
+            **read.model_dump(), token=token, accept_path="/beta/invitations/accept"
         )
 
     def invitations(self) -> list[InvitationRead]:
@@ -310,7 +310,7 @@ class ClosedBetaService:
         self._audit_invite(invite, actor_id, correlation_id, "resent")
         read = self._invite_read(invite)
         return InvitationCreated(
-            **read.model_dump(), token=token, accept_path=f"/beta/invitations/{token}/accept"
+            **read.model_dump(), token=token, accept_path="/beta/invitations/accept"
         )
 
     def _audit_invite(

@@ -9,6 +9,7 @@ from closed_beta.schemas import (
     BetaUserRead,
     BetaUserUpdate,
     InvitationAccept,
+    InvitationAcceptByToken,
     InvitationAccepted,
     InvitationCreate,
     InvitationCreated,
@@ -129,6 +130,18 @@ def resend_invitation(
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
+@router.post("/beta/invitations/accept", response_model=InvitationAccepted)
+def accept_invitation_from_body(
+    payload: InvitationAcceptByToken, service: BetaServiceDependency
+) -> InvitationAccepted:
+    try:
+        return service.accept(payload.token, payload)
+    except (BetaNotFoundError, ValueError) as error:
+        raise HTTPException(status_code=404, detail="Invitation is unavailable") from error
+
+
+# Compatibility for already-open client pages. The edge suppresses access
+# logs for this path so its token cannot be written to request-URI logs.
 @router.post("/beta/invitations/{token}/accept", response_model=InvitationAccepted)
 def accept_invitation(
     token: str, payload: InvitationAccept, service: BetaServiceDependency

@@ -43,3 +43,17 @@ def test_smoke_waits_for_asynchronous_research(monkeypatch) -> None:
 
     assert smoke_test.wait_for_research(42, "test-token") == {"status": "COMPLETED"}
     assert calls == [("/api/research/42", "test-token")] * 3
+
+
+def test_invitation_secrets_are_not_sent_or_logged_in_request_urls() -> None:
+    client = Path("frontend/src/api.ts").read_text(encoding="utf-8")
+    edge = Path("deployment/production/nginx/internal.conf").read_text(encoding="utf-8")
+    host = Path("deployment/production/nginx/host-vhost.conf.example").read_text(
+        encoding="utf-8"
+    )
+
+    assert '"/beta/invitations/accept"' in client
+    assert "`/beta/invitations/${" not in client
+    for config in (edge, host):
+        assert "location ^~ /api/beta/invitations/ {" in config
+        assert "access_log off;" in config
