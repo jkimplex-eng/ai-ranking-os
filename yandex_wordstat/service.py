@@ -281,7 +281,9 @@ class WordstatService:
         category_tokens = re.findall(r"[a-zа-яё0-9]+", category.casefold())
         is_cream_market = any(token.startswith("крем") for token in category_tokens)
         if not is_cream_market:
-            return True
+            # TOP phrases are also popularity results, not proof that the
+            # whole buyer intent matches the seed (e.g. real estate vs AI).
+            return cls._association_relevant(query, anchor)
         if any(
             any(token.startswith(food) for food in cls._FOOD_CREAM_TOKENS)
             for token in tokens

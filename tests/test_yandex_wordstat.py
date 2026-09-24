@@ -259,6 +259,16 @@ def test_similar_queries_require_two_distinct_intent_terms() -> None:
     )
 
 
+def test_top_queries_require_the_full_topic_not_just_a_generic_word() -> None:
+    relevant = WordstatService._query_relevant_to_category
+    category = "продвижение в нейросетях"
+
+    assert relevant("продвижение в нейросетях", category, "TOP")
+    assert relevant("продвижение бренда в нейросетях", category, "TOP")
+    assert not relevant("агентство по продвижению недвижимости", category, "TOP")
+    assert not relevant("бесплатная нейросеть для картинок", category, "TOP")
+
+
 def test_wordstat_does_not_send_generic_similar_noise_to_research() -> None:
     db = database()
 
