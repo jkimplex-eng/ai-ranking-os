@@ -567,5 +567,15 @@ class WordstatQuerySource:
         if snapshot is None:
             return 0, []
         rows = [WordstatQueryRead.model_validate(item) for item in snapshot.queries]
-        selected = [item.query for item in rows if item.selected_for_alice and not item.branded]
+        # Old snapshots keep their historical evidence, but their SIMILAR
+        # phrases were accepted on a single generic token. Never promote
+        # those phrases into a new automated research after the rule changed.
+        legacy_associations = snapshot.algorithm_version in {
+            "1.0", "1.1", "1.2", "1.3", "1.4",
+        }
+        selected = [
+            item.query for item in rows
+            if item.selected_for_alice and not item.branded
+            and not (legacy_associations and item.source_type == "SIMILAR")
+        ]
         return snapshot.id, selected[:limit]

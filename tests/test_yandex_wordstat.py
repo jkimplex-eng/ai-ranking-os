@@ -14,7 +14,7 @@ import workspace.models  # noqa: F401
 from backend.app.database import Base
 from organization_workspace.models import Organization
 from provider_connections.crypto import SecretCipher
-from yandex_wordstat.models import WordstatConnection
+from yandex_wordstat.models import WordstatConnection, WordstatDemandSnapshot
 from yandex_wordstat.repository import WordstatRepository
 from yandex_wordstat.schemas import WordstatDiscoveryRequest
 from yandex_wordstat.service import WordstatError, WordstatQuerySource, WordstatService
@@ -298,6 +298,40 @@ def test_wordstat_does_not_send_generic_similar_noise_to_research() -> None:
         "оптимизация сайта под нейросети",
         "оптимизация коммерческих сайтов под нейросети",
     ]
+
+
+def test_legacy_snapshot_associations_stay_visible_but_not_auto_selected() -> None:
+    db = database()
+    snapshot = WordstatDemandSnapshot(
+        organization_id=1,
+        brand="Signal",
+        category="оптимизация сайта под нейросети",
+        region_ids=[213],
+        device="all",
+        status="READY",
+        queries=[
+            {
+                "query": phrase, "frequency": 100, "demand_rank": rank,
+                "source_type": source_type, "branded": False,
+                "selected_for_alice": True,
+            }
+            for rank, (phrase, source_type) in enumerate([
+                ("оптимизация сайта под нейросети", "TOP"),
+                ("qwen нейросеть официальный", "SIMILAR"),
+            ], 1)
+        ],
+        raw_count=2,
+        limitations=[],
+        algorithm_version="1.4",
+        created_by=7,
+    )
+    db.add(snapshot)
+    db.commit()
+
+    assert len(snapshot.queries) == 2
+    assert WordstatQuerySource(db).queries(1, "Signal") == (
+        snapshot.id, ["оптимизация сайта под нейросети"],
+    )
 
 
 def test_wordstat_endpoints_are_documented_in_openapi() -> None:
