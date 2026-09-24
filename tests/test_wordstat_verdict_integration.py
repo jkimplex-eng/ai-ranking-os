@@ -43,6 +43,7 @@ def test_analytics_uses_verdict_evidence_and_excludes_empty_answers():
 
     class Database:
         calls = 0
+        execute_calls = 0
         statements = []
 
         def scalars(self, statement):
@@ -51,7 +52,8 @@ def test_analytics_uses_verdict_evidence_and_excludes_empty_answers():
             return [research] if self.calls == 1 else []
 
         def execute(self, statement):
-            return SimpleNamespace(all=lambda: rows)
+            self.execute_calls += 1
+            return SimpleNamespace(all=lambda: rows if self.execute_calls == 1 else [])
 
     service = object.__new__(WordstatService)
     service.db = Database()
